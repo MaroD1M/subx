@@ -1,6 +1,8 @@
 import OpenAI from 'openai'
 import type { SubtitleEntry } from '../../types'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { useDb } from './db'
+import { SubtitleService } from './subtitle'
 import { appendFileSync, existsSync, readFileSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
@@ -104,22 +106,43 @@ export const TranslationService = {
         let lastParsedIndex = 0
 
         try {
-            const stream = await openai.chat.completions.create({
-                model: model,
-                messages: [
+            const systemMessage = `你是高级字幕翻译专家。按指定格式逐条输出翻译，不要输出任何额外内容。每条输入都必须有对应的翻译输出，序号必须与输入完全一致。${stylePrompt ? ' ' + stylePrompt : ''}`
+            const messages: ChatCompletionMessageParam[] = [
                     {
                         role: 'system',
-                        content: `你是高级字幕翻译专家。按指定格式逐条输出翻译，不要输出任何额外内容。每条输入都必须有对应的翻译输出，序号必须与输入完全一致。${stylePrompt ? ' ' + stylePrompt : ''}`
+                        content: systemMessage
                     },
                     { role: 'user', content: prompt }
-                ],
-                stream: true
+                ]
+
+            const rawRequest = JSON.stringify({
+                model,
+                targetLanguage,
+                chunkSize: chunk.length,
+                chunkIds: chunk.map(e => e.id),
+                messages
+            })
+
+            const stream = await openai.chat.completions.create({
+                model: model,
+                messages,
+                stream: true,
+                stream_options: { include_usage: true }
             })
 
             let lastLogTime = Date.now()
             let buffer = ''
+            let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
 
             for await (const part of stream) {
+                if (part.usage) {
+                    usage = {
+                        prompt_tokens: part.usage.prompt_tokens ?? 0,
+                        completion_tokens: part.usage.completion_tokens ?? 0,
+                        total_tokens: part.usage.total_tokens ?? 0
+                    }
+                }
+
                 const content = part.choices[0]?.delta?.content || ''
                 fullContent += content
                 buffer += content
@@ -151,16 +174,20 @@ export const TranslationService = {
                 }
             }
 
-            console.log(`[Stream] Task ${taskId} chunk ${chunkIndex} complete, total ${fullContent.length} bytes`)
+            console.log(`[Stream] Task ${taskId} chunk ${chunkIndex} complete, total ${fullContent.length} bytes, tokens: ${usage.total_tokens} (prompt: ${usage.prompt_tokens}, completion: ${usage.completion_tokens})`)
 
             if (taskId) {
                 try {
                     const db = useDb()
-                    db.prepare('INSERT INTO task_responses (task_id, chunk_index, model, raw_response) VALUES (?, ?, ?, ?)').run(
+                    db.prepare('INSERT INTO task_responses (task_id, chunk_index, model, raw_request, raw_response, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
                         taskId,
                         chunkIndex ?? 0,
                         model,
-                        fullContent
+                        rawRequest,
+                        fullContent,
+                        usage.prompt_tokens,
+                        usage.completion_tokens,
+                        usage.total_tokens
                     )
                 } catch (dbErr) {
                     console.error('[DB] Failed to save raw AI response:', dbErr)
@@ -200,9 +227,13 @@ export const TranslationService = {
             }
         })
 
-        const translatedCount = result.filter(e => e.translatedText && e.translatedText !== e.text).length
-        if (translatedCount === 0 && chunk.length > 0) {
-            throw new Error(`翻译结果为空: chunk ${chunkIndex} 包含 ${chunk.length} 条目但无有效翻译 (AI返回 ${fullContent.length} bytes)`)
+        const verbalEntries = chunk.filter(e => !SubtitleService.isNonVerbal(e.text))
+        const translatedVerbalCount = result.filter(e =>
+            !SubtitleService.isNonVerbal(e.text) && e.translatedText && e.translatedText !== e.text
+        ).length
+
+        if (verbalEntries.length > 0 && translatedVerbalCount === 0) {
+            throw new Error(`翻译结果为空: chunk ${chunkIndex} 包含 ${verbalEntries.length} 条语音条目但无有效翻译 (AI返回 ${fullContent.length} bytes, 原始内容: "${fullContent.substring(0, 100)}")`)
         }
 
         return result

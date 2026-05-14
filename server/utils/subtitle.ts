@@ -18,6 +18,16 @@ export function safePath(userPath: string): string {
 }
 
 export const SubtitleService = {
+    isNonVerbal(text: string): boolean {
+        const trimmed = text.trim()
+        if (!trimmed) return true
+        if (/^\*+$/.test(trimmed)) return true
+        if (/^\*.*\*$/.test(trimmed) && trimmed.replace(/[\*]/g, '').trim().length === 0) return true
+        if (/^\[.*\]$/.test(trimmed)) return true
+        if (/^[\(\[].*[\)\]]$/.test(trimmed)) return true
+        return false
+    },
+
     async parseSubtitle(filePath: string): Promise<SubtitleEntry[]> {
         const content = readFileSync(filePath, 'utf-8')
         const extension = filePath.split('.').pop()?.toLowerCase()

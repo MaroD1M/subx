@@ -202,8 +202,14 @@ export const TaskService = {
 
                 const uncachedEntries: SubtitleEntry[] = []
                 const cachedResults = new Map<string, string>()
+                const nonVerbalResults = new Map<string, string>()
 
                 for (const entry of chunk) {
+                    if (SubtitleService.isNonVerbal(entry.text)) {
+                        nonVerbalResults.set(String(entry.id), entry.text)
+                        continue
+                    }
+
                     const sourceText = entry.text
                     const cacheHash = SubtitleService.computeCacheHash(sourceText, task.model, task.targetLanguage)
                     const cached = SubtitleService.getCachedTranslation(cacheHash)
@@ -214,17 +220,24 @@ export const TaskService = {
                     }
                 }
 
-                if (uncachedEntries.length < chunk.length) {
-                    console.log(`[Cache] Chunk ${index}: ${chunk.length - uncachedEntries.length}/${chunk.length} entries from cache`)
+                if (cachedResults.size > 0 || nonVerbalResults.size > 0) {
+                    console.log(`[Cache] Chunk ${index}: ${cachedResults.size} from cache, ${nonVerbalResults.size} non-verbal skipped, ${uncachedEntries.length} to translate`)
                 }
 
                 let translatedChunk: SubtitleEntry[]
 
                 if (uncachedEntries.length === 0) {
-                    translatedChunk = chunk.map(entry => ({
-                        ...entry,
-                        translatedText: cachedResults.get(String(entry.id)) || entry.text
-                    }))
+                    translatedChunk = chunk.map(entry => {
+                        const cachedText = cachedResults.get(String(entry.id))
+                        if (cachedText) {
+                            return { ...entry, translatedText: cachedText }
+                        }
+                        const nonVerbalText = nonVerbalResults.get(String(entry.id))
+                        if (nonVerbalText) {
+                            return { ...entry, translatedText: nonVerbalText }
+                        }
+                        return entry
+                    })
                 } else {
                     const idMapping = new Map<string, string>()
                     const remappedChunk: SubtitleEntry[] = uncachedEntries.map((entry, i) => {
@@ -264,7 +277,7 @@ export const TaskService = {
                             }
                             aiResultByOriginalId.set(originalId, restoredEntry)
 
-                            if (entry.translatedText && entry.translatedText !== entry.text) {
+                            if (entry.translatedText && entry.translatedText !== entry.text && !SubtitleService.isNonVerbal(originalEntry!.text)) {
                                 const cacheHash = SubtitleService.computeCacheHash(originalEntry!.text, task.model, task.targetLanguage)
                                 SubtitleService.setCachedTranslation(cacheHash, originalEntry!.text, entry.translatedText, task.model, task.targetLanguage)
                             }
@@ -275,6 +288,10 @@ export const TaskService = {
                         const cachedText = cachedResults.get(String(entry.id))
                         if (cachedText) {
                             return { ...entry, translatedText: cachedText }
+                        }
+                        const nonVerbalText = nonVerbalResults.get(String(entry.id))
+                        if (nonVerbalText) {
+                            return { ...entry, translatedText: nonVerbalText }
                         }
                         const aiResult = aiResultByOriginalId.get(String(entry.id))
                         return aiResult || entry

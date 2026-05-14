@@ -59,7 +59,11 @@ export function useDb() {
       task_id TEXT NOT NULL,
       chunk_index INTEGER,
       model TEXT,
+      raw_request TEXT,
       raw_response TEXT,
+      prompt_tokens INTEGER DEFAULT 0,
+      completion_tokens INTEGER DEFAULT 0,
+      total_tokens INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -79,6 +83,22 @@ export function useDb() {
   // Safe migration: add style_preset column to existing databases
   try {
     _db.exec(`ALTER TABLE tasks ADD COLUMN style_preset TEXT NOT NULL DEFAULT 'default'`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE task_responses ADD COLUMN raw_request TEXT`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE task_responses ADD COLUMN prompt_tokens INTEGER DEFAULT 0`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE task_responses ADD COLUMN completion_tokens INTEGER DEFAULT 0`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE task_responses ADD COLUMN total_tokens INTEGER DEFAULT 0`)
   } catch { /* column already exists */ }
 
   // Performance indexes
