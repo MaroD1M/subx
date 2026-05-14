@@ -1,6 +1,12 @@
 import { AuthService } from '../../utils/auth'
 
 export default defineEventHandler(async (event) => {
+    const ip = getRequestIP(event, { xForwardedFor: true }) || 'unknown'
+
+    if (!AuthService.checkLoginRate(ip)) {
+        throw createError({ statusCode: 429, message: '登录尝试过于频繁，请稍后再试' })
+    }
+
     const { passkey } = await readBody(event)
 
     if (!passkey) {
@@ -16,7 +22,8 @@ export default defineEventHandler(async (event) => {
 
     setCookie(event, 'subx_session', token, {
         httpOnly: true,
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 24 * 7,
         path: '/',
         sameSite: 'lax'
     })

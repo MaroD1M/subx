@@ -81,5 +81,15 @@ export function useDb() {
     _db.exec(`ALTER TABLE tasks ADD COLUMN style_preset TEXT NOT NULL DEFAULT 'default'`)
   } catch { /* column already exists */ }
 
+  // Performance indexes
+  _db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_task_responses_task_id ON task_responses(task_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_translation_cache_hash ON translation_cache(hash);
+    CREATE INDEX IF NOT EXISTS idx_translation_cache_model_lang ON translation_cache(model, target_lang);
+  `)
+
   return _db
 }

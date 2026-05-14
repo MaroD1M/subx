@@ -25,7 +25,6 @@ class TaskQueue {
     }
 
     private async next() {
-        // Read the latest concurrency setting every time we try to start a new task
         const config = await ConfigService.getConfig();
         const concurrency = Math.max(1, Number(config.concurrency) || 3);
 
@@ -33,7 +32,6 @@ class TaskQueue {
             const taskArgs = this.queue.shift();
             if (taskArgs) {
                 this.active++;
-                // Start processing without awaiting it here, let it run
                 TaskService.process(taskArgs.taskId, taskArgs.openaiConfig)
                     .then(taskArgs.resolve)
                     .catch(taskArgs.reject)
@@ -48,10 +46,40 @@ class TaskQueue {
 
 export const globalTaskQueue = new TaskQueue()
 
+async function translateChunkWithRetry(
+    openai: OpenAI,
+    chunk: SubtitleEntry[],
+    targetLanguage: string,
+    glossary: Record<string, string>,
+    previousContext: SubtitleEntry[],
+    model: string,
+    taskId: string,
+    chunkIndex: number,
+    stylePrompt: string,
+    maxRetries: number,
+    callbacks?: { onEntryTranslated?: (entry: { id: string; translatedText: string }) => void }
+): Promise<SubtitleEntry[]> {
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await TranslationService.translateChunk(
+                openai, chunk, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks
+            )
+        } catch (e: any) {
+            lastError = e
+            if (attempt < maxRetries) {
+                const delay = Math.min(1000 * Math.pow(2, attempt), 30000)
+                console.warn(`[Retry] Chunk ${chunkIndex} attempt ${attempt + 1} failed, retrying in ${delay}ms...`)
+                await new Promise(resolve => setTimeout(resolve, delay))
+            }
+        }
+    }
+
+    throw lastError!
+}
+
 export const TaskService = {
-    /**
-     * Create new task in database
-     */
     async createTask(task: Partial<TranslationTask>): Promise<TranslationTask> {
         const db = useDb()
         const stmt = db.prepare(`
@@ -66,9 +94,6 @@ export const TaskService = {
         return this.getTask(task.taskId!)
     },
 
-    /**
-     * Get task by ID
-     */
     getTask(taskId: string): TranslationTask {
         const db = useDb()
         const task = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId) as any
@@ -88,21 +113,14 @@ export const TaskService = {
         }
     },
 
-    /**
-     * Update task status and progress
-     */
     async updateStatus(taskId: string, status: TaskStatus, progress: number, data: any = {}) {
         const db = useDb()
         const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
         stmt.run(status, progress, taskId)
 
-        // Emit for SSE
         taskEvents.emit('progress', { taskId, step: status, progress, ...data })
     },
 
-    /**
-     * Main processing loop for a task
-     */
     async process(taskId: string, openaiConfig: { apiKey: string, baseUrl?: string }) {
         const task = this.getTask(taskId)
         const videoDir = process.env.VIDEO_DIR || '/data'
@@ -115,13 +133,11 @@ export const TaskService = {
         const srtPath = task.sourceType === 'external'
             ? join(videoDir, task.filePath)
             : join(tempDir, `${taskId}.srt`)
-        // Clean up common language prefixes from the base name, e.g., "video.zh-CN.srt" -> "video.en.srt"
         const baseName = task.filePath.replace(/\.[^.]+$/, '')
         const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
         const outputPath = join(videoDir, `${cleanName}.${task.targetLanguage}.srt`)
 
         try {
-            // 1. Extraction (Optional for MKV)
             await this.updateStatus(taskId, 'extracting', 10, { log: '正在从原视频中提取字幕流...' })
             if (task.sourceType === 'embedded') {
                 await VideoService.extractSubtitle(task.filePath, task.trackIndex!, srtPath)
@@ -130,11 +146,9 @@ export const TaskService = {
                 await this.updateStatus(taskId, 'extracting', 15, { log: '使用外部字幕文件。' })
             }
 
-            // 2. Parsing & Chunking
             await this.updateStatus(taskId, 'parsing', 20, { log: '正在解析 SRT 并进行智能分块...' })
             const allEntries = await SubtitleService.parseSubtitle(srtPath)
 
-            // 获取数据库中的配置（分块大小）
             const config = await ConfigService.getConfig()
             const chunkSize = config.chunkSize || 2000
             console.log(`[Task] Using chunk size: ${chunkSize}`)
@@ -146,47 +160,126 @@ export const TaskService = {
             const db = useDb()
             db.prepare('UPDATE tasks SET total_chunks = ? WHERE task_id = ?').run(totalChunks, taskId)
 
-            // 3. Translation
             await this.updateStatus(taskId, 'translating', 30, { totalChunks, completedChunks: 0 })
 
             const openai = new OpenAI({ apiKey: openaiConfig.apiKey, baseURL: openaiConfig.baseUrl })
             const chunkLimit = Math.max(1, config.concurrency || 3)
-            const limit = pLimit(chunkLimit) // use dynamically configured chunk concurrency
+            const limit = pLimit(chunkLimit)
+            const maxRetries = config.maxRetries || 3
 
-            let completedChunks = 0
-            const translatedEntries: SubtitleEntry[] = []
+            const glossary = config.glossary || {}
 
-            // Resolve the style prompt from the preset
             const stylePresetConfig = STYLE_PRESETS.find(s => s.id === task.stylePreset)
             const stylePrompt = stylePresetConfig?.prompt || ''
             if (stylePrompt) {
                 await this.updateStatus(taskId, 'translating', 30, { log: `使用翻译风格预设: ${stylePresetConfig!.name}` })
             }
 
-            const promises = chunks.map((chunk, index) => limit(async () => {
-                const translatedChunk = await TranslationService.translateChunk(
-                    openai, chunk, task.targetLanguage, {}, [], task.model, taskId, index, stylePrompt
-                )
-                completedChunks++
-                translatedEntries.push(...translatedChunk)
+            const translatedMap = new Map<string, SubtitleEntry>()
+            const completedChunksPerChunk = new Map<number, number>()
+            let globalCompletedChunks = 0
 
-                await this.updateStatus(taskId, 'translating', 30 + Math.floor((completedChunks / totalChunks) * 60), {
+            const updateGlobalProgress = () => {
+                globalCompletedChunks = 0
+                for (const count of completedChunksPerChunk.values()) {
+                    globalCompletedChunks += count > 0 ? 1 : 0
+                }
+                const progress = 30 + Math.floor((globalCompletedChunks / totalChunks) * 60)
+                this.updateStatus(taskId, 'translating', progress, {
                     totalChunks,
-                    completedChunks,
-                    currentText: `翻译进度: ${completedChunks}/${totalChunks}`,
-                    log: `[AI] 块 #${index + 1} 翻译完成 (${completedChunks}/${totalChunks})`
+                    completedChunks: globalCompletedChunks,
+                    currentText: `翻译进度: ${globalCompletedChunks}/${totalChunks}`
+                })
+            }
+
+            const promises = chunks.map((chunk, index) => limit(async () => {
+                const previousContext = index > 0 && chunks[index - 1]
+                    ? chunks[index - 1]!.slice(-5).map(e => {
+                        const translated = translatedMap.get(String(e.id))
+                        return translated || e
+                    })
+                    : []
+
+                const uncachedChunk: SubtitleEntry[] = []
+                const cachedResults = new Map<string, string>()
+
+                for (const entry of chunk) {
+                    const sourceText = entry.text
+                    const cacheHash = SubtitleService.computeCacheHash(sourceText, task.model, task.targetLanguage)
+                    const cached = SubtitleService.getCachedTranslation(cacheHash)
+                    if (cached) {
+                        cachedResults.set(String(entry.id), cached)
+                    } else {
+                        uncachedChunk.push(entry)
+                    }
+                }
+
+                if (uncachedChunk.length < chunk.length) {
+                    console.log(`[Cache] Chunk ${index}: ${chunk.length - uncachedChunk.length}/${chunk.length} entries from cache`)
+                }
+
+                let translatedChunk: SubtitleEntry[]
+
+                if (uncachedChunk.length === 0) {
+                    translatedChunk = chunk.map(entry => ({
+                        ...entry,
+                        translatedText: cachedResults.get(String(entry.id)) || entry.text
+                    }))
+                } else {
+                    const aiResults = await translateChunkWithRetry(
+                        openai, uncachedChunk, task.targetLanguage, glossary, previousContext,
+                        task.model, taskId, index, stylePrompt, maxRetries,
+                        {
+                            onEntryTranslated: (entry) => {
+                                translatedMap.set(String(entry.id), {
+                                    ...uncachedChunk.find(e => String(e.id) === String(entry.id))!,
+                                    translatedText: entry.translatedText
+                                })
+                            }
+                        }
+                    )
+
+                    for (const entry of aiResults) {
+                        if (entry.translatedText && entry.translatedText !== entry.text) {
+                            const cacheHash = SubtitleService.computeCacheHash(entry.text, task.model, task.targetLanguage)
+                            SubtitleService.setCachedTranslation(cacheHash, entry.text, entry.translatedText, task.model, task.targetLanguage)
+                        }
+                    }
+
+                    translatedChunk = chunk.map(entry => {
+                        const cachedText = cachedResults.get(String(entry.id))
+                        if (cachedText) {
+                            return { ...entry, translatedText: cachedText }
+                        }
+                        const aiResult = aiResults.find(t => String(t.id) === String(entry.id))
+                        return aiResult || entry
+                    })
+                }
+
+                completedChunksPerChunk.set(index, translatedChunk.length)
+                for (const entry of translatedChunk) {
+                    translatedMap.set(String(entry.id), entry)
+                }
+
+                updateGlobalProgress()
+
+                this.updateStatus(taskId, 'translating', 30 + Math.floor((globalCompletedChunks / totalChunks) * 60), {
+                    totalChunks,
+                    completedChunks: globalCompletedChunks,
+                    log: `[AI] 块 #${index + 1} 翻译完成 (${globalCompletedChunks}/${totalChunks})`
                 })
             }))
 
             await Promise.all(promises)
 
-            // 4. Exporting
             await this.updateStatus(taskId, 'exporting', 90, { log: '正在合成并保存最终字幕文件...' })
+            const translatedEntries = Array.from(translatedMap.values())
             translatedEntries.sort((a, b) => Number(a.id) - Number(b.id))
-            await SubtitleService.writeSubtitle(translatedEntries, outputPath)
+            await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual')
             await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${outputPath}` })
 
-            // 5. Done
+            TranslationService.cleanupPartialFiles(taskId, totalChunks)
+
             await this.updateStatus(taskId, 'done', 100)
             db.prepare('UPDATE tasks SET status = \'done\', progress = 100, output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
                 .run(outputPath, taskId)
@@ -211,7 +304,6 @@ export const TaskService = {
             })
             useDb().prepare('UPDATE tasks SET status = \'error\', error = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(e.message, taskId)
         } finally {
-            // Clean up temporary extracted subtitle
             if (task.sourceType === 'embedded' && existsSync(srtPath)) {
                 try {
                     rmSync(srtPath, { force: true })

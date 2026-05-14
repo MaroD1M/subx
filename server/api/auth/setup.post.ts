@@ -17,7 +17,8 @@ export default defineEventHandler(async (event) => {
 
         setCookie(event, 'subx_session', token, {
             httpOnly: true,
-            maxAge: 60 * 60 * 24 * 7, // 7 days
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 60 * 60 * 24 * 7,
             path: '/',
             sameSite: 'lax'
         })

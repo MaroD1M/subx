@@ -140,9 +140,8 @@ const toast = useToast()
 async function cancelTask() {
   cancelling.value = true
   try {
-    await $fetch('/api/tasks/cancel', { 
-      method: 'POST',
-      body: { taskId }
+    await $fetch(`/api/tasks/${taskId}/cancel`, { 
+      method: 'POST'
     })
     task.value.step = 'error'
     task.value.error = '用户取消任务'
@@ -242,49 +241,83 @@ onMounted(async () => {
   // 2. Skip SSE if task is already in terminal state
   if (task.value.step === 'done' || task.value.step === 'error') return
 
-  // 3. Connect SSE for live updates
-  const es = new EventSource(`/api/sse/progress?taskId=${taskId}`)
-  eventSource.value = es
-  
+  // 3. Connect SSE for live updates with auto-reconnect
+  let reconnectAttempts = 0
+  const MAX_RECONNECT_ATTEMPTS = 10
+  const BASE_RECONNECT_DELAY = 1000
   let lastLoggedStep = null
-  es.addEventListener('progress', (e) => {
-    const data = JSON.parse(e.data)
-    task.value = { ...task.value, ...data }
-    
-    // Handle Step Change Logs
-    if (data.step && data.step !== lastLoggedStep) {
-       lastLoggedStep = data.step
-       const stepNames = {
-         queued: '入队',
-         extracting: '提取字幕',
-         parsing: '解析文本',
-         translating: 'AI 翻译',
-         exporting: '导出文件',
-         done: '完成',
-         error: '出错'
-       }
-       const currentStepName = stepNames[data.step] || data.step
-       logs.value.push({ 
-         type: data.step === 'error' ? 'error' : 'info', 
-         message: data.step === 'error' ? `状态变更: 任务失败` : `状态变更: ${currentStepName}`,
-         timestamp: new Date().toLocaleTimeString()
-       })
-    }
+  let isIntentionalClose = false
 
-    // Handle Granular Logs
-    if (data.log) {
-      logs.value.push({
-        type: data.step === 'error' || data.log.includes('!!!') ? 'error' : 'info',
-        message: data.log,
-        timestamp: new Date().toLocaleTimeString()
-      })
-    }
-  })
+  function connectSSE() {
+    const es = new EventSource(`/api/sse/progress?taskId=${taskId}`)
+    eventSource.value = es
 
-  es.onerror = () => {
-    console.error('SSE Error')
-    es.close()
+    es.addEventListener('progress', (e) => {
+      reconnectAttempts = 0
+      const data = JSON.parse(e.data)
+      task.value = { ...task.value, ...data }
+
+      if (data.step === 'done' || data.step === 'error') {
+        isIntentionalClose = true
+        es.close()
+      }
+
+      if (data.step && data.step !== lastLoggedStep) {
+        lastLoggedStep = data.step
+        const stepNames = {
+          queued: '入队',
+          extracting: '提取字幕',
+          parsing: '解析文本',
+          translating: 'AI 翻译',
+          exporting: '导出文件',
+          done: '完成',
+          error: '出错'
+        }
+        const currentStepName = stepNames[data.step] || data.step
+        logs.value.push({
+          type: data.step === 'error' ? 'error' : 'info',
+          message: data.step === 'error' ? `状态变更: 任务失败` : `状态变更: ${currentStepName}`,
+          timestamp: new Date().toLocaleTimeString()
+        })
+      }
+
+      if (data.log) {
+        logs.value.push({
+          type: data.step === 'error' || data.log.includes('!!!') ? 'error' : 'info',
+          message: data.log,
+          timestamp: new Date().toLocaleTimeString()
+        })
+      }
+    })
+
+    es.onerror = () => {
+      es.close()
+
+      if (isIntentionalClose) return
+      if (task.value.step === 'done' || task.value.step === 'error') return
+
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000)
+        reconnectAttempts++
+        console.warn(`[SSE] Connection lost, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`)
+        logs.value.push({
+          type: 'info',
+          message: `连接中断，${delay / 1000}s 后自动重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`,
+          timestamp: new Date().toLocaleTimeString()
+        })
+        setTimeout(connectSSE, delay)
+      } else {
+        console.error('[SSE] Max reconnect attempts reached')
+        logs.value.push({
+          type: 'error',
+          message: '实时连接已断开，请刷新页面获取最新状态',
+          timestamp: new Date().toLocaleTimeString()
+        })
+      }
+    }
   }
+
+  connectSSE()
 })
 </script>
 

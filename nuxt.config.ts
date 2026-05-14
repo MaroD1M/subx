@@ -9,18 +9,39 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'SubX - 自动化视频字幕提取与翻译工具',
-      link: [
-        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
-        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap' }
-      ]
+      title: 'SubX - 自动化视频字幕提取与翻译工具'
     }
   },
 
   modules: [
     '@nuxt/ui'
   ],
+
+  fonts: {
+    defaults: {
+      weights: [],
+      styles: []
+    },
+    providers: {
+      google: false,
+      googleicons: false,
+      bunny: false,
+      fontshare: false,
+      fontsource: false,
+      adobe: false
+    }
+  },
+
+  icon: {
+    provider: 'iconify',
+    serverBundle: {
+      collections: ['lucide']
+    },
+    clientBundle: {
+      scan: true
+    },
+    fetchTimeout: 0
+  },
 
   css: ['~/app.css'],
 

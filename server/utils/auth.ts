@@ -1,19 +1,35 @@
 import { createHash, randomBytes } from 'crypto'
 import { useDb } from './db'
 
+const loginAttempts = new Map<string, { count: number; lastAttempt: number }>()
+const MAX_LOGIN_ATTEMPTS = 5
+const LOGIN_WINDOW_MS = 60 * 1000
+
+function checkLoginRateLimit(ip: string): boolean {
+    const now = Date.now()
+    const record = loginAttempts.get(ip)
+
+    if (!record || now - record.lastAttempt > LOGIN_WINDOW_MS) {
+        loginAttempts.set(ip, { count: 1, lastAttempt: now })
+        return true
+    }
+
+    if (record.count >= MAX_LOGIN_ATTEMPTS) {
+        return false
+    }
+
+    record.count++
+    record.lastAttempt = now
+    return true
+}
+
 export const AuthService = {
-    /**
-     * 检查是否已设置口令密钥
-     */
     hasPasskey(): boolean {
         const db = useDb()
         const row = db.prepare('SELECT id FROM auth WHERE id = 1').get()
         return !!row
     },
 
-    /**
-     * 创建口令密钥（仅允许创建一次）
-     */
     setupPasskey(passkey: string): void {
         if (this.hasPasskey()) {
             throw new Error('口令密钥已存在，不可重复创建')
@@ -23,9 +39,6 @@ export const AuthService = {
         db.prepare('INSERT INTO auth (id, passkey_hash) VALUES (1, ?)').run(hash)
     },
 
-    /**
-     * 验证口令密钥
-     */
     verifyPasskey(passkey: string): boolean {
         const db = useDb()
         const row = db.prepare('SELECT passkey_hash FROM auth WHERE id = 1').get() as any
@@ -33,22 +46,18 @@ export const AuthService = {
         return row.passkey_hash === this.hashPasskey(passkey)
     },
 
-    /**
-     * 创建会话 token（有效期 7 天）
-     */
+    checkLoginRate(ip: string): boolean {
+        return checkLoginRateLimit(ip)
+    },
+
     createSession(): string {
         const token = randomBytes(32).toString('hex')
         const db = useDb()
-        // 清理过期会话
         db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run()
-        // 创建新会话
         db.prepare("INSERT INTO sessions (token, expires_at) VALUES (?, datetime('now', '+7 days'))").run(token)
         return token
     },
 
-    /**
-     * 验证会话 token 是否有效
-     */
     verifySession(token: string): boolean {
         if (!token) return false
         const db = useDb()
@@ -56,17 +65,11 @@ export const AuthService = {
         return !!row
     },
 
-    /**
-     * 销毁会话
-     */
     destroySession(token: string): void {
         const db = useDb()
         db.prepare('DELETE FROM sessions WHERE token = ?').run(token)
     },
 
-    /**
-     * 对密钥进行 SHA-256 散列
-     */
     hashPasskey(passkey: string): string {
         return createHash('sha256').update(passkey).digest('hex')
     }
