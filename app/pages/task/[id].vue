@@ -102,13 +102,82 @@
            
            <div v-if="task.step === 'done'" class="flex gap-2">
              <a
+               :href="`/api/tasks/${taskId}/download-original`"
+               class="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer"
+             >
+               <UIcon name="i-lucide-file-text" class="w-4 h-4" />
+               原始字幕
+             </a>
+             <a
                :href="`/api/tasks/${taskId}/download`"
                class="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer"
              >
                <UIcon name="i-lucide-download" class="w-4 h-4" />
-               下载 SRT
+               下载译文 SRT
              </a>
+             <UButton
+               label="调用记录"
+               icon="i-lucide-activity"
+               color="neutral"
+               variant="subtle"
+               @click="showResponses = !showResponses"
+             />
            </div>
+        </div>
+
+        <!-- AI Call Records -->
+        <div v-if="showResponses && task.step === 'done'" class="mt-4">
+          <div class="bg-gray-950 rounded-2xl p-4 font-mono text-xs overflow-hidden shadow-inner ring-1 ring-white/10">
+            <div class="flex items-center gap-1.5 mb-3">
+               <div class="w-2.5 h-2.5 rounded-full bg-blue-500/80" />
+               <span class="ml-2 text-gray-500 text-[10px] uppercase font-bold">AI 模型调用记录</span>
+            </div>
+
+            <div v-if="responsesLoading" class="text-gray-500 py-4 text-center">加载中...</div>
+            <div v-else-if="responsesSummary" class="space-y-3">
+              <div class="grid grid-cols-4 gap-4 text-gray-300 mb-3">
+                <div class="space-y-1">
+                  <span class="text-[10px] text-gray-600 uppercase font-bold">总调用次数</span>
+                  <p class="text-sm font-medium text-blue-400">{{ responsesSummary.totalChunks }}</p>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[10px] text-gray-600 uppercase font-bold">输入 Tokens</span>
+                  <p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span>
+                  <p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span>
+                  <p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p>
+                </div>
+              </div>
+
+              <div class="max-h-40 overflow-y-auto custom-scrollbar">
+                <table class="w-full text-left">
+                  <thead>
+                    <tr class="text-gray-600 text-[10px] uppercase">
+                      <th class="pb-2 pr-4">块</th>
+                      <th class="pb-2 pr-4">模型</th>
+                      <th class="pb-2 pr-4">输入</th>
+                      <th class="pb-2 pr-4">输出</th>
+                      <th class="pb-2">合计</th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-gray-400">
+                    <tr v-for="r in responsesRecords" :key="r.id" class="border-t border-gray-800/50">
+                      <td class="py-1.5 pr-4 text-gray-500">#{{ r.chunk_index + 1 }}</td>
+                      <td class="py-1.5 pr-4 text-gray-300">{{ r.model }}</td>
+                      <td class="py-1.5 pr-4 text-amber-400">{{ (r.prompt_tokens || 0).toLocaleString() }}</td>
+                      <td class="py-1.5 pr-4 text-emerald-400">{{ (r.completion_tokens || 0).toLocaleString() }}</td>
+                      <td class="py-1.5 text-primary-400">{{ (r.total_tokens || 0).toLocaleString() }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -128,6 +197,30 @@ const task = ref({
   error: null,
   model: null,
   targetLanguage: null
+})
+
+const showResponses = ref(false)
+const responsesLoading = ref(false)
+const responsesRecords = ref([])
+const responsesSummary = ref(null)
+
+async function fetchResponses() {
+  responsesLoading.value = true
+  try {
+    const data = await $fetch(`/api/tasks/${taskId}/responses`)
+    responsesRecords.value = data.records || []
+    responsesSummary.value = data.summary || null
+  } catch (e) {
+    console.error('[Responses] Failed to fetch:', e)
+  } finally {
+    responsesLoading.value = false
+  }
+}
+
+watch(showResponses, (val) => {
+  if (val && task.value.step === 'done') {
+    fetchResponses()
+  }
 })
 
 function downloadSrt() {
