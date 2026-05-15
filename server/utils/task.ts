@@ -74,7 +74,7 @@ async function translateChunkWithRetry(
 
         try {
             const results = await TranslationService.translateChunk(
-                openai, remainingEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage
+                openai, remainingEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt
             )
 
             for (const entry of results) {

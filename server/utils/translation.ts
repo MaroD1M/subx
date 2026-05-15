@@ -87,7 +87,8 @@ export const TranslationService = {
         chunkIndex?: number,
         stylePrompt?: string,
         callbacks?: StreamCallbacks,
-        streamUsage: boolean = false
+        streamUsage: boolean = false,
+        attempt: number = 0
     ): Promise<SubtitleEntry[]> {
         const glossaryText = Object.entries(glossary)
             .map(([key, value]) => `${key} -> ${value}`)
@@ -119,7 +120,7 @@ export const TranslationService = {
         if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true })
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-        const logFile = join(logDir, `task_${taskId || 'unknown'}_chunk_${chunkIndex ?? 0}_${timestamp}.log`)
+        const logFile = join(logDir, `task_${taskId || 'unknown'}_chunk_${chunkIndex ?? 0}_attempt_${attempt}_${timestamp}.log`)
 
         let fullContent = ''
         let lastParsedIndex = 0
@@ -127,12 +128,9 @@ export const TranslationService = {
         try {
             const systemMessage = `你是高级字幕翻译专家。按指定格式逐条输出翻译，不要输出任何额外内容。每条输入都必须有对应的翻译输出，序号必须与输入完全一致。${stylePrompt ? ' ' + stylePrompt : ''}`
             const messages: ChatCompletionMessageParam[] = [
-                    {
-                        role: 'system',
-                        content: systemMessage
-                    },
-                    { role: 'user', content: prompt }
-                ]
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: prompt }
+            ]
 
             // 写入初始日志
             const requestOptions = {
@@ -143,7 +141,8 @@ export const TranslationService = {
 
             const initialLog = `=== TASK INFO ===
 Task ID: ${taskId}
-Chunk: ${chunkIndex}
+Chunk Index: ${chunkIndex}
+Attempt: ${attempt}
 Model: ${model}
 Target: ${targetLanguage}
 Stream Usage Toggle: ${streamUsage ? 'ON' : 'OFF'}
