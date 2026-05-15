@@ -8,19 +8,22 @@ RUN apk add --no-cache --virtual .build-deps \
     python3 \
     make \
     g++ \
-    sqlite-dev
+    sqlite-dev \
+    libc6-compat
 
 # 为了使用 npm ci 或 npm install 安装
-COPY package.json package-lock.json* ./
+COPY package.json ./
 
 # 优化针对 QEMU 模拟环境的安装逻辑
 # 1. 设置超时以防网络抖动导致 QEMU 进程挂起
 # 2. 禁用 audit 和 fund 减少不必要的进程分发
+# 3. 使用 --ignore-scripts 先安装依赖，然后再运行 scripts，避开 npm 在某些环境下无法正确处理可选依赖的 bug
 RUN npm config set fetch-retries 5 && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000 && \
     npm config set audit false && \
     npm config set fund false && \
+    npm install --ignore-scripts && \
     npm install
 
 COPY . .
