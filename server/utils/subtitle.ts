@@ -21,10 +21,8 @@ export const SubtitleService = {
     isNonVerbal(text: string): boolean {
         const trimmed = text.trim()
         if (!trimmed) return true
-        if (/^\*+$/.test(trimmed)) return true
-        if (/^\*.*\*$/.test(trimmed) && trimmed.replace(/[\*]/g, '').trim().length === 0) return true
-        if (/^\[.*\]$/.test(trimmed)) return true
-        if (/^[\(\[].*[\)\]]$/.test(trimmed)) return true
+        // 仅包含星号、破折号或纯标点符号的情况视为非语言
+        if (/^[\*\-\.，。！？、…\s]+$/.test(trimmed)) return true
         return false
     },
 

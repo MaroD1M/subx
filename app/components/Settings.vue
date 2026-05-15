@@ -94,12 +94,15 @@
       </UFormField>
     </div>
 
-    <div class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 flex items-center justify-between">
+    <div 
+      class="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+      @click="config.streamUsage = !config.streamUsage"
+    >
       <div class="space-y-0.5">
         <label class="text-sm font-medium text-gray-700 dark:text-gray-300">流式统计 (Stream Usage)</label>
         <p class="text-[11px] text-gray-500 dark:text-gray-400">实时统计 Token 消耗。部分第三方 API 可能不兼容导致报错，若遇到“0字节/解析失败”建议关闭。</p>
       </div>
-      <UToggle v-model="config.streamUsage" />
+      <USwitch v-model="config.streamUsage" class="shrink-0 ml-4" @click.stop />
     </div>
 
     <div class="flex justify-end pt-4 border-t dark:border-gray-800 gap-3">
@@ -231,6 +234,7 @@ if (config.value) {
   if (config.value.concurrency) config.value.concurrency = Number(config.value.concurrency)
   if (config.value.maxRetries) config.value.maxRetries = Number(config.value.maxRetries)
   if (config.value.logRetentionDays) config.value.logRetentionDays = Number(config.value.logRetentionDays)
+  if (config.value.streamUsage === undefined) config.value.streamUsage = false
 }
 const pending = ref(false)
 const toast = useToast()
