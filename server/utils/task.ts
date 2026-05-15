@@ -61,23 +61,49 @@ async function translateChunkWithRetry(
     streamUsage: boolean = false
 ): Promise<SubtitleEntry[]> {
     let lastError: Error | null = null
+    const finalResults = new Map<string, SubtitleEntry>()
+    let remainingEntries = [...chunk]
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (remainingEntries.length === 0) break
+
+        if (attempt > 0) {
+            console.log(`[Retry] Task ${taskId} chunk ${chunkIndex}: 正在进行第 ${attempt}/${maxRetries} 次增量重试，剩余 ${remainingEntries.length} 条未翻译`)
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+        }
+
         try {
-            return await TranslationService.translateChunk(
-                openai, chunk, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage
+            const results = await TranslationService.translateChunk(
+                openai, remainingEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage
             )
+
+            for (const entry of results) {
+                if (entry.translatedText && entry.translatedText !== entry.text) {
+                    finalResults.set(String(entry.id), entry)
+                }
+            }
+
+            remainingEntries = remainingEntries.filter(e => !finalResults.has(String(e.id)))
+
+            if (remainingEntries.length === 0) {
+                break
+            }
         } catch (e: any) {
             lastError = e
-            if (attempt < maxRetries) {
-                const delay = Math.min(1000 * Math.pow(2, attempt), 30000)
-                console.warn(`[Retry] Chunk ${chunkIndex} attempt ${attempt + 1} failed, retrying in ${delay}ms...`)
-                await new Promise(resolve => setTimeout(resolve, delay))
-            }
+            console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
         }
     }
 
-    throw lastError!
+    // 检查是否还有遗漏
+    if (remainingEntries.length > 0) {
+        console.warn(`[Retry] Task ${taskId} chunk ${chunkIndex}: 在 ${maxRetries} 次重试后仍有 ${remainingEntries.length} 条翻译缺失`)
+    }
+
+    // 按照原始顺序组装结果
+    return chunk.map(entry => {
+        const translated = finalResults.get(String(entry.id))
+        return translated || { ...entry, translatedText: entry.text } // 最终保底填入原文
+    })
 }
 
 export const TaskService = {

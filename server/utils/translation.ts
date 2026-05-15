@@ -135,12 +135,22 @@ export const TranslationService = {
                 ]
 
             // 写入初始日志
+            const requestOptions = {
+                model: model,
+                stream: true,
+                stream_options: streamUsage ? { include_usage: true } : undefined
+            }
+
             const initialLog = `=== TASK INFO ===
 Task ID: ${taskId}
 Chunk: ${chunkIndex}
 Model: ${model}
 Target: ${targetLanguage}
+Stream Usage Toggle: ${streamUsage ? 'ON' : 'OFF'}
 Timestamp: ${new Date().toISOString()}
+
+=== REQUEST OPTIONS ===
+${JSON.stringify(requestOptions, null, 2)}
 
 === SYSTEM MESSAGE ===
 ${systemMessage}
@@ -153,11 +163,10 @@ ${prompt}
             appendFileSync(logFile, initialLog)
 
             const stream = await openai.chat.completions.create({
-                model: model,
+                ...requestOptions,
                 messages,
-                stream: true,
-                ...(streamUsage ? { stream_options: { include_usage: true } } : {})
-            })
+                stream: true
+            }) as any
 
             let lastLogTime = Date.now()
             let buffer = ''
