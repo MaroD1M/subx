@@ -1,7 +1,10 @@
 <template>
-  <div class="flex h-[750px] gap-6 glass-panel rounded-3xl p-5 overflow-hidden">
+  <div ref="layoutRef" class="flex h-[850px] gap-3 glass-panel rounded-3xl p-4 overflow-hidden">
     <!-- File Browser (Left) -->
-    <div class="w-1/2 flex flex-col border-r border-gray-100 dark:border-gray-700 pr-4">
+    <div
+      class="flex flex-col border border-gray-200/80 dark:border-gray-700/80 rounded-2xl p-3 bg-white/35 dark:bg-gray-900/25 min-w-[280px]"
+      :style="{ width: `${leftPaneWidth}%` }"
+    >
       <div class="flex items-center gap-2 mb-4">
         <UIcon name="i-lucide-folder" class="w-5 h-5 text-primary-500" />
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">文件浏览器</h3>
@@ -44,57 +47,79 @@
       </div>
     </div>
 
+    <div
+      class="w-2 rounded-full bg-gray-200/80 dark:bg-gray-700/80 hover:bg-primary-300 dark:hover:bg-primary-700 cursor-col-resize transition-colors"
+      title="拖动调整左右分区宽度"
+      @mousedown.prevent="startResize('main', $event)"
+    />
+
     <!-- Track & Options (Right) -->
-    <div class="w-1/2 flex flex-col pl-4">
+    <div ref="rightPaneRef" class="flex-1 flex flex-col min-w-[340px] border border-gray-200/80 dark:border-gray-700/80 rounded-2xl p-3 bg-white/35 dark:bg-gray-900/25">
+      <div class="flex items-center justify-end mb-2">
+        <UButton
+          label="恢复默认布局"
+          size="xs"
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-rotate-ccw"
+          @click="resetLayout"
+        />
+      </div>
       <div v-if="selectedFile" class="h-full flex flex-col min-h-0">
         <div class="flex items-center gap-2 mb-4">
           <UIcon :name="isSubtitleFile ? 'i-lucide-file-text' : 'i-lucide-video'" class="w-5 h-5 text-sky-500" />
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ isSubtitleFile ? '字幕文件已就绪：' : '字幕轨道：' }}{{ selectedFile.name }}</h3>
         </div>
 
-        <div v-if="isSubtitleFile" class="flex-1 flex flex-col min-h-[180px] mb-4 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800 p-3 overflow-hidden">
-          <div v-if="pendingSubtitle" class="flex flex-col items-center justify-center flex-1">
-             <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
-             <p class="text-xs text-neutral-500">正在读取字幕内容...</p>
-          </div>
-          <div v-else-if="subtitlePreview.length" class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-            <div v-for="entry in subtitlePreview" :key="entry.id" class="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 shadow-sm">
-                <div class="flex items-center justify-between mb-1">
-                   <span class="text-[10px] font-mono text-sky-500 bg-sky-50 dark:bg-sky-950 px-1.5 py-0.5 rounded leading-none">{{ entry.startTime }}</span>
-                   <span class="text-[9px] text-neutral-400">#{{ entry.id }}</span>
+        <div class="flex-1 min-h-0 flex flex-col">
+          <div class="min-h-[180px] overflow-hidden rounded-2xl border border-gray-200/80 dark:border-gray-700/80 bg-gray-50/50 dark:bg-gray-900/40 p-3" :style="{ height: `${rightTopHeight}%` }">
+            <div v-if="isSubtitleFile" class="h-full flex flex-col min-h-0">
+              <div v-if="pendingSubtitle" class="flex flex-col items-center justify-center flex-1">
+                <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
+                <p class="text-xs text-neutral-500">正在读取字幕内容...</p>
+              </div>
+              <div v-else-if="subtitlePreview.length" class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                <div v-for="entry in subtitlePreview" :key="entry.id" class="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 shadow-sm">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[10px] font-mono text-sky-500 bg-sky-50 dark:bg-sky-950 px-1.5 py-0.5 rounded leading-none">{{ entry.startTime }}</span>
+                      <span class="text-[9px] text-neutral-400">#{{ entry.id }}</span>
+                    </div>
+                    <p class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{{ entry.text }}</p>
                 </div>
-                <p class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{{ entry.text }}</p>
+                <div v-if="totalSubtitleEntries > subtitlePreview.length" class="py-2 text-center">
+                  <p class="text-xs text-neutral-400 italic">共 {{ totalSubtitleEntries }} 条，仅显示前 50 条预览</p>
+                </div>
+              </div>
+              <div v-else class="flex flex-col items-center justify-center flex-1 text-center">
+                <UIcon name="i-lucide-file-warning" class="w-8 h-8 text-neutral-300 mb-2" />
+                <p class="text-xs text-neutral-500">当前暂无可预览内容，请确认字幕编码或格式后重试</p>
+              </div>
             </div>
-            <div v-if="totalSubtitleEntries > subtitlePreview.length" class="py-2 text-center">
-               <p class="text-xs text-neutral-400 italic">共 {{ totalSubtitleEntries }} 条，仅显示前 50 条预览</p>
-            </div>
+            <template v-else>
+              <div v-if="pendingTracks" class="flex items-center justify-center h-full">
+                <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary-500" />
+              </div>
+              <div v-else-if="tracks.length" class="h-full space-y-2">
+                <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 px-1">
+                  <span>可用轨道 {{ tracks.filter(t => t.isSupported).length }} / {{ tracks.length }}</span>
+                  <span v-if="selectedTrackIndex !== null">当前选择 #{{ selectedTrackIndex }}</span>
+                </div>
+                <div class="h-[calc(100%-22px)] overflow-y-auto py-2 pr-1 custom-scrollbar">
+                  <URadioGroup v-model="selectedTrackIndex" :items="trackOptions" />
+                </div>
+              </div>
+              <div v-else class="h-full flex flex-col items-center justify-center p-8 text-center">
+                <UIcon name="i-lucide-info" class="w-8 h-8 text-neutral-400 mb-2" />
+                <p class="text-sm text-neutral-500">当前未找到可用字幕轨道，请更换视频或改选外部字幕文件</p>
+              </div>
+            </template>
           </div>
-          <div v-else class="flex flex-col items-center justify-center flex-1 text-center">
-            <UIcon name="i-lucide-file-warning" class="w-8 h-8 text-neutral-300 mb-2" />
-            <p class="text-xs text-neutral-500">当前暂无可预览内容，请确认字幕编码或格式后重试</p>
-          </div>
-        </div>
 
-        <template v-else>
-          <div v-if="pendingTracks" class="flex items-center justify-center min-h-[180px]">
-            <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary-500" />
-          </div>
-          
-          <div v-else-if="tracks.length" class="space-y-2 mb-4">
-            <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 px-1">
-              <span>可用轨道 {{ tracks.filter(t => t.isSupported).length }} / {{ tracks.length }}</span>
-              <span v-if="selectedTrackIndex !== null">当前选择 #{{ selectedTrackIndex }}</span>
-            </div>
-            <div class="min-h-[220px] max-h-[360px] overflow-y-auto py-2 pr-1 custom-scrollbar">
-            <URadioGroup v-model="selectedTrackIndex" :items="trackOptions" />
-            </div>
-          </div>
-          
-          <div v-else class="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 rounded-xl text-center min-h-[180px] mb-4">
-            <UIcon name="i-lucide-info" class="w-8 h-8 text-neutral-400 mb-2" />
-            <p class="text-sm text-neutral-500">当前未找到可用字幕轨道，请更换视频或改选外部字幕文件</p>
-          </div>
-        </template>
+          <div
+            class="my-2 h-2 rounded-full bg-gray-200/80 dark:bg-gray-700/80 hover:bg-primary-300 dark:hover:bg-primary-700 cursor-row-resize transition-colors"
+            title="拖动调整上下分区高度"
+            @mousedown.prevent="startResize('right', $event)"
+          />
 
         <div class="shrink-0 pt-4 border-t border-gray-100 dark:border-gray-700">
           <div class="max-h-[320px] overflow-y-auto pr-1 custom-scrollbar space-y-4">
@@ -120,12 +145,20 @@
                 <USelect v-model="options.targetLanguage" :items="['zh-CN', 'zh-TW', 'en']" class="w-full" />
               </UFormField>
               <UFormField label="输出模式">
-                <USelect v-model="options.outputMode" :items="[{ label: '仅显示译文', value: 'translated' }, { label: '双语对照', value: 'bilingual' }]" class="w-full" />
+                <USelect
+                  v-model="options.outputMode"
+                  :items="[
+                    { label: '仅显示译文', value: 'translated' },
+                    { label: '双语对照', value: 'bilingual' },
+                    { label: '仅导出原字幕', value: 'original' }
+                  ]"
+                  class="w-full"
+                />
               </UFormField>
             </div>
           </div>
 
-          <div class="space-y-3.5">
+          <div class="space-y-3.5" :class="{ 'opacity-70': options.outputMode === 'original' }">
             <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">字幕输出</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <UFormField label="字幕格式">
@@ -140,7 +173,7 @@
                 />
               </UFormField>
               <UFormField label="字幕样式">
-                <USelect v-model="options.subtitleStylePreset" :items="subtitleStyleOptions" class="w-full" />
+                <USelect v-model="options.subtitleStylePreset" :items="subtitleStyleOptions" class="w-full" :disabled="options.outputMode === 'original'" />
               </UFormField>
             </div>
             <UFormField label="双语布局">
@@ -159,11 +192,12 @@
 
           <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800/70 bg-white/90 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/75 supports-[backdrop-filter]:dark:bg-gray-900/65 rounded-xl">
             <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase mb-2">操作</p>
-            <div class="flex gap-3">
+            <div class="flex gap-2">
               <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
-              <UButton :label="launching ? '正在创建任务...' : '开始翻译'" color="primary" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
+              <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
             </div>
           </div>
+        </div>
         </div>
       </div>
 
@@ -184,6 +218,11 @@ const { data: files, refresh, pending: loadingFiles, error: filesError } = await
 const { data: appConfig } = await useFetch('/api/config')
 const selectedFile = ref(null)
 const selectedNode = ref(null)
+const layoutRef = ref<HTMLElement | null>(null)
+const rightPaneRef = ref<HTMLElement | null>(null)
+const leftPaneWidth = ref(50)
+const rightTopHeight = ref(48)
+const resizeMode = ref<'main' | 'right' | null>(null)
 
 async function refreshFiles() {
   await refresh()
@@ -236,6 +275,13 @@ const subtitleStyleOptions = computed(() => {
       { label: '单语紧凑', value: 'mono_compact' }
     ]
   }
+  if (options.value.outputMode === 'original') {
+    return [
+      ...common,
+      { label: '单语清爽', value: 'mono_clean' },
+      { label: '单语紧凑', value: 'mono_compact' }
+    ]
+  }
   return [
     ...common,
     { label: '简洁双语（推荐）', value: 'bilingual_simple' },
@@ -270,7 +316,11 @@ watch(appConfig, (cfg) => {
 watch(() => options.value.outputMode, (mode) => {
   const allowed = subtitleStyleOptions.value.map(item => item.value)
   if (allowed.includes(options.value.subtitleStylePreset)) return
-  options.value.subtitleStylePreset = mode === 'translated' ? 'mono_clean' : 'bilingual_simple'
+  if (mode === 'translated' || mode === 'original') {
+    options.value.subtitleStylePreset = 'mono_clean'
+  } else {
+    options.value.subtitleStylePreset = 'bilingual_simple'
+  }
 })
 
 const currentStyle = computed(() => STYLE_PRESETS.find(s => s.id === options.value.stylePreset))
@@ -434,3 +484,49 @@ async function startTask(silent = false) {
   }
 }
 </script>
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function startResize(mode: 'main' | 'right', _event: MouseEvent) {
+  resizeMode.value = mode
+}
+
+function handleResize(event: MouseEvent) {
+  if (!resizeMode.value) return
+
+  if (resizeMode.value === 'main' && layoutRef.value) {
+    const rect = layoutRef.value.getBoundingClientRect()
+    const percent = ((event.clientX - rect.left) / rect.width) * 100
+    leftPaneWidth.value = clamp(percent, 34, 66)
+    return
+  }
+
+  if (resizeMode.value === 'right' && rightPaneRef.value) {
+    const rect = rightPaneRef.value.getBoundingClientRect()
+    const headerOffset = 56
+    const usable = rect.height - headerOffset
+    const topPx = event.clientY - rect.top - headerOffset
+    const percent = (topPx / usable) * 100
+    rightTopHeight.value = clamp(percent, 30, 70)
+  }
+}
+
+function stopResize() {
+  resizeMode.value = null
+}
+
+function resetLayout() {
+  leftPaneWidth.value = 50
+  rightTopHeight.value = 48
+}
+
+onMounted(() => {
+  window.addEventListener('mousemove', handleResize)
+  window.addEventListener('mouseup', stopResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', handleResize)
+  window.removeEventListener('mouseup', stopResize)
+})

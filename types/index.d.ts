@@ -23,7 +23,7 @@ export interface TranslationTask {
   trackIndex?: number          // 内嵌字幕轨道索引
   model: string                // 使用的模型
   targetLanguage: string       // 目标语言（如 zh-CN）
-  outputMode: 'translated' | 'bilingual' // 纯译文 or 双语
+  outputMode: 'translated' | 'bilingual' | 'original' // 纯译文 / 双语 / 仅导出原字幕
   stylePreset: string              // 翻译风格预设 ID
   status: TaskStatus
   progress: number             // 0-100

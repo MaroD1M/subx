@@ -68,7 +68,7 @@ export const SubtitleService = {
         return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`
     },
 
-    async writeSubtitle(entries: SubtitleEntry[], outputPath: string, outputMode: 'translated' | 'bilingual' = 'translated') {
+    async writeSubtitle(entries: SubtitleEntry[], outputPath: string, outputMode: 'translated' | 'bilingual' | 'original' = 'translated') {
         const outputDir = join(outputPath, '..')
         if (!existsSync(outputDir)) {
             mkdirSync(outputDir, { recursive: true })
@@ -78,7 +78,9 @@ export const SubtitleService = {
             const translatedText = entry.translatedText || entry.text
             let displayText: string
 
-            if (outputMode === 'bilingual' && entry.translatedText) {
+            if (outputMode === 'original') {
+                displayText = entry.text
+            } else if (outputMode === 'bilingual' && entry.translatedText) {
                 displayText = `${entry.text}\n${entry.translatedText}`
             } else {
                 displayText = translatedText

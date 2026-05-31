@@ -164,7 +164,9 @@ export const TaskService = {
             : join(tempDir, `${taskId}.srt`)
         const baseName = task.filePath.replace(/\.[^.]+$/, '')
         const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
-        const outputPath = join(videoDir, `${cleanName}.${task.targetLanguage}.srt`)
+        const outputExt = 'srt'
+        const outputSuffix = task.outputMode === 'original' ? 'original' : task.targetLanguage
+        const outputPath = join(videoDir, `${cleanName}.${outputSuffix}.${outputExt}`)
 
         try {
             await this.updateStatus(taskId, 'extracting', 10, { log: '正在从原视频中提取字幕流...' })
@@ -188,6 +190,18 @@ export const TaskService = {
 
             const db = useDb()
             db.prepare('UPDATE tasks SET total_chunks = ? WHERE task_id = ?').run(totalChunks, taskId)
+
+            if (task.outputMode === 'original') {
+                await this.updateStatus(taskId, 'translating', 80, { totalChunks, completedChunks: totalChunks, log: '已选择仅导出原字幕，跳过翻译。' })
+                await this.updateStatus(taskId, 'exporting', 90, { log: '正在导出原字幕文件...' })
+                const originalEntries = allEntries.map(entry => ({ ...entry, translatedText: entry.text }))
+                await SubtitleService.writeSubtitle(originalEntries, outputPath, 'original')
+                await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${outputPath}` })
+                await this.updateStatus(taskId, 'done', 100)
+                db.prepare('UPDATE tasks SET status = \'done\', progress = 100, output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
+                    .run(outputPath, taskId)
+                return
+            }
 
             await this.updateStatus(taskId, 'translating', 30, { totalChunks, completedChunks: 0 })
 
@@ -347,7 +361,7 @@ export const TaskService = {
             await this.updateStatus(taskId, 'exporting', 90, { log: '正在合成并保存最终字幕文件...' })
             const translatedEntries = Array.from(translatedMap.values())
             translatedEntries.sort((a, b) => Number(a.id) - Number(b.id))
-            await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual')
+            await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original')
             await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${outputPath}` })
 
             TranslationService.cleanupPartialFiles(taskId, totalChunks)

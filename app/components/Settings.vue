@@ -81,7 +81,15 @@
         <USelect v-model="config.targetLanguage" :items="['zh-CN', 'zh-TW', 'en', 'ja', 'ko']" class="w-full" />
       </UFormField>
       <UFormField label="输出模式">
-        <USelect v-model="config.outputMode" :items="[{ label: '仅显示翻译', value: 'translated' }, { label: '双语对照', value: 'bilingual' }]" class="w-full" />
+        <USelect
+          v-model="config.outputMode"
+          :items="[
+            { label: '仅显示译文', value: 'translated' },
+            { label: '双语对照', value: 'bilingual' },
+            { label: '仅导出原字幕', value: 'original' }
+          ]"
+          class="w-full"
+        />
       </UFormField>
     </div>
 
