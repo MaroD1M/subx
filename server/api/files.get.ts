@@ -5,16 +5,7 @@ import type { FileNode } from '~~/types'
 
 const SUPPORTED_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.ts', '.srt', '.ass', '.ssa', '.vtt']
 
-let cachedFiles: FileNode[] | null = null
-let cacheTimestamp = 0
-const CACHE_TTL = 30000
-
 export default defineEventHandler(async () => {
-    const now = Date.now()
-    if (cachedFiles && now - cacheTimestamp < CACHE_TTL) {
-        return cachedFiles
-    }
-
     const videoDir = process.env.VIDEO_DIR || '/data'
     const normalizedVideoDir = normalize(resolve(videoDir))
 
@@ -41,17 +32,15 @@ export default defineEventHandler(async () => {
 
                 if (isDir) {
                     const children = await scan(fullPath)
-                    if (children.length > 0) {
-                        nodes.push({
-                            name: item,
-                            path: relative(videoDir, fullPath),
-                            isDir: true,
-                            children: children
-                        })
-                    }
+                    nodes.push({
+                        name: item,
+                        path: relative(normalizedVideoDir, fullPath),
+                        isDir: true,
+                        children
+                    })
                 } else if (SUPPORTED_EXTENSIONS.includes(ext)) {
-                    const relPath = relative(videoDir, fullPath)
-                    const resolved = normalize(resolve(videoDir, relPath))
+                    const relPath = relative(normalizedVideoDir, fullPath)
+                    const resolved = normalize(resolve(normalizedVideoDir, relPath))
                     if (resolved.startsWith(normalizedVideoDir + '/') || resolved.startsWith(normalizedVideoDir + '\\') || resolved === normalizedVideoDir) {
                         nodes.push({
                             name: item,
@@ -69,7 +58,5 @@ export default defineEventHandler(async () => {
         }
     }
 
-    cachedFiles = await scan(videoDir)
-    cacheTimestamp = now
-    return cachedFiles
+    return scan(normalizedVideoDir)
 })

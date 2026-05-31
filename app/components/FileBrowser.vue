@@ -39,25 +39,25 @@
       
       <div class="flex-1 overflow-y-auto space-y-1">
         <template v-for="node in files" :key="node.path">
-          <FileNodeItem :node="node" @select="onSelect" />
+          <FileNodeItem :node="node" :selected-path="selectedNode?.path || ''" @select="onSelect" />
         </template>
       </div>
     </div>
 
     <!-- Track & Options (Right) -->
     <div class="w-1/2 flex flex-col pl-4">
-      <div v-if="selectedFile" class="h-full flex flex-col">
+      <div v-if="selectedFile" class="h-full flex flex-col min-h-0">
         <div class="flex items-center gap-2 mb-4">
           <UIcon :name="isSubtitleFile ? 'i-lucide-file-text' : 'i-lucide-video'" class="w-5 h-5 text-sky-500" />
-          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ isSubtitleFile ? '准备直接翻译: ' : '轨道列表: ' }}{{ selectedFile.name }}</h3>
+        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ isSubtitleFile ? '字幕文件已就绪：' : '字幕轨道：' }}{{ selectedFile.name }}</h3>
         </div>
 
-        <div v-if="isSubtitleFile" class="flex-1 flex flex-col min-h-0 mb-4 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800 p-3">
+        <div v-if="isSubtitleFile" class="flex-1 flex flex-col min-h-[180px] mb-4 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800 p-3 overflow-hidden">
           <div v-if="pendingSubtitle" class="flex flex-col items-center justify-center flex-1">
              <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
              <p class="text-xs text-neutral-500">正在读取字幕内容...</p>
           </div>
-          <div v-else-if="subtitlePreview.length" class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+          <div v-else-if="subtitlePreview.length" class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
             <div v-for="entry in subtitlePreview" :key="entry.id" class="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 shadow-sm">
                 <div class="flex items-center justify-between mb-1">
                    <span class="text-[10px] font-mono text-sky-500 bg-sky-50 dark:bg-sky-950 px-1.5 py-0.5 rounded leading-none">{{ entry.startTime }}</span>
@@ -71,45 +71,96 @@
           </div>
           <div v-else class="flex flex-col items-center justify-center flex-1 text-center">
             <UIcon name="i-lucide-file-warning" class="w-8 h-8 text-neutral-300 mb-2" />
-            <p class="text-xs text-neutral-500">无法读取该字幕文件内容</p>
+            <p class="text-xs text-neutral-500">当前暂无可预览内容，请确认字幕编码或格式后重试</p>
           </div>
         </div>
 
         <template v-else>
-          <div v-if="pendingTracks" class="flex items-center justify-center h-32">
+          <div v-if="pendingTracks" class="flex items-center justify-center min-h-[180px]">
             <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary-500" />
           </div>
           
-          <div v-else-if="tracks.length" class="flex-1 space-y-2 overflow-y-auto py-2">
+          <div v-else-if="tracks.length" class="space-y-2 mb-4">
+            <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 px-1">
+              <span>可用轨道 {{ tracks.filter(t => t.isSupported).length }} / {{ tracks.length }}</span>
+              <span v-if="selectedTrackIndex !== null">当前选择 #{{ selectedTrackIndex }}</span>
+            </div>
+            <div class="min-h-[220px] max-h-[360px] overflow-y-auto py-2 pr-1 custom-scrollbar">
             <URadioGroup v-model="selectedTrackIndex" :items="trackOptions" />
+            </div>
           </div>
           
-          <div v-else class="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 rounded-xl text-center flex-1 mb-4">
+          <div v-else class="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 rounded-xl text-center min-h-[180px] mb-4">
             <UIcon name="i-lucide-info" class="w-8 h-8 text-neutral-400 mb-2" />
-            <p class="text-sm text-neutral-500">此视频中未找到内嵌的字幕轨道。</p>
+            <p class="text-sm text-neutral-500">当前未找到可用字幕轨道，请更换视频或改选外部字幕文件</p>
           </div>
         </template>
 
-        <div class="mt-auto space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-          <UFormField label="翻译风格">
-            <USelect v-model="options.stylePreset" :items="styleOptions" />
-          </UFormField>
-          <div v-if="currentStyle" class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 transition-all">
-            <UIcon :name="currentStyle.icon" class="w-5 h-5 text-primary-500 shrink-0 mt-0.5" />
-            <div class="space-y-0.5 min-w-0">
-              <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ currentStyle.name }}</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ currentStyle.description }}</p>
+        <div class="shrink-0 space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700 max-h-[42%] overflow-y-auto pr-1 custom-scrollbar">
+          <div class="space-y-3.5">
+            <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">基础设置</p>
+            <UFormField label="翻译风格">
+              <USelect
+                v-model="options.stylePreset"
+                :items="styleOptions"
+                class="w-full"
+                :ui="{ width: 'w-full' }"
+              />
+            </UFormField>
+            <div v-if="currentStyle" class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 transition-all">
+              <UIcon :name="currentStyle.icon" class="w-5 h-5 text-primary-500 shrink-0 mt-0.5" />
+              <div class="space-y-0.5 min-w-0">
+                <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ currentStyle.name }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ currentStyle.description }}</p>
+              </div>
+            </div>
+            <UFormField label="目标语言">
+              <USelect v-model="options.targetLanguage" :items="['zh-CN', 'zh-TW', 'en']" class="w-full" />
+            </UFormField>
+            <UFormField label="输出模式">
+              <USelect v-model="options.outputMode" :items="[{ label: '仅显示译文', value: 'translated' }, { label: '双语对照', value: 'bilingual' }]" class="w-full" />
+            </UFormField>
+          </div>
+
+          <div class="space-y-3.5">
+            <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">字幕输出</p>
+            <UFormField label="字幕格式">
+              <USelect
+                v-model="options.subtitleFormat"
+                :items="[
+                  { label: 'SRT', value: 'srt' },
+                  { label: 'ASS', value: 'ass' },
+                  { label: 'SRT + ASS', value: 'both' }
+                ]"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="字幕样式">
+              <USelect v-model="options.subtitleStylePreset" :items="subtitleStyleOptions" class="w-full" />
+            </UFormField>
+            <UFormField label="双语布局">
+              <USelect
+                v-model="options.bilingualLayout"
+                :items="[
+                  { label: '译文在上', value: 'translated_first' },
+                  { label: '原文在上', value: 'original_first' }
+                ]"
+                :disabled="options.outputMode !== 'bilingual'"
+                class="w-full"
+              />
+            </UFormField>
+            <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50">
+              <p class="text-[11px] text-gray-500 mb-2">字幕样式预览（示例）</p>
+              <p class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{{ stylePreview }}</p>
             </div>
           </div>
-          <UFormField label="目标语言">
-            <USelect v-model="options.targetLanguage" :items="['zh-CN', 'zh-TW', 'en']" />
-          </UFormField>
-          <UFormField label="输出模式">
-             <USelect v-model="options.outputMode" :items="[{ label: '仅显示翻译', value: 'translated' }, { label: '双语对照', value: 'bilingual' }]" />
-          </UFormField>
-          <div class="flex gap-3 mt-4">
-             <UButton label="加入队列" color="neutral" variant="outline" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
-             <UButton label="开始 AI 翻译" color="primary" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
+
+          <div class="space-y-2">
+            <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">操作</p>
+            <div class="flex gap-3 pt-1">
+             <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
+             <UButton :label="launching ? '正在创建任务...' : '开始翻译'" color="primary" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
+            </div>
           </div>
         </div>
       </div>
@@ -118,8 +169,8 @@
         <div class="p-4 bg-gray-50 dark:bg-gray-900 rounded-full mb-4">
           <UIcon name="i-lucide-file-video-2" class="w-12 h-12 text-neutral-300" />
         </div>
-        <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">请选择一个视频或字幕文件</h4>
-        <p class="text-sm text-neutral-500 mt-2 italic px-8">SubX 会自动提取 mkv 视频内嵌字幕，或直接翻译独立的 .srt / .vtt 文件。</p>
+        <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">当前未选择文件</h4>
+        <p class="text-sm text-neutral-500 mt-2 italic px-8">SubX 会自动提取 MKV 内嵌字幕，或直接翻译独立的 .srt / .vtt / .ass / .ssa 文件。</p>
       </div>
     </div>
   </div>
@@ -128,6 +179,7 @@
 <script setup>
 const toast = useToast()
 const { data: files, refresh, pending: loadingFiles, error: filesError } = await useFetch('/api/files')
+const { data: appConfig } = await useFetch('/api/config')
 const selectedFile = ref(null)
 const selectedNode = ref(null)
 
@@ -135,19 +187,19 @@ async function refreshFiles() {
   await refresh()
   if (filesError.value) {
     toast.add({
-      title: '读取文件失败',
+      title: toastText.error,
       description: filesError.value.data?.message || '请检查媒体目录挂载和权限',
       color: 'danger'
     })
     return
   }
-  toast.add({ title: '已刷新文件列表', color: 'success' })
+  toast.add({ title: toastText.success, description: '文件列表已刷新', color: 'success' })
 }
 
 watch(filesError, (err) => {
   if (!err) return
   toast.add({
-    title: '读取文件失败',
+    title: toastText.error,
     description: err.data?.message || '请检查媒体目录挂载和权限',
     color: 'danger'
   })
@@ -160,6 +212,11 @@ const pendingSubtitle = ref(false)
 const totalSubtitleEntries = ref(0)
 const selectedTrackIndex = ref(null)
 const launching = ref(false)
+const toastText = {
+  success: '操作成功',
+  error: '操作失败',
+  hint: '提示'
+}
 
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 
@@ -168,10 +225,51 @@ const styleOptions = STYLE_PRESETS.map(s => ({
   value: s.id
 }))
 
+const subtitleStyleOptions = [
+  { label: '沿用原样式', value: 'inherit' },
+  { label: '简洁双语（推荐）', value: 'bilingual_simple' },
+  { label: '影院双语', value: 'bilingual_cinema' },
+  { label: '学习双语', value: 'bilingual_study' },
+  { label: '单语清爽', value: 'mono_clean' },
+  { label: '单语紧凑', value: 'mono_compact' }
+]
+
 const options = ref({
   stylePreset: 'default',
   targetLanguage: 'zh-CN',
-  outputMode: 'translated'
+  outputMode: 'translated',
+  subtitleFormat: 'srt',
+  subtitleStylePreset: 'bilingual_simple',
+  bilingualLayout: 'translated_first'
+})
+
+watch(appConfig, (cfg) => {
+  if (!cfg) return
+  options.value = {
+    stylePreset: cfg.stylePreset || options.value.stylePreset || 'default',
+    targetLanguage: cfg.targetLanguage || options.value.targetLanguage || 'zh-CN',
+    outputMode: cfg.outputMode || options.value.outputMode || 'translated',
+    subtitleFormat: cfg.subtitleFormat || options.value.subtitleFormat || 'srt',
+    subtitleStylePreset: cfg.subtitleStylePreset || options.value.subtitleStylePreset || 'bilingual_simple',
+    bilingualLayout: cfg.bilingualLayout || options.value.bilingualLayout || 'translated_first'
+  }
+}, { immediate: true })
+
+const stylePreview = computed(() => {
+  const original = 'I can do this all day.'
+  const translated = '我可以一直打下去'
+  if (options.value.outputMode === 'translated' || ['mono_clean', 'mono_compact'].includes(options.value.subtitleStylePreset)) {
+    return translated
+  }
+  const top = options.value.bilingualLayout === 'translated_first' ? translated : original
+  const bottomBase = options.value.bilingualLayout === 'translated_first' ? original : translated
+  if (options.value.subtitleStylePreset === 'bilingual_study') {
+    return `${top}\n[${bottomBase}]`
+  }
+  if (options.value.subtitleStylePreset === 'bilingual_simple') {
+    return `${top}\n- ${bottomBase}`
+  }
+  return `${top}\n${bottomBase}`
 })
 
 const currentStyle = computed(() => STYLE_PRESETS.find(s => s.id === options.value.stylePreset))
@@ -236,7 +334,7 @@ async function onSelect(node) {
       selectedTrackIndex.value = null
     }
   } catch (e) {
-    toast.add({ title: '错误', description: '无法分析视频轨道', color: 'danger' })
+    toast.add({ title: toastText.error, description: '无法分析视频轨道', color: 'danger' })
   } finally {
     pendingTracks.value = false
   }
@@ -251,10 +349,10 @@ async function createFolder() {
       method: 'POST',
       body: { parentPath, name }
     })
-    toast.add({ title: '成功', description: '文件夹已创建', color: 'success' })
+    toast.add({ title: toastText.success, description: '文件夹已创建', color: 'success' })
     await refresh()
   } catch (e) {
-    toast.add({ title: '创建失败', description: e?.data?.message || '无法创建文件夹', color: 'danger' })
+    toast.add({ title: toastText.error, description: e?.data?.message || '无法创建文件夹', color: 'danger' })
   }
 }
 
@@ -267,14 +365,14 @@ async function renameNode() {
       method: 'POST',
       body: { path: selectedNode.value.path, newName: name }
     })
-    toast.add({ title: '成功', description: '重命名成功', color: 'success' })
+    toast.add({ title: toastText.success, description: '重命名成功', color: 'success' })
     selectedNode.value = null
     selectedFile.value = null
     tracks.value = []
     subtitlePreview.value = []
     await refresh()
   } catch (e) {
-    toast.add({ title: '重命名失败', description: e?.data?.message || '无法重命名', color: 'danger' })
+    toast.add({ title: toastText.error, description: e?.data?.message || '无法重命名', color: 'danger' })
   }
 }
 
@@ -287,14 +385,14 @@ async function deleteNode() {
       method: 'POST',
       body: { path: selectedNode.value.path }
     })
-    toast.add({ title: '成功', description: '删除成功', color: 'success' })
+    toast.add({ title: toastText.success, description: '删除成功', color: 'success' })
     selectedNode.value = null
     selectedFile.value = null
     tracks.value = []
     subtitlePreview.value = []
     await refresh()
   } catch (e) {
-    toast.add({ title: '删除失败', description: e?.data?.message || '无法删除目标', color: 'danger' })
+    toast.add({ title: toastText.error, description: e?.data?.message || '无法删除目标', color: 'danger' })
   }
 }
 
@@ -312,8 +410,8 @@ async function startTask(silent = false) {
       }
     })
     toast.add({
-      title: '成功',
-      description: silent ? '任务已加入队列，可前往「任务历史」查看进度' : '任务已提交，正在跳转到任务详情',
+      title: toastText.success,
+      description: silent ? '已加入队列，可前往「任务历史」查看进度' : '正在打开任务详情',
       color: 'success'
     })
     if (silent) {
@@ -321,15 +419,15 @@ async function startTask(silent = false) {
       tracks.value = []
       subtitlePreview.value = []
       toast.add({
-        title: '提示',
-        description: '可点击右上角「任务历史」查看队列进度',
+        title: toastText.hint,
+        description: '可点击右上角「任务历史」查看进度',
         color: 'neutral'
       })
     } else {
       navigateTo(`/task/${res.taskId}`)
     }
   } catch (e) {
-    toast.add({ title: '错误', description: '无法开始翻译任务', color: 'danger' })
+    toast.add({ title: toastText.error, description: '无法开始翻译任务', color: 'danger' })
   } finally {
     launching.value = false
   }
