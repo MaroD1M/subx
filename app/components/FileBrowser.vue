@@ -96,7 +96,8 @@
           </div>
         </template>
 
-        <div class="shrink-0 space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700 max-h-[42%] overflow-y-auto pr-1 custom-scrollbar">
+        <div class="shrink-0 pt-4 border-t border-gray-100 dark:border-gray-700">
+          <div class="max-h-[320px] overflow-y-auto pr-1 custom-scrollbar space-y-4">
           <div class="space-y-3.5">
             <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">基础设置</p>
             <UFormField label="翻译风格">
@@ -114,30 +115,34 @@
                 <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ currentStyle.description }}</p>
               </div>
             </div>
-            <UFormField label="目标语言">
-              <USelect v-model="options.targetLanguage" :items="['zh-CN', 'zh-TW', 'en']" class="w-full" />
-            </UFormField>
-            <UFormField label="输出模式">
-              <USelect v-model="options.outputMode" :items="[{ label: '仅显示译文', value: 'translated' }, { label: '双语对照', value: 'bilingual' }]" class="w-full" />
-            </UFormField>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <UFormField label="目标语言">
+                <USelect v-model="options.targetLanguage" :items="['zh-CN', 'zh-TW', 'en']" class="w-full" />
+              </UFormField>
+              <UFormField label="输出模式">
+                <USelect v-model="options.outputMode" :items="[{ label: '仅显示译文', value: 'translated' }, { label: '双语对照', value: 'bilingual' }]" class="w-full" />
+              </UFormField>
+            </div>
           </div>
 
           <div class="space-y-3.5">
             <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">字幕输出</p>
-            <UFormField label="字幕格式">
-              <USelect
-                v-model="options.subtitleFormat"
-                :items="[
-                  { label: 'SRT', value: 'srt' },
-                  { label: 'ASS', value: 'ass' },
-                  { label: 'SRT + ASS', value: 'both' }
-                ]"
-                class="w-full"
-              />
-            </UFormField>
-            <UFormField label="字幕样式">
-              <USelect v-model="options.subtitleStylePreset" :items="subtitleStyleOptions" class="w-full" />
-            </UFormField>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <UFormField label="字幕格式">
+                <USelect
+                  v-model="options.subtitleFormat"
+                  :items="[
+                    { label: 'SRT', value: 'srt' },
+                    { label: 'ASS', value: 'ass' },
+                    { label: 'SRT + ASS', value: 'both' }
+                  ]"
+                  class="w-full"
+                />
+              </UFormField>
+              <UFormField label="字幕样式">
+                <USelect v-model="options.subtitleStylePreset" :items="subtitleStyleOptions" class="w-full" />
+              </UFormField>
+            </div>
             <UFormField label="双语布局">
               <USelect
                 v-model="options.bilingualLayout"
@@ -149,17 +154,14 @@
                 class="w-full"
               />
             </UFormField>
-            <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50">
-              <p class="text-[11px] text-gray-500 mb-2">字幕样式预览（示例）</p>
-              <p class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">{{ stylePreview }}</p>
-            </div>
+          </div>
           </div>
 
-          <div class="space-y-2">
-            <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">操作</p>
-            <div class="flex gap-3 pt-1">
-             <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
-             <UButton :label="launching ? '正在创建任务...' : '开始翻译'" color="primary" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
+          <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800/70 bg-white/90 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/75 supports-[backdrop-filter]:dark:bg-gray-900/65 rounded-xl">
+            <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase mb-2">操作</p>
+            <div class="flex gap-3">
+              <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
+              <UButton :label="launching ? '正在创建任务...' : '开始翻译'" color="primary" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
             </div>
           </div>
         </div>
@@ -225,14 +227,24 @@ const styleOptions = STYLE_PRESETS.map(s => ({
   value: s.id
 }))
 
-const subtitleStyleOptions = [
-  { label: '沿用原样式', value: 'inherit' },
-  { label: '简洁双语（推荐）', value: 'bilingual_simple' },
-  { label: '影院双语', value: 'bilingual_cinema' },
-  { label: '学习双语', value: 'bilingual_study' },
-  { label: '单语清爽', value: 'mono_clean' },
-  { label: '单语紧凑', value: 'mono_compact' }
-]
+const subtitleStyleOptions = computed(() => {
+  const common = [{ label: '沿用原样式', value: 'inherit' }]
+  if (options.value.outputMode === 'translated') {
+    return [
+      ...common,
+      { label: '单语清爽（推荐）', value: 'mono_clean' },
+      { label: '单语紧凑', value: 'mono_compact' }
+    ]
+  }
+  return [
+    ...common,
+    { label: '简洁双语（推荐）', value: 'bilingual_simple' },
+    { label: '影院双语', value: 'bilingual_cinema' },
+    { label: '学习双语', value: 'bilingual_study' },
+    { label: '单语清爽', value: 'mono_clean' },
+    { label: '单语紧凑', value: 'mono_compact' }
+  ]
+})
 
 const options = ref({
   stylePreset: 'default',
@@ -255,21 +267,10 @@ watch(appConfig, (cfg) => {
   }
 }, { immediate: true })
 
-const stylePreview = computed(() => {
-  const original = 'I can do this all day.'
-  const translated = '我可以一直打下去'
-  if (options.value.outputMode === 'translated' || ['mono_clean', 'mono_compact'].includes(options.value.subtitleStylePreset)) {
-    return translated
-  }
-  const top = options.value.bilingualLayout === 'translated_first' ? translated : original
-  const bottomBase = options.value.bilingualLayout === 'translated_first' ? original : translated
-  if (options.value.subtitleStylePreset === 'bilingual_study') {
-    return `${top}\n[${bottomBase}]`
-  }
-  if (options.value.subtitleStylePreset === 'bilingual_simple') {
-    return `${top}\n- ${bottomBase}`
-  }
-  return `${top}\n${bottomBase}`
+watch(() => options.value.outputMode, (mode) => {
+  const allowed = subtitleStyleOptions.value.map(item => item.value)
+  if (allowed.includes(options.value.subtitleStylePreset)) return
+  options.value.subtitleStylePreset = mode === 'translated' ? 'mono_clean' : 'bilingual_simple'
 })
 
 const currentStyle = computed(() => STYLE_PRESETS.find(s => s.id === options.value.stylePreset))
