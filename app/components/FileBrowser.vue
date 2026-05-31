@@ -97,14 +97,32 @@
 </template>
 
 <script setup>
-const { data: files, refresh, pending: loadingFiles } = await useFetch('/api/files')
+const toast = useToast()
+const { data: files, refresh, pending: loadingFiles, error: filesError } = await useFetch('/api/files')
 const selectedFile = ref(null)
 
 async function refreshFiles() {
   await refresh()
+  if (filesError.value) {
+    toast.add({
+      title: '读取文件失败',
+      description: filesError.value.data?.message || '请检查媒体目录挂载和权限',
+      color: 'danger'
+    })
+    return
+  }
   toast.add({ title: '已刷新文件列表', color: 'success' })
 }
-const toast = useToast()
+
+watch(filesError, (err) => {
+  if (!err) return
+  toast.add({
+    title: '读取文件失败',
+    description: err.data?.message || '请检查媒体目录挂载和权限',
+    color: 'danger'
+  })
+}, { immediate: true })
+
 const tracks = ref([])
 const pendingTracks = ref(false)
 const subtitlePreview = ref([])

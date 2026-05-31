@@ -1,6 +1,11 @@
 import { AuthService } from '../../utils/auth'
 
 export default defineEventHandler(async (event) => {
+    const forwardedProto = getHeader(event, 'x-forwarded-proto')
+    const isHttps = forwardedProto
+        ? forwardedProto.split(',')[0]?.trim() === 'https'
+        : getRequestURL(event).protocol === 'https:'
+
     const { passkey } = await readBody(event)
 
     if (!passkey || typeof passkey !== 'string' || passkey.length < 4) {
@@ -17,7 +22,7 @@ export default defineEventHandler(async (event) => {
 
         setCookie(event, 'subx_session', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: isHttps,
             maxAge: 60 * 60 * 24 * 7,
             path: '/',
             sameSite: 'lax'

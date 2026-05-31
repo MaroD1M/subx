@@ -291,8 +291,12 @@ async function save() {
     })
     toast.add({ title: '成功', description: '设置已保存', color: 'success' })
     emit('close')
-  } catch (e) {
-    toast.add({ title: '错误', description: '无法保存设置', color: 'danger' })
+  } catch (e: any) {
+    toast.add({
+      title: '错误',
+      description: e?.data?.message || e?.message || '无法保存设置，请检查登录状态',
+      color: 'danger'
+    })
   } finally {
     pending.value = false
   }
