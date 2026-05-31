@@ -6,7 +6,10 @@
         <h2 class="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">翻译历史</h2>
         <p class="text-neutral-500 max-w-2xl">查看您之前的翻译任务，下载已翻译的 SRT 文件，或检查失败任务的错误日志。</p>
       </div>
-      <UButton label="清空历史" variant="ghost" color="error" icon="i-lucide-trash-2" @click="isClearModalOpen = true" />
+      <div class="flex items-center gap-2">
+        <UButton label="返回首页" variant="outline" color="neutral" icon="i-lucide-arrow-left" to="/" />
+        <UButton label="清空历史" variant="ghost" color="error" icon="i-lucide-trash-2" @click="isClearModalOpen = true" />
+      </div>
     </div>
 
     <div class="glass-panel rounded-3xl overflow-hidden p-2">
@@ -19,6 +22,14 @@
         <template #actions-cell="{ row }">
            <div class="flex items-center gap-2">
              <UButton icon="i-lucide-eye" variant="ghost" color="neutral" :to="`/task/${row.original.taskId}`" />
+             <UButton
+               v-if="row.original.status === 'error'"
+               icon="i-lucide-rotate-ccw"
+               variant="ghost"
+               color="warning"
+               :loading="retryingTaskId === row.original.taskId"
+               @click="retryTask(row.original.taskId)"
+             />
              <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
                <UIcon name="i-lucide-download" class="w-5 h-5" />
              </a>
@@ -57,6 +68,7 @@
 <script setup>
 const isClearModalOpen = ref(false)
 const isClearing = ref(false)
+const retryingTaskId = ref('')
 const toast = useToast()
 
 const { data, pending, refresh } = await useFetch('/api/tasks')
@@ -73,6 +85,26 @@ async function clearHistory() {
     toast.add({ title: '清理失败', description: '无法删除历史记录', color: 'error' })
   } finally {
     isClearing.value = false
+  }
+}
+
+async function retryTask(taskId) {
+  retryingTaskId.value = taskId
+  try {
+    const res = await $fetch('/api/task', {
+      method: 'POST',
+      body: { retryTaskId: taskId }
+    })
+    toast.add({ title: '已重试', description: '任务已重新加入队列', color: 'success' })
+    if (res?.taskId) {
+      navigateTo(`/task/${res.taskId}`)
+    } else {
+      await refresh()
+    }
+  } catch (e) {
+    toast.add({ title: '重试失败', description: e?.data?.message || '无法重试该任务', color: 'error' })
+  } finally {
+    retryingTaskId.value = ''
   }
 }
 

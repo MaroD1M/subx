@@ -35,7 +35,7 @@
       <div class="space-y-2">
         <div class="flex gap-2">
           <USelect
-            v-if="modelItems.length"
+            v-if="modelItems.length && !useManualModelInput"
             v-model="config.defaultModel"
             :items="modelItems"
             class="flex-1 min-w-0"
@@ -44,7 +44,7 @@
           <UInput
             v-else
             v-model="config.defaultModel"
-            placeholder="gpt-4o-mini"
+            placeholder="手动输入模型名，例如 gpt-4o-mini"
             class="flex-1"
           />
           <UButton
@@ -56,6 +56,12 @@
             @click="tryFetchModels"
             title="获取模型列表"
           />
+        </div>
+        <div v-if="modelItems.length" class="flex items-center justify-between gap-3 p-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40">
+          <div class="text-xs text-gray-500 dark:text-gray-400">
+            已加载模型列表，也可切换为手动输入
+          </div>
+          <USwitch v-model="useManualModelInput" />
         </div>
         <div v-if="fetchingModels" class="flex items-center gap-2 text-xs text-gray-500">
           <UIcon name="i-lucide-loader-2" class="w-3 h-3 animate-spin" />
@@ -241,8 +247,10 @@ const toast = useToast()
 
 // Models fetching
 const modelItems = ref([])
+const useManualModelInput = ref(false)
 const fetchingModels = ref(false)
 const modelError = ref('')
+const MODEL_INPUT_MODE_KEY = 'subx:settings:model-input-mode'
 const isInsecure = computed(() => {
   if (!import.meta.client) return false
   return window.location.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(window.location.hostname)
@@ -250,9 +258,19 @@ const isInsecure = computed(() => {
 
 // Auto-fetch models on mount if credentials are already configured
 onMounted(() => {
+  const savedMode = localStorage.getItem(MODEL_INPUT_MODE_KEY)
+  if (savedMode === 'manual') {
+    useManualModelInput.value = true
+  }
+
   if (config.value?.apiKey && config.value?.apiBaseUrl) {
     tryFetchModels()
   }
+})
+
+watch(useManualModelInput, (val) => {
+  if (!import.meta.client) return
+  localStorage.setItem(MODEL_INPUT_MODE_KEY, val ? 'manual' : 'select')
 })
 
 async function tryFetchModels() {

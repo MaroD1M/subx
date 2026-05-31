@@ -33,6 +33,16 @@ export default defineEventHandler(async (event) => {
         return taskId
     }
 
+    if (body.retryTaskId) {
+        const oldTask = TaskService.getTask(String(body.retryTaskId))
+        const newTaskId = await processFile(
+            oldTask.filePath,
+            oldTask.sourceType as 'embedded' | 'external',
+            oldTask.trackIndex || 0
+        )
+        return { taskId: newTaskId, taskIds: [newTaskId], retriedFrom: body.retryTaskId }
+    }
+
     if (files && Array.isArray(files) && files.length > 0) {
         for (const path of files) {
             const ext = path.split('.').pop()?.toLowerCase() || ''

@@ -32,10 +32,9 @@ const emit = defineEmits(['select'])
 const isOpen = ref(false)
 
 function toggle() {
+  emit('select', props.node)
   if (props.node.isDir) {
     isOpen.value = !isOpen.value
-  } else {
-    emit('select', props.node)
   }
 }
 </script>

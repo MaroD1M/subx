@@ -5,6 +5,35 @@
       <div class="flex items-center gap-2 mb-4">
         <UIcon name="i-lucide-folder" class="w-5 h-5 text-primary-500" />
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">文件浏览器</h3>
+        <UButton
+          icon="i-lucide-folder-plus"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          title="新建文件夹"
+          class="ml-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+          @click="createFolder"
+        />
+        <UButton
+          icon="i-lucide-pencil"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          title="重命名"
+          class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+          :disabled="!selectedNode"
+          @click="renameNode"
+        />
+        <UButton
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="ghost"
+          size="xs"
+          title="删除"
+          class="text-gray-400 hover:text-red-600"
+          :disabled="!selectedNode"
+          @click="deleteNode"
+        />
         <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="xs" :loading="loadingFiles" @click="refreshFiles" title="刷新文件" class="ml-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
       </div>
       
@@ -100,6 +129,7 @@
 const toast = useToast()
 const { data: files, refresh, pending: loadingFiles, error: filesError } = await useFetch('/api/files')
 const selectedFile = ref(null)
+const selectedNode = ref(null)
 
 async function refreshFiles() {
   await refresh()
@@ -161,7 +191,13 @@ const isSubtitleFile = computed(() => {
 })
 
 async function onSelect(node) {
-  if (node.isDir) return
+  selectedNode.value = node
+  if (node.isDir) {
+    selectedFile.value = null
+    tracks.value = []
+    subtitlePreview.value = []
+    return
+  }
   
   const ext = node.name.toLowerCase()
   if (!ext.endsWith('.mkv') && !ext.endsWith('.srt') && !ext.endsWith('.vtt') && !ext.endsWith('.ass') && !ext.endsWith('.ssa')) {
@@ -206,6 +242,62 @@ async function onSelect(node) {
   }
 }
 
+async function createFolder() {
+  const parentPath = selectedNode.value?.isDir ? selectedNode.value.path : selectedNode.value?.path?.split('/').slice(0, -1).join('/') || ''
+  const name = window.prompt('请输入新文件夹名称')
+  if (!name) return
+  try {
+    await $fetch('/api/files/create-folder', {
+      method: 'POST',
+      body: { parentPath, name }
+    })
+    toast.add({ title: '成功', description: '文件夹已创建', color: 'success' })
+    await refresh()
+  } catch (e) {
+    toast.add({ title: '创建失败', description: e?.data?.message || '无法创建文件夹', color: 'danger' })
+  }
+}
+
+async function renameNode() {
+  if (!selectedNode.value) return
+  const name = window.prompt('请输入新名称', selectedNode.value.name)
+  if (!name || name === selectedNode.value.name) return
+  try {
+    await $fetch('/api/files/rename', {
+      method: 'POST',
+      body: { path: selectedNode.value.path, newName: name }
+    })
+    toast.add({ title: '成功', description: '重命名成功', color: 'success' })
+    selectedNode.value = null
+    selectedFile.value = null
+    tracks.value = []
+    subtitlePreview.value = []
+    await refresh()
+  } catch (e) {
+    toast.add({ title: '重命名失败', description: e?.data?.message || '无法重命名', color: 'danger' })
+  }
+}
+
+async function deleteNode() {
+  if (!selectedNode.value) return
+  const ok = window.confirm(`确定删除 ${selectedNode.value.name} 吗？`)
+  if (!ok) return
+  try {
+    await $fetch('/api/files/delete', {
+      method: 'POST',
+      body: { path: selectedNode.value.path }
+    })
+    toast.add({ title: '成功', description: '删除成功', color: 'success' })
+    selectedNode.value = null
+    selectedFile.value = null
+    tracks.value = []
+    subtitlePreview.value = []
+    await refresh()
+  } catch (e) {
+    toast.add({ title: '删除失败', description: e?.data?.message || '无法删除目标', color: 'danger' })
+  }
+}
+
 async function startTask(silent = false) {
   if (selectedTrackIndex.value === null && !isSubtitleFile.value) return
   launching.value = true
@@ -219,11 +311,20 @@ async function startTask(silent = false) {
         ...options.value
       }
     })
-    toast.add({ title: '成功', description: '任务已提交到队列', color: 'success' })
+    toast.add({
+      title: '成功',
+      description: silent ? '任务已加入队列，可前往「任务历史」查看进度' : '任务已提交，正在跳转到任务详情',
+      color: 'success'
+    })
     if (silent) {
       selectedFile.value = null
       tracks.value = []
       subtitlePreview.value = []
+      toast.add({
+        title: '提示',
+        description: '可点击右上角「任务历史」查看队列进度',
+        color: 'neutral'
+      })
     } else {
       navigateTo(`/task/${res.taskId}`)
     }

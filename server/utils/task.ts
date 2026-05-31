@@ -8,6 +8,7 @@ import { VideoService } from './video'
 import { SubtitleService } from './subtitle'
 import { TranslationService } from './translation'
 import { ConfigService } from './config'
+import { classifyTaskError } from './taskError'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
 
@@ -356,6 +357,8 @@ export const TaskService = {
                 .run(outputPath, taskId)
 
         } catch (e: any) {
+            const message = e?.message || 'Unknown error'
+            const classified = classifyTaskError(message)
             const maskedKey = openaiConfig.apiKey ? `${openaiConfig.apiKey.substring(0, 6)}...` : 'MISSING'
             console.error('\n' + '='.repeat(50))
             console.error(`[DEBUG] 任务失败详情 - Task ID: ${taskId}`)
@@ -363,17 +366,17 @@ export const TaskService = {
             console.error(`[DEBUG] API Key (前6位): ${maskedKey}`)
             console.error(`[DEBUG] 使用模型: ${task.model}`)
             console.error(`[DEBUG] 目标语言: ${task.targetLanguage}`)
-            console.error(`[DEBUG] 错误信息: ${e.message}`)
+            console.error(`[DEBUG] 错误信息: ${message}`)
             if (e.response?.data) {
                 console.error(`[DEBUG] API 响应详情: ${JSON.stringify(e.response.data)}`)
             }
             console.error('='.repeat(50) + '\n')
 
             await this.updateStatus(taskId, 'error', 0, {
-                error: e.message,
-                log: `!!! 任务失败: ${e.message}${e.stack ? '\n堆栈信息: ' + e.stack.split('\n').slice(0, 3).join('\n') : ''}`
+                error: `${classified.summary} (${message})`,
+                log: `!!! 任务失败: ${classified.summary}${e.stack ? '\n堆栈信息: ' + e.stack.split('\n').slice(0, 3).join('\n') : ''}`
             })
-            useDb().prepare('UPDATE tasks SET status = \'error\', error = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(e.message, taskId)
+            useDb().prepare('UPDATE tasks SET status = \'error\', error = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(`${classified.summary} (${message})`, taskId)
         } finally {
             if (task.sourceType === 'embedded' && existsSync(srtPath)) {
                 try {
