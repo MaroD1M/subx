@@ -17,13 +17,13 @@ COPY package.json package-lock.json ./
 # 优化针对 QEMU 模拟环境的安装逻辑
 # 1. 设置超时以防网络抖动导致 QEMU 进程挂起
 # 2. 禁用 audit 和 fund 减少不必要的进程分发
-# 3. 仅安装构建所需依赖并跳过 install scripts，降低 QEMU 下 native addon 崩溃概率
+# 3. 保留 optional 依赖（Nuxt/oxc 需要平台绑定），但跳过 install scripts 以降低 QEMU 下 native addon 崩溃概率
 RUN npm config set fetch-retries 5 && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000 && \
     npm config set audit false && \
     npm config set fund false && \
-    npm ci --ignore-scripts --omit=optional
+    npm ci --ignore-scripts
 
 COPY . .
 RUN npm run build
