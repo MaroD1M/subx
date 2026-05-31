@@ -46,18 +46,18 @@
 
     <!-- Track & Options (Right) -->
     <div class="w-1/2 flex flex-col pl-4">
-      <div v-if="selectedFile" class="h-full flex flex-col">
+      <div v-if="selectedFile" class="h-full flex flex-col min-h-0">
         <div class="flex items-center gap-2 mb-4">
           <UIcon :name="isSubtitleFile ? 'i-lucide-file-text' : 'i-lucide-video'" class="w-5 h-5 text-sky-500" />
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ isSubtitleFile ? '字幕文件已就绪：' : '字幕轨道：' }}{{ selectedFile.name }}</h3>
         </div>
 
-        <div v-if="isSubtitleFile" class="flex-1 flex flex-col min-h-0 mb-4 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800 p-3">
+        <div v-if="isSubtitleFile" class="flex-1 flex flex-col min-h-[180px] mb-4 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800 p-3 overflow-hidden">
           <div v-if="pendingSubtitle" class="flex flex-col items-center justify-center flex-1">
              <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
              <p class="text-xs text-neutral-500">正在读取字幕内容...</p>
           </div>
-          <div v-else-if="subtitlePreview.length" class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+          <div v-else-if="subtitlePreview.length" class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
             <div v-for="entry in subtitlePreview" :key="entry.id" class="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 shadow-sm">
                 <div class="flex items-center justify-between mb-1">
                    <span class="text-[10px] font-mono text-sky-500 bg-sky-50 dark:bg-sky-950 px-1.5 py-0.5 rounded leading-none">{{ entry.startTime }}</span>
@@ -76,21 +76,27 @@
         </div>
 
         <template v-else>
-          <div v-if="pendingTracks" class="flex items-center justify-center h-32">
+          <div v-if="pendingTracks" class="flex items-center justify-center min-h-[180px]">
             <UIcon name="i-lucide-loader-2" class="w-8 h-8 animate-spin text-primary-500" />
           </div>
           
-          <div v-else-if="tracks.length" class="flex-1 space-y-2 overflow-y-auto py-2">
+          <div v-else-if="tracks.length" class="space-y-2 mb-4">
+            <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 px-1">
+              <span>可用轨道 {{ tracks.filter(t => t.isSupported).length }} / {{ tracks.length }}</span>
+              <span v-if="selectedTrackIndex !== null">当前选择 #{{ selectedTrackIndex }}</span>
+            </div>
+            <div class="min-h-[220px] max-h-[360px] overflow-y-auto py-2 pr-1 custom-scrollbar">
             <URadioGroup v-model="selectedTrackIndex" :items="trackOptions" />
+            </div>
           </div>
           
-          <div v-else class="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 rounded-xl text-center flex-1 mb-4">
+          <div v-else class="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-900 rounded-xl text-center min-h-[180px] mb-4">
             <UIcon name="i-lucide-info" class="w-8 h-8 text-neutral-400 mb-2" />
             <p class="text-sm text-neutral-500">当前未找到可用字幕轨道，请更换视频或改选外部字幕文件</p>
           </div>
         </template>
 
-        <div class="mt-auto space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+        <div class="shrink-0 space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700 max-h-[42%] overflow-y-auto pr-1 custom-scrollbar">
           <div class="space-y-3.5">
             <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">基础设置</p>
             <UFormField label="翻译风格">
