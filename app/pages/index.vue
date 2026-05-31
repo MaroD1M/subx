@@ -1,6 +1,6 @@
 <template>
-  <div class="space-y-8">
-    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 mt-12">
+  <div class="space-y-6 max-w-[1500px] mx-auto">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-5 pb-5 mt-8">
       <div class="space-y-4">
         <UBreadcrumb :links="[{ label: '首页', icon: 'i-lucide-home', to: '/' }]" />
         <h2 class="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">本地视频翻译区</h2>

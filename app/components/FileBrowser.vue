@@ -1,5 +1,5 @@
 <template>
-  <div ref="layoutRef" class="flex h-[850px] gap-3 glass-panel rounded-3xl p-4 overflow-hidden">
+  <div ref="layoutRef" class="flex h-[935px] gap-4 glass-panel rounded-3xl p-5 overflow-hidden">
     <!-- File Browser (Left) -->
     <div
       class="flex flex-col border border-gray-200/80 dark:border-gray-700/80 rounded-2xl p-3 bg-white/35 dark:bg-gray-900/25 min-w-[280px]"
@@ -124,13 +124,14 @@
         <div class="shrink-0 pt-4 border-t border-gray-100 dark:border-gray-700">
           <div class="max-h-[320px] overflow-y-auto pr-1 custom-scrollbar space-y-4">
           <div class="space-y-3.5">
-            <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">基础设置</p>
+            <p class="text-[11px] font-medium tracking-wide text-gray-400 dark:text-gray-500 uppercase">基础设置</p>
             <UFormField label="翻译风格">
               <USelect
                 v-model="options.stylePreset"
                 :items="styleOptions"
                 class="w-full"
                 :ui="{ width: 'w-full' }"
+                :disabled="options.outputMode === 'original'"
               />
             </UFormField>
             <div v-if="currentStyle" class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 transition-all">
@@ -141,9 +142,6 @@
               </div>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <UFormField label="目标语言">
-                <USelect v-model="options.targetLanguage" :items="['zh-CN', 'zh-TW', 'en']" class="w-full" />
-              </UFormField>
               <UFormField label="输出模式">
                 <USelect
                   v-model="options.outputMode"
@@ -155,11 +153,14 @@
                   class="w-full"
                 />
               </UFormField>
+              <UFormField label="目标语言">
+                <USelect v-model="options.targetLanguage" :items="['zh-CN', 'zh-TW', 'en']" class="w-full" :disabled="options.outputMode === 'original'" />
+              </UFormField>
             </div>
           </div>
 
           <div class="space-y-3.5" :class="{ 'opacity-70': options.outputMode === 'original' }">
-            <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase">字幕输出</p>
+            <p class="text-[11px] font-medium tracking-wide text-gray-400 dark:text-gray-500 uppercase">字幕输出</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <UFormField label="字幕格式">
                 <USelect
@@ -191,7 +192,7 @@
           </div>
 
           <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800/70 bg-white/90 dark:bg-gray-900/80 backdrop-blur supports-[backdrop-filter]:bg-white/75 supports-[backdrop-filter]:dark:bg-gray-900/65 rounded-xl">
-            <p class="text-[11px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 uppercase mb-2">操作</p>
+            <p class="text-[11px] font-medium tracking-wide text-gray-400 dark:text-gray-500 uppercase mb-2">操作</p>
             <div class="flex gap-2">
               <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
               <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
