@@ -1,12 +1,12 @@
 <template>
-  <div class="space-y-8">
-    <div class="flex items-end justify-between border-b border-gray-100 dark:border-gray-800 pb-6">
+  <div class="space-y-6 max-w-[1500px] mx-auto">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-5 pb-6 mt-8 border-b border-gray-100 dark:border-gray-800">
       <div class="space-y-2">
         <UBreadcrumb :links="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '历史', icon: 'i-lucide-history' }]" />
         <h2 class="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">翻译历史</h2>
-        <p class="text-neutral-500 max-w-2xl">查看您之前的翻译任务，下载已翻译的 SRT 文件，或检查失败任务的错误日志。</p>
+        <p class="text-neutral-500 max-w-2xl leading-relaxed">查看您之前的翻译任务，下载已翻译的 SRT 文件，或检查失败任务的错误日志。</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 md:pb-0.5">
         <UButton label="返回首页" variant="outline" color="neutral" icon="i-lucide-arrow-left" to="/" />
         <UButton label="清空历史" variant="ghost" color="error" icon="i-lucide-trash-2" @click="isClearModalOpen = true" />
       </div>

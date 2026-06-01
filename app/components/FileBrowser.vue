@@ -47,8 +47,8 @@
       </div>
       
       <div class="relative flex-1 min-h-0">
-        <div class="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-white/75 dark:from-gray-900/70 to-transparent pointer-events-none z-10" />
-        <div class="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-white/75 dark:from-gray-900/70 to-transparent pointer-events-none z-10" />
+        <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-white/70 dark:from-gray-900/65 to-transparent pointer-events-none z-10" />
+        <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-white/40 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
         <div class="h-full overflow-y-auto space-y-1 pr-1 custom-scrollbar">
           <template v-for="node in files" :key="node.path">
             <FileNodeItem :node="node" :selected-path="selectedNode?.path || ''" @select="onSelect" />
@@ -80,7 +80,7 @@
         />
       </div>
       <div v-if="selectedFile" class="h-full flex flex-col min-h-0">
-        <div class="flex items-center gap-2 mb-3">
+        <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
           <UIcon :name="isSubtitleFile ? 'i-lucide-file-text' : 'i-lucide-video'" class="w-5 h-5 text-sky-500" />
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ isSubtitleFile ? '字幕文件已就绪：' : '字幕轨道：' }}{{ selectedFile.name }}</h3>
         </div>
@@ -133,6 +133,7 @@
               <div v-else class="h-full flex flex-col items-center justify-center p-8 text-center">
                 <UIcon name="i-lucide-info" class="w-8 h-8 text-neutral-400 mb-2" />
                 <p class="text-sm text-neutral-500">暂无可用字幕轨道，可更换视频或改选外部字幕文件</p>
+                <UButton label="返回文件选择" size="xs" variant="ghost" color="neutral" class="mt-2" @click="selectedFile = null" />
               </div>
             </template>
           </div>
@@ -225,6 +226,7 @@
               <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
               <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
             </div>
+            <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-2">任务创建后可在右上角「任务历史」中追踪进度与结果。</p>
           </div>
         </div>
         </div>
