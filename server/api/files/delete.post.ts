@@ -1,4 +1,4 @@
-import { readdir, rm, stat } from 'fs/promises'
+import { rm, stat } from 'fs/promises'
 import { safePath } from '../../utils/subtitle'
 
 export default defineEventHandler(async (event) => {
@@ -18,12 +18,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: '目标不存在' })
   }
 
+  // 目录支持递归删除，避免“创建成功但无法删除非空目录”的体验问题。
   if (targetStat.isDirectory()) {
-    const entries = await readdir(fullPath)
-    if (entries.length > 0) {
-      throw createError({ statusCode: 400, message: '目录非空，暂不允许删除' })
-    }
-    await rm(fullPath, { recursive: false, force: false })
+    await rm(fullPath, { recursive: true, force: false })
   } else {
     await rm(fullPath, { force: false })
   }
