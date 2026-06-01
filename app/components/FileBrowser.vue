@@ -86,7 +86,7 @@
         </div>
 
         <div class="flex-1 min-h-0 flex flex-col">
-          <div class="min-h-[180px] overflow-hidden rounded-2xl border border-gray-200/80 dark:border-gray-700/80 bg-gray-50/50 dark:bg-gray-900/40 p-3 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.35)]" :style="{ height: `${rightTopHeight}%` }">
+          <div class="min-h-[180px] overflow-hidden rounded-2xl border border-gray-200/80 dark:border-gray-700/80 bg-gray-50/50 dark:bg-gray-900/40 p-3 ring-1 ring-inset ring-white/35 dark:ring-white/10" :style="{ height: `${rightTopHeight}%` }">
             <div v-if="isSubtitleFile" class="h-full flex flex-col min-h-0">
               <div v-if="pendingSubtitle" class="flex flex-col items-center justify-center flex-1">
                 <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
@@ -138,16 +138,16 @@
           </div>
 
           <div
-            class="my-2 h-2 rounded-full bg-gray-200/80 dark:bg-gray-700/80 hover:bg-primary-300 dark:hover:bg-primary-700 cursor-row-resize transition-colors"
+            class="my-2 h-1.5 rounded-full bg-gray-200/90 dark:bg-gray-700/90 hover:bg-primary-300 dark:hover:bg-primary-700 cursor-row-resize transition-colors ring-1 ring-white/70 dark:ring-white/10"
             :class="{ 'bg-primary-400 dark:bg-primary-600': resizeMode === 'right' }"
             title="拖动调整上下分区高度"
             @mousedown.prevent="startResize('right', $event)"
           />
 
-        <div class="flex-1 min-h-0 pt-3 border-t border-gray-100 dark:border-gray-700 flex flex-col">
+        <div class="flex-1 min-h-0 pt-3 border-t border-gray-100 dark:border-gray-700/90 flex flex-col bg-white/35 dark:bg-gray-900/28 rounded-xl px-2">
           <div class="relative flex-1 min-h-0">
-          <div class="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-white/80 dark:from-gray-900/80 to-transparent pointer-events-none z-10" />
-          <div class="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-white/80 dark:from-gray-900/80 to-transparent pointer-events-none z-10" />
+          <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-white/70 dark:from-gray-900/65 to-transparent pointer-events-none z-10" />
+          <div class="absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-t from-white/70 dark:from-gray-900/65 to-transparent pointer-events-none z-10" />
           <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
           <div class="space-y-3.5 p-0.5">
             <p class="text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase">基础设置</p>
@@ -221,7 +221,7 @@
           </div>
           </div>
 
-          <div class="mt-3 pt-3 px-2.5 pb-2.5 border border-gray-100/80 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/75 supports-[backdrop-filter]:dark:bg-gray-900/65 rounded-xl shadow-[0_10px_30px_-24px_rgba(15,23,42,0.35)] shrink-0">
+          <div class="mt-3 pt-3 px-2.5 pb-2.5 border border-gray-100/85 dark:border-gray-800/80 bg-white/90 dark:bg-gray-900/82 backdrop-blur supports-[backdrop-filter]:bg-white/75 supports-[backdrop-filter]:dark:bg-gray-900/65 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.28)] shrink-0">
             <p class="text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase mb-2">操作</p>
             <div class="flex gap-2.5">
               <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
