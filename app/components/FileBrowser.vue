@@ -93,8 +93,8 @@
                 <p class="text-xs text-neutral-500">正在读取字幕内容...</p>
               </div>
               <div v-else-if="subtitlePreview.length" class="relative flex-1 min-h-0">
-                <div class="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-gray-50/90 dark:from-gray-900/85 to-transparent pointer-events-none z-10" />
-                <div class="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-gray-50/90 dark:from-gray-900/85 to-transparent pointer-events-none z-10" />
+                <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-gray-50/75 dark:from-gray-900/70 to-transparent pointer-events-none z-10" />
+                <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-gray-50/45 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
                 <div class="h-full overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                   <div v-for="entry in subtitlePreview" :key="entry.id" class="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 shadow-sm">
                       <div class="flex items-center justify-between mb-1">
@@ -123,8 +123,8 @@
                   <span v-if="selectedTrackIndex !== null">当前选择 #{{ selectedTrackIndex }}</span>
                 </div>
                 <div class="relative h-[calc(100%-22px)]">
-                  <div class="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-gray-50/90 dark:from-gray-900/85 to-transparent pointer-events-none z-10" />
-                  <div class="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-gray-50/90 dark:from-gray-900/85 to-transparent pointer-events-none z-10" />
+                  <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-gray-50/75 dark:from-gray-900/70 to-transparent pointer-events-none z-10" />
+                  <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-gray-50/45 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
                   <div class="h-full overflow-y-auto py-2 pr-1 custom-scrollbar">
                     <URadioGroup v-model="selectedTrackIndex" :items="trackOptions" />
                   </div>
@@ -138,16 +138,14 @@
           </div>
 
           <div
-            class="my-2 h-1.5 rounded-full bg-gray-200/90 dark:bg-gray-700/90 hover:bg-primary-300 dark:hover:bg-primary-700 cursor-row-resize transition-colors ring-1 ring-white/70 dark:ring-white/10"
+            class="my-2 h-1.5 rounded-full bg-gray-200/95 dark:bg-gray-700/90 hover:bg-primary-300 dark:hover:bg-primary-700 cursor-row-resize transition-colors ring-1 ring-white/80 dark:ring-white/15"
             :class="{ 'bg-primary-400 dark:bg-primary-600': resizeMode === 'right' }"
             title="拖动调整上下分区高度"
             @mousedown.prevent="startResize('right', $event)"
           />
 
-        <div class="flex-1 min-h-0 pt-3 border-t border-gray-100 dark:border-gray-700/90 flex flex-col bg-white/35 dark:bg-gray-900/28 rounded-xl px-2">
+        <div class="flex-1 min-h-0 pt-3 border-t border-gray-200/90 dark:border-gray-700/90 flex flex-col bg-white/45 dark:bg-gray-900/30 rounded-xl px-2">
           <div class="relative flex-1 min-h-0">
-          <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-white/70 dark:from-gray-900/65 to-transparent pointer-events-none z-10" />
-          <div class="absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-t from-white/70 dark:from-gray-900/65 to-transparent pointer-events-none z-10" />
           <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
           <div class="space-y-3.5 p-0.5">
             <p class="text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase">基础设置</p>
@@ -221,7 +219,7 @@
           </div>
           </div>
 
-          <div class="mt-3 pt-3 px-2.5 pb-2.5 border border-gray-100/85 dark:border-gray-800/80 bg-white/90 dark:bg-gray-900/82 backdrop-blur supports-[backdrop-filter]:bg-white/75 supports-[backdrop-filter]:dark:bg-gray-900/65 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.28)] shrink-0">
+          <div class="mt-3 pt-3 px-2.5 pb-2.5 border border-gray-200/85 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/68 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.24)] shrink-0">
             <p class="text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase mb-2">操作</p>
             <div class="flex gap-2.5">
               <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
