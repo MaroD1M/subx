@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 max-w-[1500px] mx-auto">
+  <div class="space-y-6 max-w-[1500px] mx-auto stagger-fade-in">
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-5 pb-6 mt-8 border-b border-gray-100 dark:border-gray-800">
       <div class="space-y-2">
         <UBreadcrumb :links="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '历史', icon: 'i-lucide-history' }]" />
@@ -12,7 +12,7 @@
       </div>
     </div>
 
-    <div class="glass-panel rounded-3xl overflow-hidden p-2">
+    <div class="glass-panel rounded-3xl overflow-hidden p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
       <UTable :data="tasks" :columns="columns" :loading="pending">
         <template #status-cell="{ row }">
            <UBadge :color="statusColor(row.original.status)" variant="subtle" size="sm" class="capitalize">

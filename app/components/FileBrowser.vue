@@ -1,5 +1,5 @@
 <template>
-  <div ref="layoutRef" class="relative flex h-[935px] gap-3.5 glass-panel rounded-3xl p-5 overflow-hidden shadow-[0_18px_48px_-24px_rgba(15,23,42,0.35)]">
+  <div ref="layoutRef" class="relative flex h-[935px] gap-3.5 glass-panel rounded-3xl p-5 overflow-hidden">
     <div
       v-if="resizeMode"
       class="absolute top-3 left-1/2 -translate-x-1/2 z-20 px-2.5 py-1 rounded-full bg-gray-900/85 text-white text-[11px] font-medium shadow-lg"
@@ -8,7 +8,7 @@
     </div>
     <!-- File Browser (Left) -->
     <div
-      class="flex flex-col border border-gray-200/80 dark:border-gray-700/80 rounded-2xl p-3 bg-white/35 dark:bg-gray-900/25 min-w-[280px] shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+      class="surface-card flex flex-col p-3 min-w-[280px] stagger-fade-in"
       :style="{ width: `${leftPaneWidth}%` }"
     >
       <div class="flex items-center gap-2 mb-3.5 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
@@ -68,7 +68,7 @@
     />
 
     <!-- Track & Options (Right) -->
-    <div ref="rightPaneRef" class="flex-1 flex flex-col min-w-[340px] border border-gray-200/80 dark:border-gray-700/80 rounded-2xl p-3 bg-white/35 dark:bg-gray-900/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]">
+    <div ref="rightPaneRef" class="surface-card flex-1 flex flex-col min-w-[340px] p-3 stagger-fade-in" style="animation-delay: 70ms;">
       <div class="flex items-center justify-end mb-2.5 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
         <UButton
           label="恢复默认布局"
@@ -149,7 +149,7 @@
           <div class="relative flex-1 min-h-0">
           <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
           <div class="space-y-3.5 p-0.5">
-            <p class="text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase">基础设置</p>
+            <p class="section-title">基础设置</p>
             <UFormField label="翻译风格">
               <USelect
                 v-model="options.stylePreset"
@@ -188,7 +188,7 @@
           </div>
 
           <div class="space-y-3.5 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
-            <p class="text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase">字幕输出</p>
+            <p class="section-title">字幕输出</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <UFormField label="字幕格式">
                 <USelect
@@ -221,7 +221,7 @@
           </div>
 
           <div class="mt-3 pt-3 px-2.5 pb-2.5 border border-gray-200/85 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/68 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.24)] shrink-0">
-            <p class="text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase mb-2">操作</p>
+            <p class="section-title mb-2">操作</p>
             <div class="flex gap-2.5">
               <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
               <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />

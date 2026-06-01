@@ -21,8 +21,21 @@
 }
 
 :root {
+    --surface-soft: rgba(255, 255, 255, 0.78);
+    --surface-strong: rgba(255, 255, 255, 0.9);
+    --border-soft: rgba(255, 255, 255, 0.5);
+    --shadow-soft: 0 10px 30px -22px rgba(15, 23, 42, 0.35);
+    --shadow-strong: 0 24px 48px -26px rgba(15, 23, 42, 0.38);
     --radius-xl: 1rem;
     --radius-2xl: 1.5rem;
+}
+
+.dark:root {
+    --surface-soft: rgba(17, 24, 39, 0.72);
+    --surface-strong: rgba(17, 24, 39, 0.84);
+    --border-soft: rgba(148, 163, 184, 0.2);
+    --shadow-soft: 0 10px 30px -22px rgba(0, 0, 0, 0.45);
+    --shadow-strong: 0 26px 52px -28px rgba(0, 0, 0, 0.55);
 }
 
 body {
@@ -33,11 +46,32 @@ body {
 
 /* Glassmorphism utilities */
 .glass-panel {
-    @apply bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border border-white/40 dark:border-gray-800/60 shadow-xl;
+    background: var(--surface-strong);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-strong);
+    @apply backdrop-blur-xl;
 }
 
 .glass-card {
-    @apply bg-white/70 dark:bg-gray-800/60 backdrop-blur-md border border-white/50 dark:border-gray-700/50 shadow-sm transition-all duration-300 hover:shadow-md hover:bg-white/90 dark:hover:bg-gray-800/80;
+    background: var(--surface-soft);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-soft);
+    @apply backdrop-blur-md transition-all duration-300;
+}
+
+.surface-card {
+    background: var(--surface-soft);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-soft);
+    @apply rounded-2xl backdrop-blur-md;
+}
+
+.section-title {
+    @apply text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase;
+}
+
+.stagger-fade-in {
+    animation: panel-fade 360ms ease-out both;
 }
 
 /* Smooth transitions */
@@ -73,4 +107,15 @@ body {
 
 .animation-delay-2000 {
     animation-delay: 2s;
+}
+
+@keyframes panel-fade {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
