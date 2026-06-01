@@ -144,8 +144,8 @@
             @mousedown.prevent="startResize('right', $event)"
           />
 
-        <div class="shrink-0 pt-3 border-t border-gray-100 dark:border-gray-700">
-          <div class="relative max-h-[320px]">
+        <div class="flex-1 min-h-0 pt-3 border-t border-gray-100 dark:border-gray-700 flex flex-col">
+          <div class="relative flex-1 min-h-0">
           <div class="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-white/80 dark:from-gray-900/80 to-transparent pointer-events-none z-10" />
           <div class="absolute bottom-0 left-0 right-0 h-4 bg-gradient-to-t from-white/80 dark:from-gray-900/80 to-transparent pointer-events-none z-10" />
           <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
@@ -221,7 +221,7 @@
           </div>
           </div>
 
-          <div class="mt-3 pt-3 px-2.5 pb-2.5 border border-gray-100/80 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/75 supports-[backdrop-filter]:dark:bg-gray-900/65 rounded-xl shadow-[0_10px_30px_-24px_rgba(15,23,42,0.35)]">
+          <div class="mt-3 pt-3 px-2.5 pb-2.5 border border-gray-100/80 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/75 supports-[backdrop-filter]:dark:bg-gray-900/65 rounded-xl shadow-[0_10px_30px_-24px_rgba(15,23,42,0.35)] shrink-0">
             <p class="text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase mb-2">操作</p>
             <div class="flex gap-2.5">
               <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />

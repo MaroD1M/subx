@@ -95,7 +95,7 @@
 
     <div class="grid grid-cols-4 gap-4 items-stretch">
       <UFormField label="分块大小 (Token)" description="较小的值可防止 AI 输出被截断。" class="flex flex-col h-full" :ui="{ container: 'mt-auto' }">
-        <UInputNumber v-model="config.chunkSize" :min="100" :max="4000" :step="100" class="w-full" />
+        <UInputNumber v-model="config.chunkSize" :min="100" :max="6000" :step="100" class="w-full" />
       </UFormField>
       <UFormField label="并发任务数" description="同时进行的翻译请求数量。" class="flex flex-col h-full" :ui="{ container: 'mt-auto' }">
         <UInputNumber v-model="config.concurrency" :min="1" :max="10" class="w-full" />

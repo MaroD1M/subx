@@ -17,7 +17,7 @@ export const ConfigService = {
             apiBaseUrl: 'https://api.openai.com/v1',
             defaultModel: 'gpt-3.5-turbo',
             targetLanguage: 'zh-CN',
-            chunkSize: 500,
+            chunkSize: 2000,
             concurrency: 3,
             maxRetries: 3,
             streamUsage: false,
