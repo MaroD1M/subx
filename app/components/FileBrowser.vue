@@ -21,10 +21,7 @@
 
         <div class="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(180px,220px)_minmax(0,1fr)] items-end">
           <UFormField label="当前媒体库" class="min-w-0">
-            <div class="flex items-center gap-2">
-              <UBadge :color="isRootUnavailable ? 'error' : 'success'" variant="subtle">{{ isRootUnavailable ? '异常' : '可用' }}</UBadge>
-              <USelect v-model="activeRootId" :items="rootItems" class="w-full" :disabled="!rootItems.length" @update:model-value="handleRootChange" />
-            </div>
+            <USelect v-model="activeRootId" :items="rootItems" class="w-full" :disabled="!rootItems.length" @update:model-value="handleRootChange" />
           </UFormField>
           <UFormField label="快速筛选" class="min-w-0">
             <UInput v-model="searchQuery" icon="i-lucide-search" placeholder="例如：S01E01 / 中文字幕 / mkv" class="w-full" />
