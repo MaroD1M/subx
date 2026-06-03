@@ -26,12 +26,25 @@
         </div>
       </div>
 
+      <div v-if="selectedNodePathPreview" class="mb-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/40 px-3 py-2">
+        <div class="flex items-start gap-2">
+          <UIcon name="i-lucide-waypoints" class="w-4 h-4 mt-0.5 text-gray-400 shrink-0" />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">完整路径</p>
+              <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="2xs" title="复制完整路径" class="shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="copySelectedPath" />
+            </div>
+            <p class="text-xs text-gray-700 dark:text-gray-300 break-all mt-1">{{ selectedNodePathPreview }}</p>
+          </div>
+        </div>
+      </div>
+
       <div class="relative flex-1 min-h-0">
         <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-white/70 dark:from-gray-900/65 to-transparent pointer-events-none z-10" />
         <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-white/40 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
         <div class="h-full overflow-y-auto space-y-1 pr-1 custom-scrollbar">
           <template v-for="node in displayNodes" :key="`${node.rootId || 'group'}:${node.path || node.name}`">
-            <FileNodeItem :node="node" :selected-path="selectedNodeKey" @select="onSelect" />
+            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :expanded-keys="expandedNodeKeys" @select="onSelect" @toggle-dir="toggleDirectory" />
           </template>
           <div v-if="!loadingFiles && (!displayNodes || !displayNodes.length)" class="h-full min-h-[180px] flex items-center justify-center text-center px-3">
             <div v-if="isRootUnavailable" class="space-y-2">
@@ -188,6 +201,7 @@ const leftPaneWidth = ref(50)
 const rightTopHeight = ref(48)
 const resizeMode = ref<'main' | 'right' | null>(null)
 const LAYOUT_STORAGE_KEY = 'subx:file-browser-layout'
+const TREE_STATE_STORAGE_KEY = 'subx:file-browser-tree-state'
 
 const { data: files, refresh, pending: loadingFiles, error: filesError } = await useFetch('/api/files', {
   query: computed(() => activeRootId.value ? { rootId: activeRootId.value } : {})
@@ -229,10 +243,77 @@ const selectedNodeKey = computed(() => {
   return `${selectedNode.value.rootId || 'default'}:${selectedNode.value.path}`
 })
 
+const expandedTreeState = ref<Record<string, string[]>>({})
+const expandedNodeKeys = computed(() => expandedTreeState.value[activeRootId.value || 'default'] || [])
+
 const canMutateSelected = computed(() => !!selectedNode.value?.path)
+
+const selectedNodePathPreview = computed(() => {
+  if (!selectedNode.value?.path) return ''
+  const rootName = selectedNode.value.rootName || activeRootName.value
+  return rootName + ' / ' + selectedNode.value.path
+})
 
 const rootAccessMessage = computed(() => filesError.value?.data?.message || '')
 const isRootUnavailable = computed(() => !!filesError.value)
+
+function persistExpandedTreeState() {
+  if (!import.meta.client) return
+  localStorage.setItem(TREE_STATE_STORAGE_KEY, JSON.stringify(expandedTreeState.value))
+}
+
+function setExpandedKeys(rootId: string, keys: string[]) {
+  expandedTreeState.value = {
+    ...expandedTreeState.value,
+    [rootId]: Array.from(new Set(keys))
+  }
+  persistExpandedTreeState()
+}
+
+function buildNodeKey(path: string, rootId?: string) {
+  return `${rootId || 'default'}:${path}`
+}
+
+function getAncestorKeys(node: FileNode) {
+  if (!node.path) return []
+  const rootId = node.rootId || activeRootId.value || 'default'
+  const segments = node.path.split('/').filter(Boolean)
+  const ancestorCount = node.isDir ? segments.length : Math.max(segments.length - 1, 0)
+  const keys: string[] = []
+
+  for (let index = 0; index < ancestorCount; index += 1) {
+    keys.push(buildNodeKey(segments.slice(0, index + 1).join('/'), rootId))
+  }
+
+  return keys
+}
+
+function ensureExpandedForNode(node: FileNode) {
+  const rootId = node.rootId || activeRootId.value || 'default'
+  const keys = [...expandedNodeKeys.value, ...getAncestorKeys(node)]
+  setExpandedKeys(rootId, keys)
+}
+
+function toggleDirectory(node: FileNode) {
+  if (!node.isDir) return
+  const rootId = node.rootId || activeRootId.value || 'default'
+  const key = buildNodeKey(node.path, rootId)
+  const current = expandedTreeState.value[rootId] || []
+  const next = current.includes(key)
+    ? current.filter(item => item !== key)
+    : [...current, key]
+  setExpandedKeys(rootId, next)
+}
+
+async function copySelectedPath() {
+  if (!selectedNodePathPreview.value || !import.meta.client) return
+  try {
+    await navigator.clipboard.writeText(selectedNodePathPreview.value)
+    toast.add({ title: toastText.success, description: '完整路径已复制', color: 'success' })
+  } catch {
+    toast.add({ title: toastText.error, description: '复制失败，请手动复制', color: 'danger' })
+  }
+}
 
 async function handleRootChange() {
   selectedNode.value = null
@@ -336,6 +417,7 @@ const isSubtitleFile = computed(() => {
 
 async function onSelect(node: FileNode) {
   selectedNode.value = node
+  ensureExpandedForNode(node)
   if (node.isDir) {
     selectedFile.value = null
     tracks.value = []
@@ -520,6 +602,20 @@ onMounted(() => {
         const parsed = JSON.parse(raw)
         if (typeof parsed.leftPaneWidth === 'number') leftPaneWidth.value = clamp(parsed.leftPaneWidth, 34, 66)
         if (typeof parsed.rightTopHeight === 'number') rightTopHeight.value = clamp(parsed.rightTopHeight, 30, 70)
+      } catch {
+        // ignore invalid cache
+      }
+    }
+
+    const treeStateRaw = localStorage.getItem(TREE_STATE_STORAGE_KEY)
+    if (treeStateRaw) {
+      try {
+        const parsed = JSON.parse(treeStateRaw)
+        if (parsed && typeof parsed === 'object') {
+          expandedTreeState.value = Object.fromEntries(
+            Object.entries(parsed).map(([rootId, keys]) => [rootId, Array.isArray(keys) ? keys.filter(item => typeof item === 'string') : []])
+          )
+        }
       } catch {
         // ignore invalid cache
       }
