@@ -61,26 +61,18 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 space-y-2">
-          <UFormField label="分块大小 (Token)" description="较小的值可防止 AI 输出被截断。">
-            <UInputNumber v-model="config.chunkSize" :min="100" :max="6000" :step="100" class="w-full" :ui="{ base: 'w-full min-w-[220px]' }" />
-          </UFormField>
-        </div>
-        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 space-y-2">
-          <UFormField label="并发任务数" description="同时进行的翻译请求数量。">
-            <UInputNumber v-model="config.concurrency" :min="1" :max="10" class="w-full" :ui="{ base: 'w-full min-w-[220px]' }" />
-          </UFormField>
-        </div>
-        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 space-y-2">
-          <UFormField label="最大重试次数" description="翻译失败或漏译时自动重跑次数。">
-            <UInputNumber v-model="config.maxRetries" :min="0" :max="5" class="w-full" :ui="{ base: 'w-full min-w-[220px]' }" />
-          </UFormField>
-        </div>
-        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 space-y-2">
-          <UFormField label="日志保留天数" description="AI 日志在 ai-logs 中的保留天数。">
-            <UInputNumber v-model="config.logRetentionDays" :min="1" :max="30" class="w-full" :ui="{ base: 'w-full min-w-[220px]' }" />
-          </UFormField>
-        </div>
+        <UFormField label="分块大小 (Token)" description="较小的值可防止 AI 输出被截断。" class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3">
+          <UInputNumber v-model="config.chunkSize" :min="100" :max="6000" :step="100" class="w-full" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
+        </UFormField>
+        <UFormField label="并发任务数" description="同时进行的翻译请求数量。" class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3">
+          <UInputNumber v-model="config.concurrency" :min="1" :max="10" class="w-full" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
+        </UFormField>
+        <UFormField label="最大重试次数" description="翻译失败或漏译时自动重跑次数。" class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3">
+          <UInputNumber v-model="config.maxRetries" :min="0" :max="5" class="w-full" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
+        </UFormField>
+        <UFormField label="日志保留天数" description="AI 日志在 ai-logs 中的保留天数。" class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3">
+          <UInputNumber v-model="config.logRetentionDays" :min="1" :max="30" class="w-full" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
+        </UFormField>
       </div>
 
       <div class="rounded-xl bg-gray-50/80 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800 p-3.5">
@@ -91,16 +83,6 @@
           </div>
           <USwitch v-model="config.streamUsage" @click.stop />
         </div>
-      </div>
-    </div>
-
-    <div class="rounded-2xl border border-primary-100 dark:border-primary-900/50 bg-primary-50/70 dark:bg-primary-950/20 p-4 sm:p-5">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">媒体库管理</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">已移至独立页面，避免设置弹窗过长和排版拥挤。</p>
-        </div>
-        <UButton label="打开媒体库管理" icon="i-lucide-library-big" color="primary" variant="soft" to="/media-libraries" @click="emit('close')" />
       </div>
     </div>
 

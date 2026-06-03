@@ -206,7 +206,7 @@ export const TaskService = {
                 await this.updateStatus(taskId, 'translating', 80, { totalChunks, completedChunks: totalChunks, log: '已选择仅导出原字幕，跳过翻译。' })
                 await this.updateStatus(taskId, 'exporting', 90, { log: '正在导出原字幕文件...' })
                 const originalEntries = allEntries.map(entry => ({ ...entry, translatedText: entry.text }))
-                const savedPath = await SubtitleService.writeSubtitle(originalEntries, outputPath, 'original', subtitleFormat, subtitleStylePreset, bilingualLayout)
+                const savedPath = await SubtitleService.writeSubtitle(originalEntries, outputPath, 'original', subtitleFormat, subtitleStylePreset, bilingualLayout, srtPath)
                 await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${savedPath}` })
                 await this.updateStatus(taskId, 'done', 100)
                 db.prepare('UPDATE tasks SET status = \'done\', progress = 100, output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
@@ -372,7 +372,7 @@ export const TaskService = {
             await this.updateStatus(taskId, 'exporting', 90, { log: '正在合成并保存最终字幕文件...' })
             const translatedEntries = Array.from(translatedMap.values())
             translatedEntries.sort((a, b) => Number(a.id) - Number(b.id))
-            const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat, subtitleStylePreset, bilingualLayout)
+            const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat, subtitleStylePreset, bilingualLayout, srtPath)
             await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${savedPath}` })
 
             TranslationService.cleanupPartialFiles(taskId, totalChunks)
