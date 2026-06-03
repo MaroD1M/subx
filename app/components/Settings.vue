@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <div v-if="isInsecure" class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/5 border border-amber-100 dark:border-amber-500/20 flex items-start gap-3 animate-pulse">
       <UIcon name="i-lucide-shield-alert" class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
       <div class="space-y-1">
@@ -52,23 +52,35 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <UFormField label="目标语言"><USelect v-model="config.targetLanguage" :items="['zh-CN', 'zh-TW', 'en', 'ja', 'ko']" class="w-full" /></UFormField>
-        <UFormField label="输出模式"><USelect v-model="config.outputMode" :items="outputModeItems" class="w-full" /></UFormField>
+        <UFormField label="目标语言">
+          <USelect v-model="config.targetLanguage" :items="['zh-CN', 'zh-TW', 'en', 'ja', 'ko']" class="w-full" />
+        </UFormField>
+        <UFormField label="输出模式">
+          <USelect v-model="config.outputMode" :items="outputModeItems" class="w-full" />
+        </UFormField>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
-        <UFormField label="分块大小 (Token)" description="较小的值可防止 AI 输出被截断。" class="flex flex-col h-full" :ui="{ container: 'mt-auto' }">
-          <UInputNumber v-model="config.chunkSize" :min="100" :max="6000" :step="100" class="w-full" :ui="{ base: 'w-full min-w-[170px]' }" />
-        </UFormField>
-        <UFormField label="并发任务数" description="同时进行的翻译请求数量。" class="flex flex-col h-full" :ui="{ container: 'mt-auto' }">
-          <UInputNumber v-model="config.concurrency" :min="1" :max="10" class="w-full" :ui="{ base: 'w-full min-w-[150px]' }" />
-        </UFormField>
-        <UFormField label="最大重试次数" description="翻译失败或漏译时自动重跑次数。" class="flex flex-col h-full" :ui="{ container: 'mt-auto' }">
-          <UInputNumber v-model="config.maxRetries" :min="0" :max="5" class="w-full" :ui="{ base: 'w-full min-w-[150px]' }" />
-        </UFormField>
-        <UFormField label="日志保留天数" description="AI 日志在 ai-logs 中的保留天数。" class="flex flex-col h-full" :ui="{ container: 'mt-auto' }">
-          <UInputNumber v-model="config.logRetentionDays" :min="1" :max="30" class="w-full" :ui="{ base: 'w-full min-w-[150px]' }" />
-        </UFormField>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 space-y-2">
+          <UFormField label="分块大小 (Token)" description="较小的值可防止 AI 输出被截断。">
+            <UInputNumber v-model="config.chunkSize" :min="100" :max="6000" :step="100" class="w-full" :ui="{ base: 'w-full min-w-[220px]' }" />
+          </UFormField>
+        </div>
+        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 space-y-2">
+          <UFormField label="并发任务数" description="同时进行的翻译请求数量。">
+            <UInputNumber v-model="config.concurrency" :min="1" :max="10" class="w-full" :ui="{ base: 'w-full min-w-[220px]' }" />
+          </UFormField>
+        </div>
+        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 space-y-2">
+          <UFormField label="最大重试次数" description="翻译失败或漏译时自动重跑次数。">
+            <UInputNumber v-model="config.maxRetries" :min="0" :max="5" class="w-full" :ui="{ base: 'w-full min-w-[220px]' }" />
+          </UFormField>
+        </div>
+        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 space-y-2">
+          <UFormField label="日志保留天数" description="AI 日志在 ai-logs 中的保留天数。">
+            <UInputNumber v-model="config.logRetentionDays" :min="1" :max="30" class="w-full" :ui="{ base: 'w-full min-w-[220px]' }" />
+          </UFormField>
+        </div>
       </div>
 
       <div class="rounded-xl bg-gray-50/80 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800 p-3.5">
@@ -82,31 +94,17 @@
       </div>
     </div>
 
-    <div class="rounded-2xl border border-primary-100 dark:border-primary-900/50 bg-primary-50/70 dark:bg-primary-950/20 p-4 sm:p-5 space-y-4">
+    <div class="rounded-2xl border border-primary-100 dark:border-primary-900/50 bg-primary-50/70 dark:bg-primary-950/20 p-4 sm:p-5">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">媒体库管理已迁移为独立页面</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">媒体库数量和检测结果较多时，单独页面更方便滚动、排序与排障。</p>
+          <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">媒体库管理</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">已移至独立页面，避免设置弹窗过长和排版拥挤。</p>
         </div>
         <UButton label="打开媒体库管理" icon="i-lucide-library-big" color="primary" variant="soft" to="/media-libraries" @click="emit('close')" />
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-        <div class="rounded-xl bg-white/70 dark:bg-gray-900/35 border border-gray-100 dark:border-gray-800 p-3">
-          <p class="font-semibold text-gray-800 dark:text-gray-200">独立滚动区域</p>
-          <p class="text-gray-500 dark:text-gray-400 mt-1">避免设置弹窗过高时内容被遮挡。</p>
-        </div>
-        <div class="rounded-xl bg-white/70 dark:bg-gray-900/35 border border-gray-100 dark:border-gray-800 p-3">
-          <p class="font-semibold text-gray-800 dark:text-gray-200">批量检测更清晰</p>
-          <p class="text-gray-500 dark:text-gray-400 mt-1">集中查看每个媒体库的挂载、权限和默认状态。</p>
-        </div>
-        <div class="rounded-xl bg-white/70 dark:bg-gray-900/35 border border-gray-100 dark:border-gray-800 p-3">
-          <p class="font-semibold text-gray-800 dark:text-gray-200">新手引导更直接</p>
-          <p class="text-gray-500 dark:text-gray-400 mt-1">页面内会提示“填写容器内路径”与常见错误原因。</p>
-        </div>
-      </div>
     </div>
 
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
       <div v-if="hasUnsavedChanges" class="text-xs text-amber-600 dark:text-amber-400">有未保存的更改</div>
       <div class="flex items-center gap-3 sm:ml-auto">
         <UButton label="取消" color="neutral" variant="ghost" @click="handleClose" />

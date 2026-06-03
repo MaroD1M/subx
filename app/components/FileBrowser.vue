@@ -417,7 +417,6 @@ const isSubtitleFile = computed(() => {
 
 async function onSelect(node: FileNode) {
   selectedNode.value = node
-  ensureExpandedForNode(node)
   if (node.isDir) {
     selectedFile.value = null
     tracks.value = []
