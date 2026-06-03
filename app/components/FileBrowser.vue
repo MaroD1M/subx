@@ -10,6 +10,7 @@
           <UIcon name="i-lucide-folder" class="w-5 h-5 text-primary-500" />
           <h3 class="text-[13px] font-semibold tracking-wide text-gray-700 dark:text-gray-300">文件浏览器</h3>
           <div class="ml-auto flex items-center gap-1">
+            <UButton icon="i-lucide-library-big" color="neutral" variant="ghost" size="xs" title="媒体库管理" to="/media-libraries" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
             <UButton icon="i-lucide-folder-plus" color="neutral" variant="ghost" size="xs" title="新建文件夹" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="createFolder" />
             <UButton icon="i-lucide-pencil" color="neutral" variant="ghost" size="xs" title="重命名" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" :disabled="!selectedNode || !canMutateSelected" @click="renameNode" />
             <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="xs" title="删除" class="text-gray-400 hover:text-red-600" :disabled="!selectedNode || !canMutateSelected" @click="deleteNode" />
@@ -89,12 +90,14 @@
               <p class="text-xs text-neutral-500">正在分析视频轨道...</p>
             </div>
 
-            <div v-else-if="tracks.length" class="h-full space-y-2">
+            <div v-else-if="tracks.length" class="h-full min-h-0 flex flex-col space-y-2">
               <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
                 <span>可用轨道 {{ tracks.filter((t: any) => t.isSupported).length }} / {{ tracks.length }}</span>
                 <span v-if="selectedTrackIndex !== null">当前选择 #{{ selectedTrackIndex }}</span>
               </div>
-              <URadioGroup v-model="selectedTrackIndex" :items="trackOptions" />
+              <div class="flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
+                <URadioGroup v-model="selectedTrackIndex" :items="trackOptions" />
+              </div>
             </div>
 
             <div v-else class="flex flex-col items-center justify-center h-full text-neutral-400 text-xs">
@@ -212,7 +215,7 @@ const activeRoot = computed(() => rootItems.value.find((item: any) => item.value
 const activeRootName = computed(() => activeRoot.value?.label || '默认媒体库')
 const activeRootPath = computed(() => {
   const configured = Array.isArray(appConfig.value?.mediaRoots) ? appConfig.value.mediaRoots : []
-  return configured.find((root: any) => root.id === activeRootId.value)?.path || '使用环境变量 VIDEO_DIR'
+  return configured.find((root: any) => root.id === activeRootId.value)?.path || '默认媒体目录'
 })
 
 const displayNodes = computed<FileNode[]>(() => {
@@ -223,7 +226,7 @@ const displayNodes = computed<FileNode[]>(() => {
 
 const selectedNodeKey = computed(() => {
   if (!selectedNode.value) return ''
-  return `${selectedNode.value.rootId || activeRootId.value}:${selectedNode.value.path}`
+  return `${selectedNode.value.rootId || 'default'}:${selectedNode.value.path}`
 })
 
 const canMutateSelected = computed(() => !!selectedNode.value?.path)

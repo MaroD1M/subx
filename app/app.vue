@@ -10,7 +10,8 @@
             <span class="text-sm font-medium text-gray-500 dark:text-gray-400 hidden sm:inline-block tracking-wide">自动化视频字幕提取与翻译工具</span>
           </div>
           <div class="flex items-center gap-4">
-             <UButton icon="i-lucide-settings" variant="ghost" color="neutral" @click="isSettingsOpen = true" />
+             <UButton icon="i-lucide-library-big" variant="ghost" color="neutral" to="/media-libraries" title="媒体库管理" />
+             <UButton icon="i-lucide-settings" variant="ghost" color="neutral" title="全局设置" @click="isSettingsOpen = true" />
              <UButton v-if="authenticated" icon="i-lucide-log-out" variant="ghost" color="neutral" title="登出" @click="handleLogout" />
              <UButton icon="i-lucide-github" variant="ghost" color="neutral" to="https://github.com/chao-eng/subx" target="_blank" />
              <UButton
@@ -27,9 +28,9 @@
         <NuxtPage />
       </main>
 
-      <UModal v-model:open="isSettingsOpen" title="设置" description="配置全局翻译偏好、语言模型连接及处理参数" :ui="{ width: '!max-w-3xl w-[90vw]' }">
+      <UModal v-model:open="isSettingsOpen" title="设置" description="配置全局翻译偏好、语言模型连接及处理参数" :ui="{ width: '!max-w-4xl w-[92vw]' }">
         <template #content>
-          <div class="p-6">
+          <div class="p-6 max-h-[82vh] overflow-y-auto custom-scrollbar">
             <Settings @close="isSettingsOpen = false" />
           </div>
         </template>
@@ -41,7 +42,7 @@
 </template>
 
 <script setup>
-const isSettingsOpen = ref(false)
+const isSettingsOpen = useState('subx-settings-open', () => false)
 const colorMode = useColorMode()
 const { logout, authenticated } = useAuth()
 const route = useRoute()
