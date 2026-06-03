@@ -12,18 +12,15 @@
       </div>
     </div>
 
-    <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/65 dark:bg-gray-950/25 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+    <div v-if="showMediaSetupHint" class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/65 dark:bg-gray-950/25 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
       <div>
-        <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">首次配置建议</p>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">如果你刚启用多媒体库功能，建议先进入“媒体库管理”配置容器内路径并做一次批量检测。</p>
+        <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">首次使用建议</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">建议先完成媒体库配置，并执行一次路径检测，确认容器挂载与目录权限正常。</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
-        <UButton label="前往引导配置" icon="i-lucide-sparkles" color="primary" variant="soft" @click="guideOpen = true" />
-        <UButton label="媒体库管理" icon="i-lucide-arrow-right-circle" color="neutral" variant="ghost" to="/media-libraries" />
+        <UButton label="前往媒体库管理" icon="i-lucide-arrow-right-circle" color="primary" variant="soft" to="/media-libraries" />
       </div>
     </div>
-
-    <OnboardingGuide :config="config" v-model:open="guideOpen" @open-settings="settingsOpen = true" />
 
     <FileBrowser />
   </div>
@@ -35,6 +32,11 @@ definePageMeta({
 })
 
 const { data: config } = await useFetch('/api/config')
-const guideOpen = ref(false)
-const settingsOpen = useState('subx-settings-open', () => false)
+
+const showMediaSetupHint = computed(() => {
+  const roots = Array.isArray(config.value?.mediaRoots)
+    ? config.value.mediaRoots.filter((root) => root?.enabled !== false && root?.name && root?.path)
+    : []
+  return roots.length === 0
+})
 </script>

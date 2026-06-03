@@ -14,6 +14,7 @@
             <UButton icon="i-lucide-folder-plus" color="neutral" variant="ghost" size="xs" title="新建文件夹" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="createFolder" />
             <UButton icon="i-lucide-pencil" color="neutral" variant="ghost" size="xs" title="重命名" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" :disabled="!selectedNode || !canMutateSelected" @click="renameNode" />
             <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="xs" title="删除" class="text-gray-400 hover:text-red-600" :disabled="!selectedNode || !canMutateSelected" @click="deleteNode" />
+            <UButton icon="i-lucide-panel-left-close" color="neutral" variant="ghost" size="xs" title="折叠全部目录" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="collapseAllDirectories" />
             <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="xs" :loading="loadingFiles" @click="refreshFiles" title="刷新文件" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
           </div>
         </div>
@@ -303,6 +304,11 @@ function toggleDirectory(node: FileNode) {
     ? current.filter(item => item !== key)
     : [...current, key]
   setExpandedKeys(rootId, next)
+}
+
+function collapseAllDirectories() {
+  const rootId = activeRootId.value || 'default'
+  setExpandedKeys(rootId, [])
 }
 
 async function copySelectedPath() {

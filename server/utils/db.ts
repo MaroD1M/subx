@@ -58,6 +58,15 @@ export function useDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS translations_cache (
+      hash TEXT PRIMARY KEY,
+      original_text TEXT NOT NULL,
+      translated_text TEXT NOT NULL,
+      model TEXT NOT NULL,
+      target_language TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS task_responses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       task_id TEXT NOT NULL,

@@ -62,8 +62,8 @@
         </template>
 
         <template #actions-cell="{ row }">
-          <div class="min-w-[96px]">
-            <div class="flex items-center justify-end gap-1.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/60 px-2 py-1.5 shadow-sm">
+          <div class="min-w-[96px] h-full flex items-center justify-center">
+            <div class="flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/60 px-2 py-1.5 shadow-sm">
               <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" :to="`/task/${row.original.taskId}`" />
               <UButton v-if="row.original.status === 'error'" icon="i-lucide-rotate-ccw" variant="ghost" color="warning" size="xs" :loading="retryingTaskId === row.original.taskId" @click="retryTask(row.original.taskId)" />
               <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center justify-center rounded-lg p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
