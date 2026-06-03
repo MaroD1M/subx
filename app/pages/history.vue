@@ -12,8 +12,8 @@
       </div>
     </div>
 
-    <div class="glass-panel rounded-3xl overflow-hidden p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
-      <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ td: 'align-top', th: 'whitespace-nowrap', tr: 'group' }">
+    <div class="history-table glass-panel rounded-3xl overflow-hidden p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
+      <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-top', th: 'whitespace-nowrap', tr: 'group' }">
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
             <div class="min-w-0">
@@ -62,8 +62,8 @@
         </template>
 
         <template #actions-cell="{ row }">
-          <div class="min-w-[96px] h-full flex items-center justify-center">
-            <div class="flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/60 px-2 py-1.5 shadow-sm">
+          <div class="w-full flex items-center justify-center py-1">
+            <div class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/60 px-2 py-1.5 shadow-sm">
               <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" :to="`/task/${row.original.taskId}`" />
               <UButton v-if="row.original.status === 'error'" icon="i-lucide-rotate-ccw" variant="ghost" color="warning" size="xs" :loading="retryingTaskId === row.original.taskId" @click="retryTask(row.original.taskId)" />
               <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center justify-center rounded-lg p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
@@ -197,3 +197,39 @@ function statusColor(status) {
   }
 }
 </script>
+
+<style scoped>
+.history-table :deep(table) {
+  table-layout: fixed;
+}
+
+.history-table :deep(th:nth-child(2)),
+.history-table :deep(td:nth-child(2)) {
+  width: 92px;
+}
+
+.history-table :deep(th:nth-child(3)),
+.history-table :deep(td:nth-child(3)) {
+  width: 78px;
+}
+
+.history-table :deep(th:nth-child(4)),
+.history-table :deep(td:nth-child(4)) {
+  width: 148px;
+}
+
+.history-table :deep(th:last-child),
+.history-table :deep(td:last-child) {
+  width: 132px;
+  text-align: center;
+}
+
+.history-table :deep(th:last-child > div),
+.history-table :deep(td:last-child > div) {
+  justify-content: center;
+}
+
+.history-table :deep(td:last-child) {
+  vertical-align: middle;
+}
+</style>

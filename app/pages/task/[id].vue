@@ -1,11 +1,11 @@
 <template>
   <div class="max-w-4xl mx-auto space-y-8 py-10">
-    <div class="flex items-center gap-4 mb-8">
+    <div class="flex flex-col sm:flex-row sm:items-start gap-4 mb-8">
       <UButton icon="i-lucide-arrow-left" variant="ghost" color="neutral" to="/history" />
-      <div class="flex flex-col min-w-0">
+      <div class="flex flex-col min-w-0 flex-1 gap-1.5">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ task.step === 'done' ? '翻译任务完成' : task.step === 'error' ? '翻译任务失败' : '翻译任务进行中' }}</h2>
-        <p class="text-sm text-neutral-500">任务 ID: {{ $route.params.id }}</p>
-        <p v-if="task.filePath" class="text-xs text-neutral-400 truncate mt-1">{{ task.rootName || '默认媒体库' }} · {{ task.filePath }}</p>
+        <p class="text-sm text-neutral-500 break-all">任务 ID: {{ $route.params.id }}</p>
+        <p v-if="task.filePath" class="text-xs text-neutral-400 break-all">{{ task.rootName || '默认媒体库' }} · {{ task.filePath }}</p>
       </div>
     </div>
 
@@ -64,11 +64,14 @@
         </div>
 
         <div class="bg-gray-950 rounded-2xl p-4 font-mono text-xs overflow-hidden shadow-inner ring-1 ring-white/10 relative">
-          <div class="flex items-center gap-1.5 mb-3">
-            <div class="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-            <div class="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-            <span class="ml-2 text-gray-500 text-[10px] uppercase font-bold">处理日志</span>
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5">
+              <div class="w-2.5 h-2.5 rounded-full bg-red-500/80" />
+              <div class="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+              <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+              <span class="ml-2 text-gray-500 text-[10px] uppercase font-bold">处理日志</span>
+            </div>
+            <UBadge color="neutral" variant="subtle">共 {{ logs.length }} 条日志</UBadge>
           </div>
           <div class="space-y-1.5 h-48 overflow-y-auto custom-scrollbar" ref="logContainer">
             <p v-for="(log, i) in logs" :key="i" :class="[log.type === 'error' ? 'text-red-400' : 'text-gray-400']">
@@ -94,7 +97,7 @@
           <UButton v-if="task.step === 'done'" :label="showResponses ? '隐藏 Token 统计' : '查看 Token 统计'" icon="i-lucide-chart-column-big" color="neutral" variant="ghost" @click="showResponses = !showResponses" />
         </div>
 
-        <div v-if="showResponses && task.step === 'done'" class="rounded-2xl bg-gray-950 text-gray-100 p-4 ring-1 ring-white/10">
+        <div v-if="showResponses && task.step === 'done'" class="rounded-2xl bg-gray-950 text-gray-100 p-4 ring-1 ring-white/10 space-y-4">
           <div v-if="responsesLoading" class="flex items-center gap-2 text-xs text-gray-400">
             <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             正在加载 Token 统计...
@@ -106,7 +109,9 @@
               <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
               <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
             </div>
-            <div class="max-h-40 overflow-y-auto custom-scrollbar">
+            <div>
+              <p class="text-[11px] text-gray-500 mb-2">以下为每个翻译分块的 Token 消耗统计。</p>
+              <div class="max-h-48 overflow-y-auto custom-scrollbar">
               <table class="w-full text-left">
                 <thead>
                   <tr class="text-gray-600 text-[10px] uppercase"><th class="pb-2 pr-4">块</th><th class="pb-2 pr-4">模型</th><th class="pb-2 pr-4">输入</th><th class="pb-2 pr-4">输出</th><th class="pb-2">合计</th></tr>
@@ -121,6 +126,7 @@
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>
@@ -154,6 +160,7 @@ const cancelling = ref(false)
 const toast = useToast()
 const logContainer = ref(null)
 const eventSource = ref(null)
+const reconnectTimer = ref(null)
 const logs = ref([{ type: 'info', message: '任务初始化中，正在连接 SubX 引擎...', timestamp: new Date().toLocaleTimeString() }])
 
 async function fetchResponses() {
@@ -228,6 +235,7 @@ const stepIcon = computed(() => {
 
 onUnmounted(() => {
   if (eventSource.value) eventSource.value.close()
+  if (reconnectTimer.value) clearTimeout(reconnectTimer.value)
 })
 
 onMounted(async () => {
@@ -278,6 +286,10 @@ onMounted(async () => {
 
       if (data.step === 'done' || data.step === 'error') {
         isIntentionalClose = true
+        if (reconnectTimer.value) {
+          clearTimeout(reconnectTimer.value)
+          reconnectTimer.value = null
+        }
         es.close()
       }
 
@@ -318,7 +330,8 @@ onMounted(async () => {
         const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000)
         reconnectAttempts++
         logs.value.push({ type: 'info', message: `连接中断，${delay / 1000}s 后自动重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, timestamp: new Date().toLocaleTimeString() })
-        setTimeout(connectSSE, delay)
+        if (reconnectTimer.value) clearTimeout(reconnectTimer.value)
+        reconnectTimer.value = setTimeout(connectSSE, delay)
       } else {
         logs.value.push({ type: 'error', message: '实时连接已断开，请刷新页面获取最新状态', timestamp: new Date().toLocaleTimeString() })
       }

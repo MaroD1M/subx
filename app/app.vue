@@ -28,9 +28,9 @@
         <NuxtPage />
       </main>
 
-      <UModal v-model:open="isSettingsOpen" title="设置" description="配置全局翻译偏好、语言模型连接及处理参数" :ui="{ width: '!max-w-4xl w-[92vw]' }">
+      <UModal v-model:open="isSettingsOpen" title="设置" description="配置全局翻译偏好、语言模型连接及处理参数" :ui="{ width: '!max-w-5xl w-[94vw]' }">
         <template #content>
-          <div class="p-6 max-h-[82vh] overflow-y-auto custom-scrollbar">
+          <div class="p-5 sm:p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
             <Settings @close="isSettingsOpen = false" />
           </div>
         </template>

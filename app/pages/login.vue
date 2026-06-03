@@ -14,7 +14,7 @@
         </div>
         <div class="space-y-1">
           <h1 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400">SubX Auth</h1>
-          <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">安全驱动的字幕协作空间</p>
+          <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">本地部署的字幕提取与翻译入口</p>
         </div>
       </div>
 
@@ -150,7 +150,7 @@
       <div class="mt-10 flex flex-col items-center gap-4">
         <div class="flex items-center gap-2 text-[11px] font-medium text-neutral-400 tracking-wider uppercase">
           <UIcon name="i-lucide-binary" class="w-3.5 h-3.5" />
-          <span>SHA-256 Encrypted Session</span>
+          <span>本地口令验证会话</span>
         </div>
         <div class="flex items-center gap-6">
           <UButton icon="i-lucide-help-circle" variant="ghost" color="neutral" size="xs" label="获取帮助" class="text-neutral-500" />

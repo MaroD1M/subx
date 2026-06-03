@@ -128,7 +128,26 @@ const isInsecure = computed(() => {
   return window.location.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(window.location.hostname)
 })
 
-const currentSnapshot = computed(() => JSON.stringify({ ...config.value, apiKey: '' }))
+function buildConfigSnapshot(value: any) {
+  return JSON.stringify({
+    apiBaseUrl: String(value?.apiBaseUrl || ''),
+    defaultModel: String(value?.defaultModel || ''),
+    targetLanguage: String(value?.targetLanguage || ''),
+    outputMode: String(value?.outputMode || ''),
+    stylePreset: String(value?.stylePreset || ''),
+    subtitleFormat: String(value?.subtitleFormat || ''),
+    subtitleStylePreset: String(value?.subtitleStylePreset || ''),
+    bilingualLayout: String(value?.bilingualLayout || ''),
+    chunkSize: Number(value?.chunkSize || 0),
+    concurrency: Number(value?.concurrency || 0),
+    maxRetries: Number(value?.maxRetries || 0),
+    logRetentionDays: Number(value?.logRetentionDays || 0),
+    streamUsage: !!value?.streamUsage,
+    glossary: value?.glossary || {}
+  })
+}
+
+const currentSnapshot = computed(() => buildConfigSnapshot(config.value))
 const hasUnsavedChanges = computed(() => initialSnapshot.value !== '' && currentSnapshot.value !== initialSnapshot.value)
 
 onMounted(() => {

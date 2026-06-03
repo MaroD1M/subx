@@ -1,42 +1,58 @@
 <template>
-  <div ref="layoutRef" class="relative flex h-[935px] gap-3.5 glass-panel rounded-3xl p-5 overflow-hidden">
+  <div ref="layoutRef" class="relative flex min-h-[720px] h-[calc(100vh-11.5rem)] max-h-[1120px] gap-3.5 glass-panel rounded-3xl p-5 overflow-hidden">
     <div v-if="resizeMode" class="absolute top-3 left-1/2 -translate-x-1/2 z-20 px-2.5 py-1 rounded-full bg-gray-900/85 text-white text-[11px] font-medium shadow-lg">
       {{ resizeHint }}
     </div>
 
     <div class="surface-card flex flex-col p-3 min-w-[280px] stagger-fade-in" :style="{ width: `${leftPaneWidth}%` }">
       <div class="space-y-3 mb-3.5 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <UIcon name="i-lucide-folder" class="w-5 h-5 text-primary-500" />
           <h3 class="text-[13px] font-semibold tracking-wide text-gray-700 dark:text-gray-300">文件浏览器</h3>
-          <div class="ml-auto flex items-center gap-1">
-            <UButton icon="i-lucide-library-big" color="neutral" variant="ghost" size="xs" title="媒体库管理" to="/media-libraries" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
+          <div class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+            <UButton label="媒体库" icon="i-lucide-library-big" color="neutral" variant="soft" size="xs" to="/media-libraries" />
+            <UButton label="折叠" icon="i-lucide-panel-left-close" color="neutral" variant="ghost" size="xs" title="折叠全部目录" @click="collapseAllDirectories" />
+            <UButton label="刷新" icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="xs" :loading="loadingFiles" @click="refreshFiles" title="刷新文件" />
             <UButton icon="i-lucide-folder-plus" color="neutral" variant="ghost" size="xs" title="新建文件夹" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="createFolder" />
             <UButton icon="i-lucide-pencil" color="neutral" variant="ghost" size="xs" title="重命名" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" :disabled="!selectedNode || !canMutateSelected" @click="renameNode" />
             <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="xs" title="删除" class="text-gray-400 hover:text-red-600" :disabled="!selectedNode || !canMutateSelected" @click="deleteNode" />
-            <UButton icon="i-lucide-panel-left-close" color="neutral" variant="ghost" size="xs" title="折叠全部目录" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="collapseAllDirectories" />
-            <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="xs" :loading="loadingFiles" @click="refreshFiles" title="刷新文件" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
           </div>
         </div>
 
-        <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
-          <UFormField label="当前媒体库" description="切换不同挂载目录进行浏览。">
-            <USelect v-model="activeRootId" :items="rootItems" class="w-full" :disabled="!rootItems.length" @update:model-value="handleRootChange" />
-          </UFormField>
-          <div class="flex items-center gap-2 mb-1"><UBadge :color="isRootUnavailable ? 'error' : 'success'" variant="subtle">{{ isRootUnavailable ? '异常' : '健康' }}</UBadge><UBadge color="neutral" variant="subtle" class="truncate max-w-[180px]">{{ activeRootPath }}</UBadge></div>
+        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
+          <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(220px,320px)] gap-2">
+            <UFormField label="当前媒体库" description="切换不同挂载目录进行浏览。">
+              <USelect v-model="activeRootId" :items="rootItems" class="w-full" :disabled="!rootItems.length" @update:model-value="handleRootChange" />
+            </UFormField>
+            <UFormField label="快速筛选" description="按文件名或路径片段快速定位。">
+              <UInput v-model="searchQuery" icon="i-lucide-search" placeholder="例如：S01E01 / 中文字幕 / mkv" class="w-full" />
+            </UFormField>
+          </div>
+          <div class="flex items-center gap-2 mb-1 flex-wrap justify-end"><UBadge :color="isRootUnavailable ? 'error' : 'success'" variant="subtle">{{ isRootUnavailable ? '异常' : '健康' }}</UBadge><UBadge color="neutral" variant="subtle" class="truncate max-w-[220px]" :title="activeRootPath">{{ activeRootPath }}</UBadge></div>
         </div>
       </div>
 
-      <div v-if="selectedNodePathPreview" class="mb-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/40 px-3 py-2">
+      <div v-if="selectedNodePathPreview || searchQuery" class="mb-3 space-y-2">
+        <div v-if="searchQuery" class="rounded-xl border border-primary-100 dark:border-primary-900/40 bg-primary-50/70 dark:bg-primary-950/20 px-3 py-2 flex flex-wrap items-center gap-2 justify-between">
+          <div class="min-w-0">
+            <p class="text-[10px] uppercase tracking-wider text-primary-500">筛选中</p>
+            <p class="text-xs text-gray-700 dark:text-gray-300 break-all">当前关键字：{{ searchQuery }}</p>
+          </div>
+          <UButton label="清除" size="2xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="searchQuery = ''" />
+        </div>
+        <div v-if="selectedNodePathPreview" class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/40 px-3 py-2">
         <div class="flex items-start gap-2">
           <UIcon name="i-lucide-waypoints" class="w-4 h-4 mt-0.5 text-gray-400 shrink-0" />
           <div class="min-w-0 flex-1">
             <div class="flex items-center justify-between gap-2">
-              <p class="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">完整路径</p>
+              <p class="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">显示路径</p>
               <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="2xs" title="复制完整路径" class="shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="copySelectedPath" />
             </div>
-            <p class="text-xs text-gray-700 dark:text-gray-300 break-all mt-1">{{ selectedNodePathPreview }}</p>
+            <p class="text-xs text-gray-700 dark:text-gray-300 break-all mt-1">{{ selectedNodePathPreview }}
+            </p>
+            <p v-if="selectedNodeActualPath" class="text-[11px] text-gray-500 dark:text-gray-400 break-all mt-1">容器内路径：{{ selectedNodeActualPath }}</p>
           </div>
+        </div>
         </div>
       </div>
 
@@ -48,12 +64,23 @@
             <FileNodeItem :node="node" :selected-path="selectedNodeKey" :expanded-keys="expandedNodeKeys" @select="onSelect" @toggle-dir="toggleDirectory" />
           </template>
           <div v-if="!loadingFiles && (!displayNodes || !displayNodes.length)" class="h-full min-h-[180px] flex items-center justify-center text-center px-3">
-            <div v-if="isRootUnavailable" class="space-y-2">
+            <div v-if="isRootUnavailable" class="space-y-3">
               <p class="text-sm font-medium text-amber-600 dark:text-amber-400">当前媒体库暂不可访问</p>
               <p class="text-xs text-neutral-400 max-w-xs">{{ rootAccessMessage }}</p>
-              <p class="text-[11px] text-neutral-400">请检查 Docker 挂载路径、目录权限，或前往设置页重新检测媒体库。</p>
+              <p class="text-[11px] text-neutral-400">请检查 Docker 挂载路径、目录权限，或前往媒体库管理页重新检测。</p>
+              <div class="flex items-center justify-center gap-2 flex-wrap">
+                <UButton label="前往媒体库管理" size="xs" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
+                <UButton label="重新刷新" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :loading="loadingFiles" @click="refreshFiles" />
+              </div>
             </div>
-            <p v-else class="text-xs text-neutral-400">暂无文件内容，可检查挂载目录后重试</p>
+            <div v-else class="space-y-3">
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-300">当前媒体库暂无可显示内容</p>
+              <p class="text-xs text-neutral-400">可检查挂载目录、切换媒体库，或刷新后重试。</p>
+              <div class="flex items-center justify-center gap-2 flex-wrap">
+                <UButton label="刷新文件列表" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :loading="loadingFiles" @click="refreshFiles" />
+                <UButton label="管理媒体库" size="xs" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -181,9 +208,49 @@
           <UIcon name="i-lucide-file-video-2" class="w-12 h-12 text-neutral-300" />
         </div>
         <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">当前未选择文件</h4>
-        <p class="text-sm text-neutral-500 mt-2 italic px-8">SubX 会自动提取 MKV 内嵌字幕，或直接翻译独立的 .srt / .vtt / .ass / .ssa 文件。</p>
+        <p class="text-sm text-neutral-500 mt-2 px-8 leading-relaxed">请先在左侧文件浏览器中选择一个视频或字幕文件。SubX 支持提取 MKV 内嵌字幕，也支持直接翻译独立的 `.srt`、`.vtt`、`.ass`、`.ssa` 文件。</p>
+        <div class="mt-4 flex items-center gap-2 flex-wrap justify-center">
+          <UButton label="管理媒体库" size="sm" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
+          <UButton label="查看任务历史" size="sm" color="neutral" variant="ghost" icon="i-lucide-history" to="/history" />
+        </div>
       </div>
     </div>
+
+
+    <UModal v-model:open="folderDialogOpen" :title="folderDialogMode === 'create' ? '新建文件夹' : '重命名'" :description="folderDialogMode === 'create' ? '请输入新文件夹名称。' : '请输入新的文件名或目录名。'" :ui="{ width: '!max-w-md w-[92vw]' }">
+      <template #content>
+        <div class="p-5 space-y-4">
+          <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3 text-xs text-gray-500 dark:text-gray-400 break-all">
+            {{ folderDialogMode === 'create' ? `创建位置：${selectedNodeActualPath || activeRootPath}` : `当前对象：${selectedNodeActualPath || selectedNode?.name || '-'}` }}
+          </div>
+          <UFormField :label="folderDialogMode === 'create' ? '文件夹名称' : '新名称'" required>
+            <UInput v-model="folderDialogValue" :placeholder="folderDialogMode === 'create' ? '例如：Season 2' : '请输入新的名称'" class="w-full" @keyup.enter="submitFolderDialog" />
+          </UFormField>
+          <div class="flex items-center justify-end gap-3">
+            <UButton label="取消" color="neutral" variant="ghost" @click="closeFolderDialog" />
+            <UButton :label="folderDialogMode === 'create' ? '创建' : '保存'" color="primary" :loading="folderDialogLoading" @click="submitFolderDialog" />
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal v-model:open="deleteDialogOpen" title="确认删除" description="删除后不可恢复，请确认是否继续。" :ui="{ width: '!max-w-md w-[92vw]' }">
+      <template #content>
+        <div class="p-5 space-y-4">
+          <div class="flex items-start gap-3 rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50/80 dark:bg-red-950/20 p-3">
+            <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+            <div class="space-y-1 min-w-0">
+              <p class="text-sm font-medium text-red-700 dark:text-red-300">即将删除：{{ selectedNode?.name || '-' }}</p>
+              <p class="text-xs text-red-600/90 dark:text-red-300/80 break-all">{{ selectedNodeActualPath || selectedNodePathPreview }}</p>
+            </div>
+          </div>
+          <div class="flex items-center justify-end gap-3">
+            <UButton label="取消" color="neutral" variant="ghost" @click="deleteDialogOpen = false" />
+            <UButton label="确认删除" color="error" :loading="deleteDialogLoading" @click="confirmDeleteNode" />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -194,6 +261,7 @@ import type { FileNode } from '~~/types'
 const toast = useToast()
 const { data: appConfig } = await useFetch('/api/config')
 const activeRootId = ref<string>('')
+const searchQuery = ref('')
 const selectedFile = ref<FileNode | null>(null)
 const selectedNode = ref<FileNode | null>(null)
 const layoutRef = ref<HTMLElement | null>(null)
@@ -203,6 +271,12 @@ const rightTopHeight = ref(48)
 const resizeMode = ref<'main' | 'right' | null>(null)
 const LAYOUT_STORAGE_KEY = 'subx:file-browser-layout'
 const TREE_STATE_STORAGE_KEY = 'subx:file-browser-tree-state'
+const folderDialogOpen = ref(false)
+const folderDialogMode = ref<'create' | 'rename'>('create')
+const folderDialogValue = ref('')
+const folderDialogLoading = ref(false)
+const deleteDialogOpen = ref(false)
+const deleteDialogLoading = ref(false)
 
 const { data: files, refresh, pending: loadingFiles, error: filesError } = await useFetch('/api/files', {
   query: computed(() => activeRootId.value ? { rootId: activeRootId.value } : {})
@@ -230,13 +304,33 @@ const activeRoot = computed(() => rootItems.value.find((item: any) => item.value
 const activeRootName = computed(() => activeRoot.value?.label || '默认媒体库')
 const activeRootPath = computed(() => {
   const configured = Array.isArray(appConfig.value?.mediaRoots) ? appConfig.value.mediaRoots : []
-  return configured.find((root: any) => root.id === activeRootId.value)?.path || '默认媒体目录'
+  return configured.find((root: any) => root.id === activeRootId.value)?.path || '/media'
 })
+
+function filterNodes(nodes: FileNode[], keyword: string): FileNode[] {
+  if (!keyword) return nodes
+  const normalized = keyword.trim().toLowerCase()
+  if (!normalized) return nodes
+
+  return nodes
+    .map((node) => {
+      const children = Array.isArray(node.children) ? filterNodes(node.children, normalized) : []
+      const haystack = `${node.name || ''} ${node.path || ''}`.toLowerCase()
+      const matched = haystack.includes(normalized)
+      if (matched || children.length) {
+        return {
+          ...node,
+          children: node.isDir ? children : node.children
+        }
+      }
+      return null
+    })
+    .filter(Boolean) as FileNode[]
+}
 
 const displayNodes = computed<FileNode[]>(() => {
   const current = files.value || []
-  if (activeRootId.value) return current
-  return current
+  return filterNodes(current, searchQuery.value)
 })
 
 const selectedNodeKey = computed(() => {
@@ -253,6 +347,13 @@ const selectedNodePathPreview = computed(() => {
   if (!selectedNode.value?.path) return ''
   const rootName = selectedNode.value.rootName || activeRootName.value
   return rootName + ' / ' + selectedNode.value.path
+})
+
+const selectedNodeActualPath = computed(() => {
+  if (!selectedNode.value?.path) return ''
+  const base = activeRootPath.value && activeRootPath.value !== '默认媒体目录' ? activeRootPath.value : ''
+  if (!base) return selectedNode.value.path
+  return `${String(base).replace(/\/$/, '')}/${String(selectedNode.value.path).replace(/^\//, '')}`
 })
 
 const rootAccessMessage = computed(() => filesError.value?.data?.message || '')
@@ -314,14 +415,15 @@ function collapseAllDirectories() {
 async function copySelectedPath() {
   if (!selectedNodePathPreview.value || !import.meta.client) return
   try {
-    await navigator.clipboard.writeText(selectedNodePathPreview.value)
-    toast.add({ title: toastText.success, description: '完整路径已复制', color: 'success' })
+    await navigator.clipboard.writeText(selectedNodeActualPath.value || selectedNodePathPreview.value)
+    toast.add({ title: toastText.success, description: selectedNodeActualPath.value ? '容器内路径已复制' : '显示路径已复制', color: 'success' })
   } catch {
     toast.add({ title: toastText.error, description: '复制失败，请手动复制', color: 'danger' })
   }
 }
 
 async function handleRootChange() {
+  searchQuery.value = ''
   selectedNode.value = null
   selectedFile.value = null
   tracks.value = []
@@ -466,44 +568,73 @@ async function onSelect(node: FileNode) {
   }
 }
 
-async function createFolder() {
-  const rootId = selectedNode.value?.rootId || activeRootId.value
-  const parentPath = selectedNode.value?.isDir ? selectedNode.value.path : selectedNode.value?.path?.split('/').slice(0, -1).join('/') || ''
-  const name = window.prompt('请输入新文件夹名称')
-  if (!name) return
+function createFolder() {
+  folderDialogMode.value = 'create'
+  folderDialogValue.value = ''
+  folderDialogOpen.value = true
+}
+
+function renameNode() {
+  if (!selectedNode.value || !selectedNode.value.path) return
+  folderDialogMode.value = 'rename'
+  folderDialogValue.value = selectedNode.value.name || ''
+  folderDialogOpen.value = true
+}
+
+function deleteNode() {
+  if (!selectedNode.value || !selectedNode.value.path) return
+  deleteDialogOpen.value = true
+}
+
+function closeFolderDialog() {
+  if (folderDialogLoading.value) return
+  folderDialogOpen.value = false
+  folderDialogValue.value = ''
+}
+
+async function submitFolderDialog() {
+  const value = folderDialogValue.value.trim()
+  if (!value) {
+    toast.add({ title: toastText.error, description: folderDialogMode.value === 'create' ? '请输入文件夹名称' : '请输入新名称', color: 'danger' })
+    return
+  }
+
+  folderDialogLoading.value = true
   try {
-    await $fetch('/api/files/create-folder', { method: 'POST', body: { parentPath, name, rootId } })
-    toast.add({ title: toastText.success, description: '文件夹已创建', color: 'success' })
+    if (folderDialogMode.value === 'create') {
+      const rootId = selectedNode.value?.rootId || activeRootId.value
+      const parentPath = selectedNode.value?.isDir ? selectedNode.value.path : selectedNode.value?.path?.split('/').slice(0, -1).join('/') || ''
+      await $fetch('/api/files/create-folder', { method: 'POST', body: { parentPath, name: value, rootId } })
+      toast.add({ title: toastText.success, description: '文件夹已创建', color: 'success' })
+    } else {
+      if (!selectedNode.value?.path) return
+      if (value === selectedNode.value.name) {
+        closeFolderDialog()
+        return
+      }
+      await $fetch('/api/files/rename', { method: 'POST', body: { path: selectedNode.value.path, newName: value, rootId: selectedNode.value.rootId || activeRootId.value } })
+      toast.add({ title: toastText.success, description: '重命名成功', color: 'success' })
+      selectedNode.value = null
+      selectedFile.value = null
+      tracks.value = []
+      subtitlePreview.value = []
+    }
+    closeFolderDialog()
     await refresh()
   } catch (e: any) {
-    toast.add({ title: toastText.error, description: e?.data?.message || '无法创建文件夹', color: 'danger' })
+    toast.add({ title: toastText.error, description: e?.data?.message || (folderDialogMode.value === 'create' ? '无法创建文件夹' : '无法重命名'), color: 'danger' })
+  } finally {
+    folderDialogLoading.value = false
   }
 }
 
-async function renameNode() {
+async function confirmDeleteNode() {
   if (!selectedNode.value || !selectedNode.value.path) return
-  const name = window.prompt('请输入新名称', selectedNode.value.name)
-  if (!name || name === selectedNode.value.name) return
-  try {
-    await $fetch('/api/files/rename', { method: 'POST', body: { path: selectedNode.value.path, newName: name, rootId: selectedNode.value.rootId || activeRootId.value } })
-    toast.add({ title: toastText.success, description: '重命名成功', color: 'success' })
-    selectedNode.value = null
-    selectedFile.value = null
-    tracks.value = []
-    subtitlePreview.value = []
-    await refresh()
-  } catch (e: any) {
-    toast.add({ title: toastText.error, description: e?.data?.message || '无法重命名', color: 'danger' })
-  }
-}
-
-async function deleteNode() {
-  if (!selectedNode.value || !selectedNode.value.path) return
-  const ok = window.confirm(`确定删除 ${selectedNode.value.name} 吗？`)
-  if (!ok) return
+  deleteDialogLoading.value = true
   try {
     await $fetch('/api/files/delete', { method: 'POST', body: { path: selectedNode.value.path, rootId: selectedNode.value.rootId || activeRootId.value } })
     toast.add({ title: toastText.success, description: '删除成功', color: 'success' })
+    deleteDialogOpen.value = false
     selectedNode.value = null
     selectedFile.value = null
     tracks.value = []
@@ -511,6 +642,8 @@ async function deleteNode() {
     await refresh()
   } catch (e: any) {
     toast.add({ title: toastText.error, description: e?.data?.message || '无法删除目标', color: 'danger' })
+  } finally {
+    deleteDialogLoading.value = false
   }
 }
 
