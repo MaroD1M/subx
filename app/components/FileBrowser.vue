@@ -19,40 +19,31 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
-          <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(220px,320px)] gap-2">
-            <UFormField label="当前媒体库" description="切换不同挂载目录进行浏览。">
+        <div class="space-y-2">
+          <div class="flex flex-wrap items-center gap-2 justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <UBadge :color="isRootUnavailable ? 'error' : 'success'" variant="subtle">{{ isRootUnavailable ? '异常' : '健康' }}</UBadge>
+              <UBadge color="neutral" variant="subtle" class="truncate max-w-[240px]" :title="activeRootPath">{{ activeRootPath }}</UBadge>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(132px,180px)_minmax(0,1fr)] xl:grid-cols-[minmax(136px,180px)_minmax(0,1fr)]">
+            <UFormField label="当前媒体库" description="切换不同挂载目录进行浏览。" class="min-w-0">
               <USelect v-model="activeRootId" :items="rootItems" class="w-full" :disabled="!rootItems.length" @update:model-value="handleRootChange" />
             </UFormField>
-            <UFormField label="快速筛选" description="按文件名或路径片段快速定位。">
+            <UFormField label="快速筛选" description="按文件名或路径片段快速定位。" class="min-w-0">
               <UInput v-model="searchQuery" icon="i-lucide-search" placeholder="例如：S01E01 / 中文字幕 / mkv" class="w-full" />
             </UFormField>
           </div>
-          <div class="flex items-center gap-2 mb-1 flex-wrap justify-end"><UBadge :color="isRootUnavailable ? 'error' : 'success'" variant="subtle">{{ isRootUnavailable ? '异常' : '健康' }}</UBadge><UBadge color="neutral" variant="subtle" class="truncate max-w-[220px]" :title="activeRootPath">{{ activeRootPath }}</UBadge></div>
         </div>
       </div>
 
-      <div v-if="selectedNodePathPreview || searchQuery" class="mb-3 space-y-2">
+      <div v-if="searchQuery" class="mb-3 space-y-2">
         <div v-if="searchQuery" class="rounded-xl border border-primary-100 dark:border-primary-900/40 bg-primary-50/70 dark:bg-primary-950/20 px-3 py-2 flex flex-wrap items-center gap-2 justify-between">
           <div class="min-w-0">
             <p class="text-[10px] uppercase tracking-wider text-primary-500">筛选中</p>
             <p class="text-xs text-gray-700 dark:text-gray-300 break-all">当前关键字：{{ searchQuery }}</p>
           </div>
           <UButton label="清除" size="2xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="searchQuery = ''" />
-        </div>
-        <div v-if="selectedNodePathPreview" class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/40 px-3 py-2">
-        <div class="flex items-start gap-2">
-          <UIcon name="i-lucide-waypoints" class="w-4 h-4 mt-0.5 text-gray-400 shrink-0" />
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">显示路径</p>
-              <UButton icon="i-lucide-copy" color="neutral" variant="ghost" size="2xs" title="复制完整路径" class="shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="copySelectedPath" />
-            </div>
-            <p class="text-xs text-gray-700 dark:text-gray-300 break-all mt-1">{{ selectedNodePathPreview }}
-            </p>
-            <p v-if="selectedNodeActualPath" class="text-[11px] text-gray-500 dark:text-gray-400 break-all mt-1">容器内路径：{{ selectedNodeActualPath }}</p>
-          </div>
-        </div>
         </div>
       </div>
 
@@ -97,8 +88,8 @@
         <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
           <UIcon :name="isSubtitleFile ? 'i-lucide-file-text' : 'i-lucide-video'" class="w-5 h-5 text-sky-500" />
           <div class="min-w-0">
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate">{{ isSubtitleFile ? '字幕文件已就绪：' : '字幕轨道：' }}{{ selectedFile.name }}</h3>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400 truncate">{{ selectedFile.rootName || activeRootName }} · {{ selectedFile.path }}</p>
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate" :title="selectedFile.name">{{ isSubtitleFile ? '字幕文件已就绪：' : '字幕轨道：' }}{{ selectedFile.name }}</h3>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400 truncate" :title="selectedFile.path">{{ selectedFile.rootName || activeRootName }} · {{ selectedFile.path }}</p>
           </div>
         </div>
 
@@ -152,7 +143,10 @@
             <div class="relative flex-1 min-h-0">
               <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
                 <div class="space-y-3.5 p-0.5">
-                  <p class="section-title">基础设置</p>
+                  <div class="space-y-1">
+                    <p class="section-title">基础设置</p>
+                    <p class="text-[11px] text-gray-500 dark:text-gray-400">先选择翻译风格、输出模式和目标语言，再开始任务。</p>
+                  </div>
                   <UFormField label="翻译风格">
                     <USelect v-model="options.stylePreset" :items="styleOptions" class="w-full" :ui="{ width: 'w-full' }" :disabled="options.outputMode === 'original'" />
                   </UFormField>
@@ -163,7 +157,7 @@
                       <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ currentStyle.description }}</p>
                     </div>
                   </div>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     <UFormField label="输出模式">
                       <USelect v-model="options.outputMode" :items="outputModeItems" class="w-full" />
                     </UFormField>
@@ -175,8 +169,11 @@
                 </div>
 
                 <div class="space-y-3.5 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
-                  <p class="section-title">字幕输出</p>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <p class="section-title">字幕输出</p>
+                    <p class="text-[11px] text-gray-500 dark:text-gray-400">可选择导出格式、字幕样式和双语布局。</p>
+                  </div>
+                  <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     <UFormField label="字幕格式">
                       <USelect v-model="options.subtitleFormat" :items="subtitleFormatItems" class="w-full" />
                     </UFormField>
@@ -203,15 +200,14 @@
         </div>
       </div>
 
-      <div v-else class="h-full flex flex-col items-center justify-center text-center px-4">
-        <div class="p-4 bg-gray-50 dark:bg-gray-900 rounded-full mb-4">
-          <UIcon name="i-lucide-file-video-2" class="w-12 h-12 text-neutral-300" />
-        </div>
-        <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">当前未选择文件</h4>
-        <p class="text-sm text-neutral-500 mt-2 px-8 leading-relaxed">请先在左侧文件浏览器中选择一个视频或字幕文件。SubX 支持提取 MKV 内嵌字幕，也支持直接翻译独立的 `.srt`、`.vtt`、`.ass`、`.ssa` 文件。</p>
-        <div class="mt-4 flex items-center gap-2 flex-wrap justify-center">
-          <UButton label="管理媒体库" size="sm" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
-          <UButton label="查看任务历史" size="sm" color="neutral" variant="ghost" icon="i-lucide-history" to="/history" />
+      <div v-else class="h-full flex flex-col items-center justify-center text-center px-6 py-8">
+        <div class="max-w-md space-y-4">
+          <div class="mx-auto w-fit p-4 bg-gray-50 dark:bg-gray-900 rounded-full">
+            <UIcon name="i-lucide-file-video-2" class="w-12 h-12 text-neutral-300" />
+          </div>
+          <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">当前未选择文件</h4>
+          <p class="text-sm text-neutral-500 leading-relaxed">请先在左侧文件浏览器中选择一个视频或字幕文件。支持提取 MKV 内嵌字幕，也支持直接翻译独立的 `.srt`、`.vtt`、`.ass`、`.ssa` 文件。</p>
+          <p class="text-xs text-neutral-400">媒体库管理与任务历史入口已保留在页面顶部，避免与字幕工作区混在一起。</p>
         </div>
       </div>
     </div>
@@ -221,7 +217,7 @@
       <template #content>
         <div class="p-5 space-y-4">
           <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3 text-xs text-gray-500 dark:text-gray-400 break-all">
-            {{ folderDialogMode === 'create' ? `创建位置：${selectedNodeActualPath || activeRootPath}` : `当前对象：${selectedNodeActualPath || selectedNode?.name || '-'}` }}
+            {{ folderDialogMode === 'create' ? `创建位置：${activeRootPath}` : `当前对象：${selectedNode?.name || '-'}` }}
           </div>
           <UFormField :label="folderDialogMode === 'create' ? '文件夹名称' : '新名称'" required>
             <UInput v-model="folderDialogValue" :placeholder="folderDialogMode === 'create' ? '例如：Season 2' : '请输入新的名称'" class="w-full" @keyup.enter="submitFolderDialog" />
@@ -241,7 +237,7 @@
             <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
             <div class="space-y-1 min-w-0">
               <p class="text-sm font-medium text-red-700 dark:text-red-300">即将删除：{{ selectedNode?.name || '-' }}</p>
-              <p class="text-xs text-red-600/90 dark:text-red-300/80 break-all">{{ selectedNodeActualPath || selectedNodePathPreview }}</p>
+              <p class="text-xs text-red-600/90 dark:text-red-300/80 break-all">此操作将永久删除所选文件或目录，请谨慎确认。</p>
             </div>
           </div>
           <div class="flex items-center justify-end gap-3">
@@ -343,18 +339,6 @@ const expandedNodeKeys = computed(() => expandedTreeState.value[activeRootId.val
 
 const canMutateSelected = computed(() => !!selectedNode.value?.path)
 
-const selectedNodePathPreview = computed(() => {
-  if (!selectedNode.value?.path) return ''
-  const rootName = selectedNode.value.rootName || activeRootName.value
-  return rootName + ' / ' + selectedNode.value.path
-})
-
-const selectedNodeActualPath = computed(() => {
-  if (!selectedNode.value?.path) return ''
-  const base = activeRootPath.value && activeRootPath.value !== '默认媒体目录' ? activeRootPath.value : ''
-  if (!base) return selectedNode.value.path
-  return `${String(base).replace(/\/$/, '')}/${String(selectedNode.value.path).replace(/^\//, '')}`
-})
 
 const rootAccessMessage = computed(() => filesError.value?.data?.message || '')
 const isRootUnavailable = computed(() => !!filesError.value)
@@ -412,15 +396,6 @@ function collapseAllDirectories() {
   setExpandedKeys(rootId, [])
 }
 
-async function copySelectedPath() {
-  if (!selectedNodePathPreview.value || !import.meta.client) return
-  try {
-    await navigator.clipboard.writeText(selectedNodeActualPath.value || selectedNodePathPreview.value)
-    toast.add({ title: toastText.success, description: selectedNodeActualPath.value ? '容器内路径已复制' : '显示路径已复制', color: 'success' })
-  } catch {
-    toast.add({ title: toastText.error, description: '复制失败，请手动复制', color: 'danger' })
-  }
-}
 
 async function handleRootChange() {
   searchQuery.value = ''
@@ -586,8 +561,8 @@ function deleteNode() {
   deleteDialogOpen.value = true
 }
 
-function closeFolderDialog() {
-  if (folderDialogLoading.value) return
+function closeFolderDialog(force = false) {
+  if (folderDialogLoading.value && !force) return
   folderDialogOpen.value = false
   folderDialogValue.value = ''
 }
@@ -609,7 +584,7 @@ async function submitFolderDialog() {
     } else {
       if (!selectedNode.value?.path) return
       if (value === selectedNode.value.name) {
-        closeFolderDialog()
+        closeFolderDialog(true)
         return
       }
       await $fetch('/api/files/rename', { method: 'POST', body: { path: selectedNode.value.path, newName: value, rootId: selectedNode.value.rootId || activeRootId.value } })
@@ -619,7 +594,7 @@ async function submitFolderDialog() {
       tracks.value = []
       subtitlePreview.value = []
     }
-    closeFolderDialog()
+    closeFolderDialog(true)
     await refresh()
   } catch (e: any) {
     toast.add({ title: toastText.error, description: e?.data?.message || (folderDialogMode.value === 'create' ? '无法创建文件夹' : '无法重命名'), color: 'danger' })

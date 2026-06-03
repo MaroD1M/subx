@@ -103,19 +103,80 @@ export const SubtitleService = {
       id: String(entry.id),
       startMs: this.srtTimeToMs(String(entry.startTime)),
       endMs: this.srtTimeToMs(String(entry.endTime)),
-      text: this.getDisplayText(entry, outputMode, bilingualLayout)
+      text: this.sanitizeSrtText(this.getDisplayText(entry, outputMode, bilingualLayout))
     }))
   },
 
-  escapeAssText(text: string): string {
+  normalizeSubtitleText(text: unknown): string {
     return String(text ?? '')
-      .replace(/\\/g, '\\\\')
-      .replace(/\{/g, '\\{')
-      .replace(/\}/g, '\\}')
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n')
-      .replace(/\n/g, '\\N')
+      .trim()
   },
+
+  sanitizeSrtText(text: unknown): string {
+    return this.normalizeSubtitleText(text)
+      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/<\/?\s*(i|b|u)\s*>/gi, '')
+      .replace(/<\s*font[^>]*>/gi, '')
+      .replace(/<\s*\/\s*font\s*>/gi, '')
+  },
+
+  buildAssTextPayload(text: unknown) {
+    const normalized = this.normalizeSubtitleText(text)
+      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/<\s*font[^>]*>/gi, '')
+      .replace(/<\s*\/\s*font\s*>/gi, '')
+
+    const parsed: Array<{ tags: Array<Record<string, number>>, text: string, drawing: never[] }> = []
+    const styleState = { i: 0, b: 0, u: 0 }
+    const tokenPattern = /<\s*(\/)?\s*(i|b|u)\s*>/gi
+    let cursor = 0
+    let match: RegExpExecArray | null = null
+
+    const getActiveTags = () => Object.entries(styleState)
+      .filter(([, value]) => value)
+      .map(([key, value]) => ({ [key]: value })) as Array<Record<string, number>>
+
+    const pushFragment = (fragmentText: string, forceTags?: Array<Record<string, number>>) => {
+      if (!fragmentText) return
+      parsed.push({
+        tags: forceTags ?? getActiveTags(),
+        text: fragmentText.replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}').replace(/\n/g, '\\N'),
+        drawing: []
+      })
+    }
+
+    while ((match = tokenPattern.exec(normalized)) !== null) {
+      pushFragment(normalized.slice(cursor, match.index))
+      const isClosing = !!match[1]
+      const tagName = match[2].toLowerCase() as 'i' | 'b' | 'u'
+      styleState[tagName] = isClosing ? 0 : 1
+
+      if (isClosing) {
+        parsed.push({
+          tags: [{ [tagName]: 0 }],
+          text: '',
+          drawing: []
+        })
+      }
+
+      cursor = match.index + match[0].length
+    }
+
+    pushFragment(normalized.slice(cursor))
+
+    if (parsed.length === 0) {
+      parsed.push({ tags: [], text: '', drawing: [] })
+    }
+
+    return {
+      raw: normalized,
+      combined: normalized.replace(/<[^>]+>/g, ''),
+      parsed
+    }
+  },
+
 
   buildAssStyle(subtitleStylePreset = 'bilingual_simple') {
     const isCinema = subtitleStylePreset.includes('cinema')
@@ -179,11 +240,7 @@ export const SubtitleService = {
           MarginR: 0,
           MarginV: 0,
           Effect: null,
-          Text: {
-            raw: this.escapeAssText(entry.text),
-            combined: String(entry.text ?? ''),
-            parsed: [{ tags: [], text: this.escapeAssText(entry.text), drawing: [] }]
-          }
+          Text: this.buildAssTextPayload(entry.text)
         }))
       }
     }
@@ -202,11 +259,7 @@ export const SubtitleService = {
 
       return {
         ...dialogue,
-        Text: {
-          raw: this.escapeAssText(nextEntry.text),
-          combined: String(nextEntry.text ?? ''),
-          parsed: [{ tags: [], text: this.escapeAssText(nextEntry.text), drawing: [] }]
-        }
+        Text: this.buildAssTextPayload(nextEntry.text)
       }
     })
 
@@ -231,7 +284,7 @@ export const SubtitleService = {
       id: entry.id,
       startTime: entry.startTime,
       endTime: entry.endTime,
-      text: this.getDisplayText(entry, outputMode, bilingualLayout)
+      text: this.sanitizeSrtText(this.getDisplayText(entry, outputMode, bilingualLayout))
     }))
 
     const basePath = outputPath.replace(/\.[^.]+$/, '')

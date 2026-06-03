@@ -21,9 +21,9 @@
           <UBadge color="neutral" variant="subtle">总数 {{ mediaRoots.length }}</UBadge>
           <UBadge color="primary" variant="subtle">默认 {{ defaultRootCount }}</UBadge>
           <UBadge :color="invalidRootCount ? 'error' : 'success'" variant="subtle">异常 {{ invalidRootCount }}</UBadge>
-          <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 ml-1">
-            <USwitch v-model="forceSaveInvalidRoots" />
-            <span>允许强制保存</span>
+          <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 ml-1 rounded-full border border-gray-200 dark:border-gray-700 px-2.5 py-1 bg-gray-50/80 dark:bg-gray-900/40">
+            <USwitch v-model="forceSaveInvalidRoots" color="primary" />
+            <span class="font-medium">允许强制保存</span>
           </div>
         </div>
       </div>
@@ -36,32 +36,35 @@
 
     <div class="space-y-4">
       <div v-for="(root, index) in mediaRoots" :key="root.id" class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
-        <div class="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-5">
-          <div class="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] gap-4">
+        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4 xl:gap-5">
+          <div class="space-y-4 min-w-0">
             <UFormField label="媒体库名称">
               <UInput v-model="root.name" placeholder="例如：电影库 / 剧集库" class="w-full" />
             </UFormField>
             <UFormField label="容器内路径" description="填写容器内路径，不是宿主机路径。">
-              <div class="flex flex-col sm:flex-row gap-2">
-                <UInput v-model="root.path" placeholder="/media/movies" class="flex-1 min-w-0" />
+              <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
+                <UInput v-model="root.path" placeholder="/media/movies" class="w-full min-w-0" />
                 <UButton label="检测路径" icon="i-lucide-search-check" color="neutral" variant="soft" :loading="inspectingId === root.id" @click="inspectRoot(root)" />
               </div>
             </UFormField>
           </div>
 
-          <div class="lg:w-[260px] space-y-3 shrink-0">
+          <div class="space-y-3 shrink-0 xl:border-l xl:border-gray-100 xl:dark:border-gray-800 xl:pl-5">
             <div class="flex flex-wrap items-center gap-2">
               <UBadge :color="root.isDefault ? 'primary' : 'neutral'" variant="subtle">{{ root.isDefault ? '默认库' : '普通库' }}</UBadge>
               <UBadge :color="root.enabled !== false ? 'success' : 'neutral'" variant="subtle">{{ root.enabled !== false ? '已启用' : '已停用' }}</UBadge>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
               <UButton :label="root.isDefault ? '当前默认' : '设为默认'" icon="i-lucide-star" size="sm" color="primary" variant="soft" :disabled="root.isDefault" @click="setDefaultRoot(index)" />
-              <UButton :label="root.enabled !== false ? '停用' : '启用'" :icon="root.enabled !== false ? 'i-lucide-toggle-left' : 'i-lucide-toggle-right'" size="sm" color="neutral" variant="ghost" @click="root.enabled = root.enabled === false" />
+              <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 px-3 py-2">
+                <span class="text-sm text-gray-600 dark:text-gray-300">通用启用</span>
+                <USwitch v-model="root.enabled" color="primary" />
+              </div>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <UButton icon="i-lucide-arrow-up" color="neutral" variant="ghost" size="sm" :disabled="index === 0" @click="moveRoot(index, -1)" />
               <UButton icon="i-lucide-arrow-down" color="neutral" variant="ghost" size="sm" :disabled="index === mediaRoots.length - 1" @click="moveRoot(index, 1)" />
-              <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="sm" @click="removeMediaRoot(index)" />
+              <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="sm" @click="openRemoveDialog(index)" />
             </div>
           </div>
         </div>
@@ -130,6 +133,20 @@
       </div>
     </div>
   </div>
+  <UModal v-model:open="removeDialogOpen" title="确认删除媒体库" description="删除后将移除该媒体库配置，但不会删除宿主机上的真实文件。" :ui="{ width: '!max-w-md w-[92vw]' }">
+    <template #content>
+      <div class="p-5 space-y-4">
+        <div class="rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50/80 dark:bg-red-950/20 p-3 text-sm text-red-700 dark:text-red-300 break-all">
+          即将删除媒体库：{{ removeTargetRoot?.name || '未命名媒体库' }}
+          <div class="text-xs mt-1 opacity-80">{{ removeTargetRoot?.path || '未配置路径' }}</div>
+        </div>
+        <div class="flex items-center justify-end gap-3">
+          <UButton label="取消" color="neutral" variant="ghost" @click="removeDialogOpen = false" />
+          <UButton label="确认删除" color="error" @click="confirmRemoveMediaRoot" />
+        </div>
+      </div>
+    </template>
+  </UModal>
 </template>
 
 <script setup lang="ts">
@@ -145,6 +162,8 @@ const inspectingId = ref('')
 const batchInspecting = ref(false)
 const forceSaveInvalidRoots = ref(false)
 const helpOpen = ref(false)
+const removeDialogOpen = ref(false)
+const removeTargetIndex = ref(-1)
 
 const { data, refresh } = await useFetch('/api/config')
 const config = ref<any>(data.value || {})
@@ -153,6 +172,7 @@ const inspectionStates = ref<Record<string, { ok: boolean, message: string, path
 
 const defaultRootCount = computed(() => mediaRoots.value.filter(root => root.isDefault).length)
 const invalidRootCount = computed(() => Object.values(inspectionStates.value).filter(item => !item.ok).length)
+const removeTargetRoot = computed(() => removeTargetIndex.value >= 0 ? mediaRoots.value[removeTargetIndex.value] : null)
 
 onMounted(() => {
   if (mediaRoots.value.length && !mediaRoots.value.some(root => root.isDefault)) {
@@ -169,6 +189,18 @@ function removeMediaRoot(index: number) {
   mediaRoots.value.splice(index, 1)
   if (removed?.id) delete inspectionStates.value[removed.id]
   if (removed?.isDefault && mediaRoots.value.length) mediaRoots.value[0].isDefault = true
+}
+
+function openRemoveDialog(index: number) {
+  removeTargetIndex.value = index
+  removeDialogOpen.value = true
+}
+
+function confirmRemoveMediaRoot() {
+  if (removeTargetIndex.value < 0) return
+  removeMediaRoot(removeTargetIndex.value)
+  removeDialogOpen.value = false
+  removeTargetIndex.value = -1
 }
 
 function setDefaultRoot(index: number) {

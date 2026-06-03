@@ -93,6 +93,20 @@
         <UButton label="保存修改" color="primary" :loading="pending" @click="save" />
       </div>
     </div>
+
+    <UModal v-model:open="closeConfirmOpen" title="放弃未保存的更改？" description="当前设置尚未保存，关闭后会丢失本次修改。" :ui="{ width: '!max-w-md w-[92vw]' }">
+      <template #content>
+        <div class="p-5 space-y-4">
+          <div class="rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/80 dark:bg-amber-950/20 p-3 text-sm text-amber-700 dark:text-amber-300">
+            你可以先保存修改，或确认放弃本次更改。
+          </div>
+          <div class="flex items-center justify-end gap-3">
+            <UButton label="继续编辑" color="neutral" variant="ghost" @click="closeConfirmOpen = false" />
+            <UButton label="放弃更改" color="warning" @click="confirmCloseWithoutSaving" />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -102,6 +116,7 @@ const isHelpOpen = ref(false)
 const { data } = await useFetch('/api/config')
 const config = ref<any>(data.value || {})
 const pending = ref(false)
+const closeConfirmOpen = ref(false)
 const toast = useToast()
 const outputModeItems = [
   { label: '仅显示译文', value: 'translated' },
@@ -181,7 +196,15 @@ async function tryFetchModels() {
 }
 
 function handleClose() {
-  if (hasUnsavedChanges.value && !window.confirm('当前有未保存的更改，确定关闭设置吗？')) return
+  if (hasUnsavedChanges.value) {
+    closeConfirmOpen.value = true
+    return
+  }
+  emit('close')
+}
+
+function confirmCloseWithoutSaving() {
+  closeConfirmOpen.value = false
   emit('close')
 }
 
