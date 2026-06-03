@@ -36,6 +36,9 @@ export function useDb() {
       target_lang TEXT NOT NULL DEFAULT 'zh-CN',
       output_mode TEXT NOT NULL DEFAULT 'translated',
       style_preset TEXT NOT NULL DEFAULT 'default',
+      subtitle_format TEXT NOT NULL DEFAULT 'srt',
+      subtitle_style_preset TEXT NOT NULL DEFAULT 'bilingual_simple',
+      bilingual_layout TEXT NOT NULL DEFAULT 'translated_first',
       status TEXT NOT NULL DEFAULT 'queued',
       progress INTEGER NOT NULL DEFAULT 0,
       total_chunks INTEGER DEFAULT 0,
@@ -88,6 +91,18 @@ export function useDb() {
 
   try {
     _db.exec(`ALTER TABLE tasks ADD COLUMN root_id TEXT`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN bilingual_layout TEXT NOT NULL DEFAULT 'translated_first'`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN subtitle_style_preset TEXT NOT NULL DEFAULT 'bilingual_simple'`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN subtitle_format TEXT NOT NULL DEFAULT 'srt'`)
   } catch { /* column already exists */ }
 
   try {

@@ -5,7 +5,7 @@ import { VideoService } from '../utils/video'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { filePath, sourceType, trackIndex, targetLanguage, outputMode, model, stylePreset, files, rootId } = body
+  const { filePath, sourceType, trackIndex, targetLanguage, outputMode, model, stylePreset, subtitleFormat, subtitleStylePreset, bilingualLayout, files, rootId } = body
 
   const config = await ConfigService.getConfig()
   const taskIds: string[] = []
@@ -21,7 +21,10 @@ export default defineEventHandler(async (event) => {
       model: model || config.defaultModel,
       targetLanguage: targetLanguage || config.targetLanguage,
       outputMode: outputMode || 'translated',
-      stylePreset: stylePreset || 'default'
+      stylePreset: stylePreset || 'default',
+      subtitleFormat: subtitleFormat || config.subtitleFormat || 'srt',
+      subtitleStylePreset: subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
+      bilingualLayout: bilingualLayout || config.bilingualLayout || 'translated_first'
     })
 
     globalTaskQueue.add(taskId, {
@@ -36,12 +39,28 @@ export default defineEventHandler(async (event) => {
 
   if (body.retryTaskId) {
     const oldTask = TaskService.getTask(String(body.retryTaskId))
-    const newTaskId = await processFile(
-      oldTask.filePath,
-      oldTask.sourceType as 'embedded' | 'external',
-      oldTask.trackIndex || 0,
-      oldTask.rootId
-    )
+    const newTaskId = uuidv4()
+    await TaskService.createTask({
+      taskId: newTaskId,
+      filePath: oldTask.filePath,
+      rootId: oldTask.rootId,
+      sourceType: oldTask.sourceType as 'embedded' | 'external',
+      trackIndex: oldTask.trackIndex || 0,
+      model: oldTask.model || config.defaultModel,
+      targetLanguage: oldTask.targetLanguage || config.targetLanguage,
+      outputMode: oldTask.outputMode || 'translated',
+      stylePreset: oldTask.stylePreset || 'default',
+      subtitleFormat: oldTask.subtitleFormat || config.subtitleFormat || 'srt',
+      subtitleStylePreset: oldTask.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
+      bilingualLayout: oldTask.bilingualLayout || config.bilingualLayout || 'translated_first'
+    })
+
+    globalTaskQueue.add(newTaskId, {
+      apiKey: config.apiKey,
+      baseUrl: config.apiBaseUrl
+    }).catch(err => {
+      console.error('Task execution error:', err)
+    })
     return { taskId: newTaskId, taskIds: [newTaskId], retriedFrom: body.retryTaskId }
   }
 

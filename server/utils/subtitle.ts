@@ -17,7 +17,6 @@ export const SubtitleService = {
     isNonVerbal(text: string): boolean {
         const trimmed = text.trim()
         if (!trimmed) return true
-        // 仅包含星号、破折号或纯标点符号的情况视为非语言
         if (/^[\*\-\.，。！？、…\s]+$/.test(trimmed)) return true
         return false
     },
@@ -64,20 +63,29 @@ export const SubtitleService = {
         return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`
     },
 
-    async writeSubtitle(entries: SubtitleEntry[], outputPath: string, outputMode: 'translated' | 'bilingual' | 'original' = 'translated') {
+    async writeSubtitle(
+        entries: SubtitleEntry[],
+        outputPath: string,
+        outputMode: 'translated' | 'bilingual' | 'original' = 'translated',
+        subtitleFormat: 'srt' | 'ass' | 'both' = 'srt',
+        subtitleStylePreset = 'bilingual_simple',
+        bilingualLayout: 'translated_first' | 'original_first' = 'translated_first'
+    ) {
         const outputDir = join(outputPath, '..')
         if (!existsSync(outputDir)) {
             mkdirSync(outputDir, { recursive: true })
         }
 
-        const srtEntries = entries.map(entry => {
+        const normalizedEntries = entries.map(entry => {
             const translatedText = entry.translatedText || entry.text
             let displayText: string
 
             if (outputMode === 'original') {
                 displayText = entry.text
             } else if (outputMode === 'bilingual' && entry.translatedText) {
-                displayText = `${entry.text}\n${entry.translatedText}`
+                displayText = bilingualLayout === 'original_first'
+                    ? `${entry.text}\n${entry.translatedText}`
+                    : `${entry.translatedText}\n${entry.text}`
             } else {
                 displayText = translatedText
             }
@@ -90,8 +98,79 @@ export const SubtitleService = {
             }
         })
 
-        const srtContent = srtParser.toSrt(srtEntries as any)
-        writeFileSync(outputPath, srtContent, 'utf-8')
+        const basePath = outputPath.replace(/\.[^.]+$/, '')
+        const srtContent = srtParser.toSrt(normalizedEntries as any)
+
+        if (subtitleFormat === 'srt') {
+            const srtPath = `${basePath}.srt`
+            writeFileSync(srtPath, srtContent, 'utf-8')
+            return srtPath
+        }
+
+        const assDialogue = normalizedEntries.map(entry => ({
+            Layer: 0,
+            Start: entry.startTime.replace(',', '.'),
+            End: entry.endTime.replace(',', '.'),
+            Style: 'Default',
+            Name: '',
+            MarginL: '0',
+            MarginR: '0',
+            MarginV: '0',
+            Effect: '',
+            Text: entry.text.replace(/\n/g, '\\N')
+        }))
+
+        const assDoc = {
+            info: {
+                Title: 'SubX Export',
+                ScriptType: 'v4.00+'
+            },
+            styles: {
+                format: ['Name', 'Fontname', 'Fontsize', 'PrimaryColour', 'SecondaryColour', 'OutlineColour', 'BackColour', 'Bold', 'Italic', 'Underline', 'StrikeOut', 'ScaleX', 'ScaleY', 'Spacing', 'Angle', 'BorderStyle', 'Outline', 'Shadow', 'Alignment', 'MarginL', 'MarginR', 'MarginV', 'Encoding'],
+                style: [{
+                    Name: 'Default',
+                    Fontname: 'Arial',
+                    Fontsize: subtitleStylePreset.includes('cinema') ? '56' : '48',
+                    PrimaryColour: '&H00FFFFFF',
+                    SecondaryColour: '&H000000FF',
+                    OutlineColour: '&H00000000',
+                    BackColour: '&H64000000',
+                    Bold: subtitleStylePreset.includes('bold') ? '-1' : '0',
+                    Italic: '0',
+                    Underline: '0',
+                    StrikeOut: '0',
+                    ScaleX: '100',
+                    ScaleY: '100',
+                    Spacing: '0',
+                    Angle: '0',
+                    BorderStyle: '1',
+                    Outline: subtitleStylePreset.includes('cinema') ? '2.5' : '2',
+                    Shadow: '0.5',
+                    Alignment: '2',
+                    MarginL: '30',
+                    MarginR: '30',
+                    MarginV: subtitleStylePreset.includes('cinema') ? '40' : '20',
+                    Encoding: '1'
+                }]
+            },
+            events: {
+                format: ['Layer', 'Start', 'End', 'Style', 'Name', 'MarginL', 'MarginR', 'MarginV', 'Effect', 'Text'],
+                dialogue: assDialogue
+            }
+        }
+
+        const assContent = compileAss(assDoc as any)
+        const assPath = `${basePath}.ass`
+
+        if (subtitleFormat === 'ass') {
+            writeFileSync(assPath, assContent, 'utf-8')
+            return assPath
+        }
+
+        const srtPath = `${basePath}.srt`
+        writeFileSync(srtPath, srtContent, 'utf-8')
+        writeFileSync(assPath, assContent, 'utf-8')
+        return assPath
     },
 
     chunkByTokens(entries: SubtitleEntry[], maxTokens: number = 2000): SubtitleEntry[][] {

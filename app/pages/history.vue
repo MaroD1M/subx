@@ -13,18 +13,60 @@
     </div>
 
     <div class="glass-panel rounded-3xl overflow-hidden p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
-      <UTable :data="tasks" :columns="columns" :loading="pending">
+      <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ td: 'align-top', th: 'whitespace-nowrap' }">
+        <template #taskId-cell="{ row }">
+          <div class="text-xs font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ row.original.taskId }}</div>
+        </template>
+
         <template #filePath-cell="{ row }">
-          <div class="min-w-0">
-            <p class="text-sm text-gray-800 dark:text-gray-100 truncate">{{ row.original.filePath }}</p>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400">{{ row.original.rootName || '默认媒体库' }}</p>
+          <div class="min-w-0 max-w-[520px] xl:max-w-[620px]">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium text-gray-800 dark:text-gray-100 break-all" :class="isExpanded(row.original.taskId) ? '' : 'line-clamp-2'">
+                  {{ row.original.filePath }}
+                </p>
+                <div class="mt-1 flex items-center gap-2 flex-wrap">
+                  <p class="text-[11px] text-gray-500 dark:text-gray-400">{{ row.original.rootName || '默认媒体库' }}</p>
+                  <span class="text-[10px] text-gray-300 dark:text-gray-600">•</span>
+                  <p class="text-[11px] text-gray-400 dark:text-gray-500">{{ fileName(row.original.filePath) }}</p>
+                </div>
+              </div>
+              <UButton
+                v-if="shouldShowExpand(row.original.filePath)"
+                :label="isExpanded(row.original.taskId) ? '收起' : '展开'"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                class="shrink-0"
+                @click="toggleExpanded(row.original.taskId)"
+              />
+              <UButton
+                icon="i-lucide-copy"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                class="shrink-0"
+                title="复制完整路径"
+                @click="copyPath(row.original.filePath)"
+              />
+            </div>
           </div>
         </template>
+
         <template #status-cell="{ row }">
-          <UBadge :color="statusColor(row.original.status)" variant="subtle" size="sm" class="capitalize">{{ row.original.status }}</UBadge>
+          <UBadge :color="statusColor(row.original.status)" variant="subtle" size="sm" class="capitalize whitespace-nowrap">{{ row.original.status }}</UBadge>
         </template>
+
+        <template #progress-cell="{ row }">
+          <div class="min-w-[74px] text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ row.original.progress }}%</div>
+        </template>
+
+        <template #createdAt-cell="{ row }">
+          <div class="min-w-[144px] text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ formatDate(row.original.createdAt) }}</div>
+        </template>
+
         <template #actions-cell="{ row }">
-          <div class="flex items-center gap-2">
+          <div class="sticky right-0 z-10 flex items-center justify-end gap-2 min-w-[154px] whitespace-nowrap bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-l-xl pl-2">
             <UButton icon="i-lucide-eye" variant="ghost" color="neutral" :to="`/task/${row.original.taskId}`" />
             <UButton v-if="row.original.status === 'error'" icon="i-lucide-rotate-ccw" variant="ghost" color="warning" :loading="retryingTaskId === row.original.taskId" @click="retryTask(row.original.taskId)" />
             <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
@@ -61,6 +103,7 @@
 const isClearModalOpen = ref(false)
 const isClearing = ref(false)
 const retryingTaskId = ref('')
+const expandedTaskIds = ref(new Set())
 const toast = useToast()
 
 const { data, pending, refresh } = await useFetch('/api/tasks')
@@ -95,6 +138,48 @@ async function retryTask(taskId) {
   } finally {
     retryingTaskId.value = ''
   }
+}
+
+function shouldShowExpand(filePath) {
+  return String(filePath || '').length > 72
+}
+
+function isExpanded(taskId) {
+  return expandedTaskIds.value.has(taskId)
+}
+
+function toggleExpanded(taskId) {
+  const next = new Set(expandedTaskIds.value)
+  if (next.has(taskId)) next.delete(taskId)
+  else next.add(taskId)
+  expandedTaskIds.value = next
+}
+
+async function copyPath(filePath) {
+  try {
+    await navigator.clipboard.writeText(String(filePath || ''))
+    toast.add({ title: '复制成功', description: '完整路径已复制到剪贴板', color: 'success' })
+  } catch {
+    toast.add({ title: '复制失败', description: '当前环境不支持复制路径', color: 'error' })
+  }
+}
+
+function fileName(filePath) {
+  const path = String(filePath || '')
+  return path.split('/').pop() || path
+}
+
+function formatDate(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 const columns = [

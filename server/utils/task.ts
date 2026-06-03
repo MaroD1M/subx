@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import pLimit from 'p-limit'
-import { join, dirname } from 'path'
+import { join, dirname, basename } from 'path'
 import { existsSync, mkdirSync, rmSync } from 'fs'
 import { EventEmitter } from 'events'
 import { useDb } from './db'
@@ -113,12 +113,12 @@ export const TaskService = {
         const db = useDb()
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, status, progress, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, subtitle_format, subtitle_style_preset, bilingual_layout, status, progress, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
             task.taskId, task.filePath, task.rootId || null, task.sourceType, task.trackIndex,
-            task.model, task.targetLanguage, task.outputMode, task.stylePreset || 'default', 'queued', 0
+            task.model, task.targetLanguage, task.outputMode, task.stylePreset || 'default', task.subtitleFormat || 'srt', task.subtitleStylePreset || 'bilingual_simple', task.bilingualLayout || 'translated_first', 'queued', 0
         )
         return this.getTask(task.taskId!)
     },
@@ -136,6 +136,9 @@ export const TaskService = {
             targetLanguage: task.target_lang,
             outputMode: task.output_mode,
             stylePreset: task.style_preset || 'default',
+            subtitleFormat: task.subtitle_format || 'srt',
+            subtitleStylePreset: task.subtitle_style_preset || 'bilingual_simple',
+            bilingualLayout: task.bilingual_layout || 'translated_first',
             totalChunks: task.total_chunks,
             completedChunks: task.done_chunks,
             createdAt: task.created_at,
@@ -170,7 +173,8 @@ export const TaskService = {
         const outputExt = 'srt'
         const outputSuffix = task.outputMode === 'original' ? 'original' : task.targetLanguage
         const inputPath = await resolveMediaPath(task.filePath, task.rootId)
-        const outputPath = join(dirname(inputPath), `${cleanName}.${outputSuffix}.${outputExt}`)
+        const outputBaseName = basename(cleanName)
+        const outputPath = join(dirname(inputPath), `${outputBaseName}.${outputSuffix}.${outputExt}`)
 
         try {
             await this.updateStatus(taskId, 'extracting', 10, { log: '正在从原视频中提取字幕流...' })
@@ -186,6 +190,9 @@ export const TaskService = {
 
             const config = await ConfigService.getConfig()
             const chunkSize = config.chunkSize || 2000
+            const subtitleFormat = task.subtitleFormat || config.subtitleFormat || 'srt'
+            const subtitleStylePreset = task.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple'
+            const bilingualLayout = task.bilingualLayout || config.bilingualLayout || 'translated_first'
             console.log(`[Task] Using chunk size: ${chunkSize}`)
 
             const chunks = SubtitleService.chunkByTokens(allEntries, chunkSize)
@@ -199,11 +206,11 @@ export const TaskService = {
                 await this.updateStatus(taskId, 'translating', 80, { totalChunks, completedChunks: totalChunks, log: '已选择仅导出原字幕，跳过翻译。' })
                 await this.updateStatus(taskId, 'exporting', 90, { log: '正在导出原字幕文件...' })
                 const originalEntries = allEntries.map(entry => ({ ...entry, translatedText: entry.text }))
-                await SubtitleService.writeSubtitle(originalEntries, outputPath, 'original')
-                await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${outputPath}` })
+                const savedPath = await SubtitleService.writeSubtitle(originalEntries, outputPath, 'original', subtitleFormat, subtitleStylePreset, bilingualLayout)
+                await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${savedPath}` })
                 await this.updateStatus(taskId, 'done', 100)
                 db.prepare('UPDATE tasks SET status = \'done\', progress = 100, output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
-                    .run(outputPath, taskId)
+                    .run(savedPath, taskId)
                 return
             }
 
@@ -365,14 +372,14 @@ export const TaskService = {
             await this.updateStatus(taskId, 'exporting', 90, { log: '正在合成并保存最终字幕文件...' })
             const translatedEntries = Array.from(translatedMap.values())
             translatedEntries.sort((a, b) => Number(a.id) - Number(b.id))
-            await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original')
-            await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${outputPath}` })
+            const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat, subtitleStylePreset, bilingualLayout)
+            await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${savedPath}` })
 
             TranslationService.cleanupPartialFiles(taskId, totalChunks)
 
             await this.updateStatus(taskId, 'done', 100)
             db.prepare('UPDATE tasks SET status = \'done\', progress = 100, output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
-                .run(outputPath, taskId)
+                .run(savedPath, taskId)
 
         } catch (e: any) {
             const message = e?.message || 'Unknown error'

@@ -36,6 +36,9 @@ export interface TranslationTask {
   targetLanguage: string       // 目标语言（如 zh-CN）
   outputMode: 'translated' | 'bilingual' | 'original' // 纯译文 / 双语 / 仅导出原字幕
   stylePreset: string              // 翻译风格预设 ID
+  subtitleFormat?: 'srt' | 'ass' | 'both'
+  subtitleStylePreset?: string
+  bilingualLayout?: 'translated_first' | 'original_first'
   status: TaskStatus
   progress: number             // 0-100
   totalChunks: number
