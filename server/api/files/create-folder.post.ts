@@ -1,6 +1,7 @@
 import { mkdir, stat } from 'fs/promises'
 import { join, resolve, normalize } from 'path'
 import { safePath } from '../../utils/subtitle'
+import { getMediaRoot } from '../../utils/mediaRoots'
 
 function validateName(name: string) {
   if (!name || !name.trim()) {
@@ -15,11 +16,13 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const folderName = String(body?.name || '').trim()
   const parentPath = String(body?.parentPath || '').trim()
+  const rootId = String(body?.rootId || '').trim() || undefined
 
   validateName(folderName)
 
-  const videoDir = normalize(resolve(process.env.VIDEO_DIR || '/data'))
-  const parentFullPath = parentPath ? safePath(parentPath) : videoDir
+  const root = await getMediaRoot(rootId)
+  const videoDir = normalize(resolve(root.path))
+  const parentFullPath = parentPath ? await safePath(parentPath, rootId) : videoDir
 
   try {
     const parentStats = await stat(parentFullPath)

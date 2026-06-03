@@ -1,6 +1,7 @@
 import { useDb } from '../../../utils/db'
 import { safePath } from '../../../utils/subtitle'
 import { VideoService } from '../../../utils/video'
+import { getMediaRoot, resolveMediaPath } from '../../../utils/mediaRoots'
 import { createReadStream, existsSync, mkdirSync } from 'fs'
 import { basename, join } from 'path'
 
@@ -16,7 +17,8 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 404, message: 'Task not found' })
     }
 
-    const videoDir = process.env.VIDEO_DIR || '/data'
+    const root = await getMediaRoot(row.root_id)
+    const videoDir = root.path
     const tempDir = join(process.cwd(), 'temp')
     if (!existsSync(tempDir)) {
         mkdirSync(tempDir, { recursive: true })
@@ -24,7 +26,7 @@ export default defineEventHandler(async (event) => {
 
     let sourcePath: string
     if (row.source_type === 'external') {
-        sourcePath = safePath(row.file_path)
+        sourcePath = await safePath(row.file_path, row.root_id)
     } else {
         // 尝试寻找同名外部文件（保留原有逻辑）
         const baseName = row.file_path.replace(/\.[^.]+$/, '')
@@ -47,7 +49,7 @@ export default defineEventHandler(async (event) => {
             const tempSrtPath = join(tempDir, `download_orig_${id}.srt`)
             try {
                 if (!existsSync(tempSrtPath)) {
-                    await VideoService.extractSubtitle(row.file_path, row.track_index, tempSrtPath)
+                    await VideoService.extractSubtitle(row.file_path, row.track_index, tempSrtPath, row.root_id)
                 }
                 sourcePath = tempSrtPath
             } catch (err: any) {

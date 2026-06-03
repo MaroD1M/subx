@@ -4,7 +4,7 @@
       <div class="space-y-2">
         <UBreadcrumb :links="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '历史', icon: 'i-lucide-history' }]" />
         <h2 class="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">翻译历史</h2>
-        <p class="text-neutral-500 max-w-2xl leading-relaxed">查看您之前的翻译任务，下载已翻译的 SRT 文件，或检查失败任务的错误日志。</p>
+        <p class="text-neutral-500 max-w-2xl leading-relaxed">查看您之前的翻译任务，下载已翻译的字幕文件，或检查失败任务的错误日志。</p>
       </div>
       <div class="flex items-center gap-2 md:pb-0.5">
         <UButton label="返回首页" variant="outline" color="neutral" icon="i-lucide-arrow-left" to="/" />
@@ -14,26 +14,23 @@
 
     <div class="glass-panel rounded-3xl overflow-hidden p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
       <UTable :data="tasks" :columns="columns" :loading="pending">
+        <template #filePath-cell="{ row }">
+          <div class="min-w-0">
+            <p class="text-sm text-gray-800 dark:text-gray-100 truncate">{{ row.original.filePath }}</p>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">{{ row.original.rootName || '默认媒体库' }}</p>
+          </div>
+        </template>
         <template #status-cell="{ row }">
-           <UBadge :color="statusColor(row.original.status)" variant="subtle" size="sm" class="capitalize">
-             {{ row.original.status }}
-           </UBadge>
+          <UBadge :color="statusColor(row.original.status)" variant="subtle" size="sm" class="capitalize">{{ row.original.status }}</UBadge>
         </template>
         <template #actions-cell="{ row }">
-           <div class="flex items-center gap-2">
-             <UButton icon="i-lucide-eye" variant="ghost" color="neutral" :to="`/task/${row.original.taskId}`" />
-             <UButton
-               v-if="row.original.status === 'error'"
-               icon="i-lucide-rotate-ccw"
-               variant="ghost"
-               color="warning"
-               :loading="retryingTaskId === row.original.taskId"
-               @click="retryTask(row.original.taskId)"
-             />
-             <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
-               <UIcon name="i-lucide-download" class="w-5 h-5" />
-             </a>
-           </div>
+          <div class="flex items-center gap-2">
+            <UButton icon="i-lucide-eye" variant="ghost" color="neutral" :to="`/task/${row.original.taskId}`" />
+            <UButton v-if="row.original.status === 'error'" icon="i-lucide-rotate-ccw" variant="ghost" color="warning" :loading="retryingTaskId === row.original.taskId" @click="retryTask(row.original.taskId)" />
+            <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
+              <UIcon name="i-lucide-download" class="w-5 h-5" />
+            </a>
+          </div>
         </template>
       </UTable>
     </div>
@@ -45,16 +42,11 @@
             <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-error-600 dark:text-error-400" />
           </div>
           <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-              确定要执行清空操作吗？
-            </h3>
-            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-              您将失去对这些历史记录和底层的所有访问权限及缓存数据。仍在运行或排队中的任务将不受此操作影响。
-            </p>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">确定要执行清空操作吗？</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">您将失去对这些历史记录和底层的所有访问权限及缓存数据。仍在运行或排队中的任务将不受此操作影响。</p>
           </div>
         </div>
       </template>
-
       <template #footer>
         <div class="flex justify-end w-full gap-3">
           <UButton label="取消" color="neutral" variant="ghost" @click="isClearModalOpen = false" />
@@ -81,7 +73,7 @@ async function clearHistory() {
     toast.add({ title: '清理成功', description: `已清理 ${res.deletedCount} 条任务记录`, color: 'success' })
     isClearModalOpen.value = false
     await refresh()
-  } catch (e) {
+  } catch {
     toast.add({ title: '清理失败', description: '无法删除历史记录', color: 'error' })
   } finally {
     isClearing.value = false
@@ -91,10 +83,7 @@ async function clearHistory() {
 async function retryTask(taskId) {
   retryingTaskId.value = taskId
   try {
-    const res = await $fetch('/api/task', {
-      method: 'POST',
-      body: { retryTaskId: taskId }
-    })
+    const res = await $fetch('/api/task', { method: 'POST', body: { retryTaskId: taskId } })
     toast.add({ title: '已重试', description: '任务已重新加入队列', color: 'success' })
     if (res?.taskId) {
       navigateTo(`/task/${res.taskId}`)

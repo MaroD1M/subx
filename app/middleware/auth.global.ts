@@ -4,14 +4,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
     const { authenticated, hasPasskey, check } = useAuth()
 
-    // 2. 如果尚未登录，执行认证确认
-    // 在 SSR 和页面初次加载时执行 check()
-    if (!authenticated.value) {
+    // 2. 如果尚未完成初始化，或尚未登录，则执行认证确认
+    if (hasPasskey.value === null || !authenticated.value) {
         await check()
     }
 
     // 3. 拦截检查
-    if (!hasPasskey.value || !authenticated.value) {
+    if (hasPasskey.value !== true || !authenticated.value) {
         return navigateTo('/login', { replace: true })
     }
 })

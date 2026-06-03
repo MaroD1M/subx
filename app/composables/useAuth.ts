@@ -2,8 +2,8 @@ import { hashPasskeyClient } from '../utils/crypto'
 
 export const useAuth = () => {
     const authenticated = useState<boolean>('auth:authenticated', () => false)
-    const hasPasskey = useState<boolean>('auth:hasPasskey', () => true)
-    const checking = useState<boolean>('auth:checking', () => true)
+    const hasPasskey = useState<boolean | null>('auth:hasPasskey', () => null)
+    const checking = useState<boolean>('auth:checking', () => false)
     
     // 使用 useRequestFetch 确保在 SSR 期间能自动透传 Cookie
     const fetcher = useRequestFetch()
@@ -13,7 +13,7 @@ export const useAuth = () => {
      */
     async function check() {
         // 防止重复检查
-        if (import.meta.client && !checking.value) return
+        if (checking.value) return
         
         checking.value = true
         try {
@@ -31,6 +31,7 @@ export const useAuth = () => {
             authenticated.value = verifyRes.authenticated
         } catch (e) {
             console.error('[Auth] Check failed:', e)
+            hasPasskey.value = true
             authenticated.value = false
         } finally {
             checking.value = false

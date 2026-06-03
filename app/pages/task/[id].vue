@@ -2,46 +2,48 @@
   <div class="max-w-4xl mx-auto space-y-8 py-10">
     <div class="flex items-center gap-4 mb-8">
       <UButton icon="i-lucide-arrow-left" variant="ghost" color="neutral" to="/history" />
-      <div class="flex flex-col">
+      <div class="flex flex-col min-w-0">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ task.step === 'done' ? '翻译任务完成' : task.step === 'error' ? '翻译任务失败' : '翻译任务进行中' }}</h2>
         <p class="text-sm text-neutral-500">任务 ID: {{ $route.params.id }}</p>
+        <p v-if="task.filePath" class="text-xs text-neutral-400 truncate mt-1">{{ task.rootName || '默认媒体库' }} · {{ task.filePath }}</p>
       </div>
     </div>
 
     <div class="glass-panel rounded-3xl overflow-hidden mb-6 p-2">
       <div class="p-8 space-y-8">
-        <!-- Progress Circular/Linear -->
         <div class="space-y-4">
-           <div class="flex justify-between items-end mb-2">
-             <div class="flex flex-col">
-               <span class="text-xs font-semibold text-primary-500 uppercase tracking-wider mb-1">{{ task.step }}</span>
-               <h3 class="text-lg font-bold text-gray-800 dark:text-gray-200">
-               <UIcon :name="stepIcon" class="mr-2 text-emerald-500" v-if="task.step === 'done'" />
-               <UIcon :name="stepIcon" class="mr-2 text-red-500" v-else-if="task.step === 'error'" />
-               <UIcon :name="stepIcon" class="mr-2 animate-pulse text-primary-500" v-else />
-               {{ statusLabel }}
-             </h3>
-           </div>
-           <div class="text-right">
-             <span class="text-3xl font-black text-gray-900 dark:text-white tracking-tighter">{{ task.step === 'done' ? 100 : task.progress }}%</span>
-           </div>
-         </div>
-         <UProgress :model-value="task.step === 'done' ? 100 : task.progress" size="xl" :color="task.step === 'error' ? 'error' : task.step === 'done' ? 'success' : 'primary'" class="h-3 rounded-full overflow-hidden" />
+          <div class="flex justify-between items-end mb-2">
+            <div class="flex flex-col">
+              <span class="text-xs font-semibold text-primary-500 uppercase tracking-wider mb-1">{{ task.step }}</span>
+              <h3 class="text-lg font-bold text-gray-800 dark:text-gray-200">
+                <UIcon :name="stepIcon" class="mr-2 text-emerald-500" v-if="task.step === 'done'" />
+                <UIcon :name="stepIcon" class="mr-2 text-red-500" v-else-if="task.step === 'error'" />
+                <UIcon :name="stepIcon" class="mr-2 animate-pulse text-primary-500" v-else />
+                {{ statusLabel }}
+              </h3>
+            </div>
+            <div class="text-right">
+              <span class="text-3xl font-black text-gray-900 dark:text-white tracking-tighter">{{ task.step === 'done' ? 100 : task.progress }}%</span>
+            </div>
+          </div>
+          <UProgress :model-value="task.step === 'done' ? 100 : task.progress" size="xl" :color="task.step === 'error' ? 'error' : task.step === 'done' ? 'success' : 'primary'" class="h-3 rounded-full overflow-hidden" />
         </div>
 
-        <!-- Error Message Alert -->
         <div v-if="task.step === 'error' && task.error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-2xl flex items-start gap-3">
-           <UIcon name="i-lucide-alert-circle" class="w-5 h-5 text-red-500 mt-0.5" />
-           <div class="space-y-1">
-             <p class="text-sm font-bold text-red-800 dark:text-red-200">处理出错</p>
-             <p class="text-xs text-red-700 dark:text-red-300 leading-relaxed">{{ task.error }}</p>
-           </div>
+          <UIcon name="i-lucide-alert-circle" class="w-5 h-5 text-red-500 mt-0.5" />
+          <div class="space-y-1">
+            <p class="text-sm font-bold text-red-800 dark:text-red-200">处理出错</p>
+            <p class="text-xs text-red-700 dark:text-red-300 leading-relaxed">{{ task.error }}</p>
+          </div>
         </div>
 
         <USeparator />
 
-        <!-- Detail Grid -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-6">
+          <div class="space-y-1">
+            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">媒体库</span>
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.rootName || '默认媒体库' }}</p>
+          </div>
           <div class="space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">模型</span>
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.model || '默认多模态模型' }}</p>
@@ -61,121 +63,64 @@
           </div>
         </div>
 
-        <!-- Terminal-like Console -->
         <div class="bg-gray-950 rounded-2xl p-4 font-mono text-xs overflow-hidden shadow-inner ring-1 ring-white/10 relative">
           <div class="flex items-center gap-1.5 mb-3">
-             <div class="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-             <div class="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-             <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-             <span class="ml-2 text-gray-500 text-[10px] uppercase font-bold">处理日志</span>
+            <div class="w-2.5 h-2.5 rounded-full bg-red-500/80" />
+            <div class="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+            <span class="ml-2 text-gray-500 text-[10px] uppercase font-bold">处理日志</span>
           </div>
           <div class="space-y-1.5 h-48 overflow-y-auto custom-scrollbar" ref="logContainer">
             <p v-for="(log, i) in logs" :key="i" :class="[log.type === 'error' ? 'text-red-400' : 'text-gray-400']">
-              <ClientOnly>
-                <span class="text-gray-600 mr-2">[{{ log.timestamp }}]</span>
-              </ClientOnly>
+              <ClientOnly><span class="text-gray-600 mr-2">[{{ log.timestamp }}]</span></ClientOnly>
               <span class="text-primary-500 mr-2">$</span>
               {{ log.message }}
             </p>
             <p v-if="task.currentText" class="text-emerald-400">
-               <ClientOnly>
-                 <span class="text-gray-600 mr-2">[{{ new Date().toLocaleTimeString() }}]</span>
-               </ClientOnly>
-               <span class="text-primary-500 mr-2">$</span>
-               {{ task.currentText }}
+              <ClientOnly><span class="text-gray-600 mr-2">[{{ new Date().toLocaleTimeString() }}]</span></ClientOnly>
+              <span class="text-primary-500 mr-2">$</span>
+              {{ task.currentText }}
             </p>
-            <div v-if="task.progress < 100 && task.step !== 'error'" class="flex items-center gap-2 text-primary-400">
-               <ClientOnly>
-                 <span class="text-gray-600 mr-2">[{{ new Date().toLocaleTimeString() }}]</span>
-               </ClientOnly>
-               <span class="text-primary-500 mr-2">$</span>
-               <span class="animate-pulse">_</span>
-            </div>
           </div>
         </div>
 
-        <!-- Actions -->
-        <div class="flex items-center justify-between pt-4">
-           <UButton v-if="task.step === 'done'" label="返回工作区" icon="i-lucide-check-circle" color="secondary" to="/" />
-           <UButton v-else-if="task.step === 'error'" label="返回并重试" icon="i-lucide-refresh-cw" color="error" to="/" />
-           <UButton v-else label="取消任务" icon="i-lucide-x-circle" color="error" variant="ghost" :loading="cancelling" @click="cancelTask" />
-           
-           <div v-if="task.step === 'done'" class="flex gap-2">
-             <a
-               :href="`/api/tasks/${taskId}/download-original`"
-               class="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer"
-             >
-               <UIcon name="i-lucide-file-text" class="w-4 h-4" />
-               原始字幕
-             </a>
-             <a
-               :href="`/api/tasks/${taskId}/download`"
-               class="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer"
-             >
-               <UIcon name="i-lucide-download" class="w-4 h-4" />
-               下载译文 SRT
-             </a>
-             <UButton
-               label="调用记录"
-               icon="i-lucide-activity"
-               color="neutral"
-               variant="subtle"
-               @click="showResponses = !showResponses"
-             />
-           </div>
+        <div class="flex items-center justify-between pt-4 gap-3 flex-wrap">
+          <div class="flex items-center gap-3 flex-wrap">
+            <UButton v-if="task.step === 'done'" label="下载结果" icon="i-lucide-download" color="primary" @click="downloadSrt" />
+            <UButton v-if="task.step === 'done'" label="返回工作区" icon="i-lucide-check-circle" color="secondary" to="/" />
+            <UButton v-else-if="task.step === 'error'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
+            <UButton v-else label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
+          </div>
+          <UButton v-if="task.step === 'done'" :label="showResponses ? '隐藏 Token 统计' : '查看 Token 统计'" icon="i-lucide-chart-column-big" color="neutral" variant="ghost" @click="showResponses = !showResponses" />
         </div>
 
-        <!-- AI Call Records -->
-        <div v-if="showResponses && task.step === 'done'" class="mt-4">
-          <div class="bg-gray-950 rounded-2xl p-4 font-mono text-xs overflow-hidden shadow-inner ring-1 ring-white/10">
-            <div class="flex items-center gap-1.5 mb-3">
-               <div class="w-2.5 h-2.5 rounded-full bg-blue-500/80" />
-               <span class="ml-2 text-gray-500 text-[10px] uppercase font-bold">AI 模型调用记录</span>
+        <div v-if="showResponses && task.step === 'done'" class="rounded-2xl bg-gray-950 text-gray-100 p-4 ring-1 ring-white/10">
+          <div v-if="responsesLoading" class="flex items-center gap-2 text-xs text-gray-400">
+            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            正在加载 Token 统计...
+          </div>
+          <div v-else-if="responsesSummary" class="space-y-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">分块数</span><p class="text-sm font-medium text-gray-100">{{ responsesSummary.totalChunks }}</p></div>
+              <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输入 Tokens</span><p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p></div>
+              <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
+              <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
             </div>
-
-            <div v-if="responsesLoading" class="text-gray-500 py-4 text-center">加载中...</div>
-            <div v-else-if="responsesSummary" class="space-y-3">
-              <div class="grid grid-cols-4 gap-4 text-gray-300 mb-3">
-                <div class="space-y-1">
-                  <span class="text-[10px] text-gray-600 uppercase font-bold">总调用次数</span>
-                  <p class="text-sm font-medium text-blue-400">{{ responsesSummary.totalChunks }}</p>
-                </div>
-                <div class="space-y-1">
-                  <span class="text-[10px] text-gray-600 uppercase font-bold">输入 Tokens</span>
-                  <p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p>
-                </div>
-                <div class="space-y-1">
-                  <span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span>
-                  <p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p>
-                </div>
-                <div class="space-y-1">
-                  <span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span>
-                  <p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p>
-                </div>
-              </div>
-
-              <div class="max-h-40 overflow-y-auto custom-scrollbar">
-                <table class="w-full text-left">
-                  <thead>
-                    <tr class="text-gray-600 text-[10px] uppercase">
-                      <th class="pb-2 pr-4">块</th>
-                      <th class="pb-2 pr-4">模型</th>
-                      <th class="pb-2 pr-4">输入</th>
-                      <th class="pb-2 pr-4">输出</th>
-                      <th class="pb-2">合计</th>
-                    </tr>
-                  </thead>
-                  <tbody class="text-gray-400">
-                    <tr v-for="r in responsesRecords" :key="r.id" class="border-t border-gray-800/50">
-                      <td class="py-1.5 pr-4 text-gray-500">#{{ r.chunk_index + 1 }}</td>
-                      <td class="py-1.5 pr-4 text-gray-300">{{ r.model }}</td>
-                      <td class="py-1.5 pr-4 text-amber-400">{{ (r.prompt_tokens || 0).toLocaleString() }}</td>
-                      <td class="py-1.5 pr-4 text-emerald-400">{{ (r.completion_tokens || 0).toLocaleString() }}</td>
-                      <td class="py-1.5 text-primary-400">{{ (r.total_tokens || 0).toLocaleString() }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <div class="max-h-40 overflow-y-auto custom-scrollbar">
+              <table class="w-full text-left">
+                <thead>
+                  <tr class="text-gray-600 text-[10px] uppercase"><th class="pb-2 pr-4">块</th><th class="pb-2 pr-4">模型</th><th class="pb-2 pr-4">输入</th><th class="pb-2 pr-4">输出</th><th class="pb-2">合计</th></tr>
+                </thead>
+                <tbody class="text-gray-400">
+                  <tr v-for="r in responsesRecords" :key="r.id" class="border-t border-gray-800/50">
+                    <td class="py-1.5 pr-4 text-gray-500">#{{ r.chunk_index + 1 }}</td>
+                    <td class="py-1.5 pr-4 text-gray-300">{{ r.model }}</td>
+                    <td class="py-1.5 pr-4 text-amber-400">{{ (r.prompt_tokens || 0).toLocaleString() }}</td>
+                    <td class="py-1.5 pr-4 text-emerald-400">{{ (r.completion_tokens || 0).toLocaleString() }}</td>
+                    <td class="py-1.5 text-primary-400">{{ (r.total_tokens || 0).toLocaleString() }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -196,13 +141,20 @@ const task = ref({
   currentText: '等待服务器响应...',
   error: null,
   model: null,
-  targetLanguage: null
+  targetLanguage: null,
+  filePath: '',
+  rootName: ''
 })
 
 const showResponses = ref(false)
 const responsesLoading = ref(false)
 const responsesRecords = ref([])
 const responsesSummary = ref(null)
+const cancelling = ref(false)
+const toast = useToast()
+const logContainer = ref(null)
+const eventSource = ref(null)
+const logs = ref([{ type: 'info', message: '任务初始化中，正在连接 SubX 引擎...', timestamp: new Date().toLocaleTimeString() }])
 
 async function fetchResponses() {
   responsesLoading.value = true
@@ -218,51 +170,33 @@ async function fetchResponses() {
 }
 
 watch(showResponses, (val) => {
-  if (val && task.value.step === 'done') {
-    fetchResponses()
-  }
+  if (val && task.value.step === 'done') fetchResponses()
 })
 
 function downloadSrt() {
   window.location.assign(`/api/tasks/${taskId}/download`)
 }
 
-const cancelling = ref(false)
-const toast = useToast()
-
 async function cancelTask() {
   cancelling.value = true
   try {
-    await $fetch(`/api/tasks/${taskId}/cancel`, { 
-      method: 'POST'
-    })
+    await $fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
     task.value.step = 'error'
     task.value.error = '用户取消任务'
     task.value.currentText = null
     logs.value.push({ type: 'error', message: '任务已被手动取消', timestamp: new Date().toLocaleTimeString() })
-    if (eventSource.value) {
-      eventSource.value.close()
-    }
+    if (eventSource.value) eventSource.value.close()
     toast.add({ title: '已取消', description: '任务已成功取消', color: 'success' })
-  } catch (e) {
+  } catch {
     toast.add({ title: '错误', description: '无法取消任务', color: 'error' })
   } finally {
     cancelling.value = false
   }
 }
 
-const logContainer = ref(null)
-
-const logs = ref([
-   { type: 'info', message: '任务初始化中，正在连接 SubX 引擎...', timestamp: new Date().toLocaleTimeString() }
-])
-
-// Auto-scroll logic
 watch(logs, () => {
   nextTick(() => {
-    if (logContainer.value) {
-      logContainer.value.scrollTop = logContainer.value.scrollHeight
-    }
+    if (logContainer.value) logContainer.value.scrollTop = logContainer.value.scrollHeight
   })
 }, { deep: true })
 
@@ -292,18 +226,11 @@ const stepIcon = computed(() => {
   }
 })
 
-// SSE Implementation
-const eventSource = ref(null)
-
-// Register cleanup BEFORE any async ops (must be synchronous in setup context)
 onUnmounted(() => {
-  if (eventSource.value) {
-    eventSource.value.close()
-  }
+  if (eventSource.value) eventSource.value.close()
 })
 
 onMounted(async () => {
-  // 1. Fetch initial state (important for already-completed tasks)
   try {
     const result = await $fetch(`/api/tasks/${taskId}`)
     const initialTask = result?.task
@@ -316,25 +243,24 @@ onMounted(async () => {
         totalChunks: initialTask.totalChunks || 0,
         error: initialTask.error || null,
         model: initialTask.model,
-        targetLanguage: initialTask.targetLanguage
+        targetLanguage: initialTask.targetLanguage,
+        filePath: initialTask.filePath || '',
+        rootName: initialTask.rootName || ''
       }
       if (initialTask.status === 'done') {
         logs.value = [{ type: 'info', message: '任务已完成，成功从历史记录加载数据。', timestamp: new Date().toLocaleTimeString() }]
-        task.value.currentText = null // 去除“等待服务器响应”文字
+        task.value.currentText = null
       } else if (initialTask.status === 'error') {
         logs.value = [{ type: 'error', message: `任务失败: ${initialTask.error}`, timestamp: new Date().toLocaleTimeString() }]
         task.value.currentText = null
       }
     }
   } catch (e) {
-    // Task not found or other error - continue showing default state
     console.warn('[Task] Unable to fetch initial task state', e)
   }
 
-  // 2. Skip SSE if task is already in terminal state
   if (task.value.step === 'done' || task.value.step === 'error') return
 
-  // 3. Connect SSE for live updates with auto-reconnect
   let reconnectAttempts = 0
   const MAX_RECONNECT_ATTEMPTS = 10
   const BASE_RECONNECT_DELAY = 1000
@@ -369,7 +295,7 @@ onMounted(async () => {
         const currentStepName = stepNames[data.step] || data.step
         logs.value.push({
           type: data.step === 'error' ? 'error' : 'info',
-          message: data.step === 'error' ? `状态变更: 任务失败` : `状态变更: ${currentStepName}`,
+          message: data.step === 'error' ? '状态变更: 任务失败' : `状态变更: ${currentStepName}`,
           timestamp: new Date().toLocaleTimeString()
         })
       }
@@ -385,27 +311,16 @@ onMounted(async () => {
 
     es.onerror = () => {
       es.close()
-
       if (isIntentionalClose) return
       if (task.value.step === 'done' || task.value.step === 'error') return
 
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000)
         reconnectAttempts++
-        console.warn(`[SSE] Connection lost, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`)
-        logs.value.push({
-          type: 'info',
-          message: `连接中断，${delay / 1000}s 后自动重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`,
-          timestamp: new Date().toLocaleTimeString()
-        })
+        logs.value.push({ type: 'info', message: `连接中断，${delay / 1000}s 后自动重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, timestamp: new Date().toLocaleTimeString() })
         setTimeout(connectSSE, delay)
       } else {
-        console.error('[SSE] Max reconnect attempts reached')
-        logs.value.push({
-          type: 'error',
-          message: '实时连接已断开，请刷新页面获取最新状态',
-          timestamp: new Date().toLocaleTimeString()
-        })
+        logs.value.push({ type: 'error', message: '实时连接已断开，请刷新页面获取最新状态', timestamp: new Date().toLocaleTimeString() })
       }
     }
   }
@@ -415,14 +330,7 @@ onMounted(async () => {
 </script>
 
 <style>
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
-  border-radius: 2px;
-}
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 </style>

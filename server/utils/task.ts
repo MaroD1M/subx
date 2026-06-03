@@ -1,11 +1,12 @@
 import OpenAI from 'openai'
 import pLimit from 'p-limit'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { existsSync, mkdirSync, rmSync } from 'fs'
 import { EventEmitter } from 'events'
 import { useDb } from './db'
 import { VideoService } from './video'
 import { SubtitleService } from './subtitle'
+import { getMediaRoot, resolveMediaPath } from './mediaRoots'
 import { TranslationService } from './translation'
 import { ConfigService } from './config'
 import { classifyTaskError } from './taskError'
@@ -112,11 +113,11 @@ export const TaskService = {
         const db = useDb()
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, source_type, track_index, model, target_lang, output_mode, style_preset, status, progress, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, status, progress, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
-            task.taskId, task.filePath, task.sourceType, task.trackIndex,
+            task.taskId, task.filePath, task.rootId || null, task.sourceType, task.trackIndex,
             task.model, task.targetLanguage, task.outputMode, task.stylePreset || 'default', 'queued', 0
         )
         return this.getTask(task.taskId!)
@@ -129,6 +130,7 @@ export const TaskService = {
             ...task,
             taskId: task.task_id,
             filePath: task.file_path,
+            rootId: task.root_id,
             sourceType: task.source_type,
             trackIndex: task.track_index,
             targetLanguage: task.target_lang,
@@ -152,7 +154,8 @@ export const TaskService = {
     async process(taskId: string, openaiConfig: { apiKey: string, baseUrl?: string }) {
         await ConfigService.cleanupLogs()
         const task = this.getTask(taskId)
-        const videoDir = process.env.VIDEO_DIR || '/data'
+        const root = await getMediaRoot(task.rootId)
+        const videoDir = root.path
         const tempDir = join(process.cwd(), 'temp')
 
         if (!existsSync(tempDir)) {
@@ -160,18 +163,19 @@ export const TaskService = {
         }
 
         const srtPath = task.sourceType === 'external'
-            ? join(videoDir, task.filePath)
+            ? await resolveMediaPath(task.filePath, task.rootId)
             : join(tempDir, `${taskId}.srt`)
         const baseName = task.filePath.replace(/\.[^.]+$/, '')
         const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
         const outputExt = 'srt'
         const outputSuffix = task.outputMode === 'original' ? 'original' : task.targetLanguage
-        const outputPath = join(videoDir, `${cleanName}.${outputSuffix}.${outputExt}`)
+        const inputPath = await resolveMediaPath(task.filePath, task.rootId)
+        const outputPath = join(dirname(inputPath), `${cleanName}.${outputSuffix}.${outputExt}`)
 
         try {
             await this.updateStatus(taskId, 'extracting', 10, { log: '正在从原视频中提取字幕流...' })
             if (task.sourceType === 'embedded') {
-                await VideoService.extractSubtitle(task.filePath, task.trackIndex!, srtPath)
+                await VideoService.extractSubtitle(task.filePath, task.trackIndex!, srtPath, task.rootId)
                 await this.updateStatus(taskId, 'extracting', 15, { log: '字幕提取成功，保存至临时文件。' })
             } else {
                 await this.updateStatus(taskId, 'extracting', 15, { log: '使用外部字幕文件。' })

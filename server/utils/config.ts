@@ -1,7 +1,7 @@
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { useDb } from './db'
-import type { AppConfig } from '../../types'
+import type { AppConfig, MediaRoot } from '../../types'
 
 export const ConfigService = {
     /**
@@ -22,13 +22,16 @@ export const ConfigService = {
             maxRetries: 3,
             streamUsage: false,
             logRetentionDays: 7,
-            glossary: {}
+            glossary: {},
+            mediaRoots: []
         }
 
         // Override with DB values
         rows.forEach(row => {
             if (row.key === 'glossary') {
                 config.glossary = JSON.parse(row.value)
+            } else if (row.key === 'mediaRoots') {
+                config.mediaRoots = JSON.parse(row.value) as MediaRoot[]
             } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {

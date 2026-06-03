@@ -4,12 +4,13 @@ import { safePath } from '../../utils/subtitle'
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const relPath = String(body?.path || '').trim()
+  const rootId = String(body?.rootId || '').trim() || undefined
 
   if (!relPath) {
     throw createError({ statusCode: 400, message: '路径不能为空' })
   }
 
-  const fullPath = safePath(relPath)
+  const fullPath = await safePath(relPath, rootId)
   let targetStat: Awaited<ReturnType<typeof stat>>
 
   try {
@@ -18,7 +19,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: '目标不存在' })
   }
 
-  // 目录支持递归删除，避免“创建成功但无法删除非空目录”的体验问题。
   if (targetStat.isDirectory()) {
     await rm(fullPath, { recursive: true, force: false })
   } else {

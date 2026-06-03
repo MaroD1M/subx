@@ -3,25 +3,39 @@ import { AuthService } from '../utils/auth'
 export default defineEventHandler((event) => {
     const url = getRequestURL(event)
     const pathname = url.pathname
+    const isAuthApi = pathname.startsWith('/api/auth/')
+    const isApi = pathname.startsWith('/api/')
+    const isNuxtAsset = pathname.startsWith('/_nuxt/')
+    const isIconApi = pathname.startsWith('/api/_nuxt_icon/')
+    const isPublicAsset = pathname === '/favicon.ico' || pathname === '/robots.txt'
+    const isLoginPage = pathname === '/login' || pathname === '/login/'
+    const acceptsHtml = (getHeader(event, 'accept') || '').includes('text/html')
 
-    // 核心保护：只拦截 API 请求
-    // 排除认证接口和图标接口
-    if (
-        !pathname.startsWith('/api/') || 
-        pathname.startsWith('/api/auth/') || 
-        pathname.startsWith('/api/_nuxt_icon/')
-    ) {
+    if (isAuthApi || isIconApi || isNuxtAsset || isPublicAsset || isLoginPage) {
         return
     }
 
-    // 如果应用尚未初始化（未设置密钥），允许通过 API
-    if (!AuthService.hasPasskey()) {
-        return
-    }
-
-    // 验证会话
+    const hasPasskey = AuthService.hasPasskey()
     const token = getCookie(event, 'subx_session')
-    if (!token || !AuthService.verifySession(token)) {
+    const authenticated = token ? AuthService.verifySession(token) : false
+
+    if (!isApi && acceptsHtml) {
+        if (!hasPasskey || !authenticated) {
+            return sendRedirect(event, '/login', 302)
+        }
+
+        return
+    }
+
+    if (!isApi) {
+        return
+    }
+
+    if (!hasPasskey) {
+        return
+    }
+
+    if (!authenticated) {
         throw createError({
             statusCode: 401,
             message: '未授权，请先登录'

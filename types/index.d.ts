@@ -15,10 +15,21 @@ export interface TranslationChunk {
   retryCount: number
 }
 
+export interface MediaRoot {
+  id: string
+  name: string
+  path: string
+  enabled?: boolean
+  order?: number
+  isDefault?: boolean
+}
+
 /** 翻译任务 */
 export interface TranslationTask {
   taskId: string
   filePath: string             // 源文件路径
+  rootId?: string              // 媒体库 ID
+  rootName?: string            // 媒体库名称
   sourceType: 'embedded' | 'external'  // 内嵌字幕 or 外挂字幕
   trackIndex?: number          // 内嵌字幕轨道索引
   model: string                // 使用的模型
@@ -55,6 +66,7 @@ export interface AppConfig {
   concurrency: number          // 并发数
   maxRetries: number           // 最大重试次数
   glossary: Record<string, string>  // 术语表
+  mediaRoots?: MediaRoot[]     // 媒体库配置
   streamUsage?: boolean        // 是否开启流式 Token 统计
   logRetentionDays?: number    // AI 日志保留天数
 }
@@ -65,6 +77,8 @@ export interface FileNode {
   path: string
   isDir: boolean
   children?: FileNode[]
+  rootId?: string
+  rootName?: string
 }
 
 /** 轨道信息 */

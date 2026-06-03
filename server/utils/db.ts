@@ -29,6 +29,7 @@ export function useDb() {
     CREATE TABLE IF NOT EXISTS tasks (
       task_id TEXT PRIMARY KEY,
       file_path TEXT NOT NULL,
+      root_id TEXT,
       source_type TEXT NOT NULL DEFAULT 'embedded',
       track_index INTEGER,
       model TEXT NOT NULL,
@@ -83,6 +84,10 @@ export function useDb() {
   // Safe migration: add style_preset column to existing databases
   try {
     _db.exec(`ALTER TABLE tasks ADD COLUMN style_preset TEXT NOT NULL DEFAULT 'default'`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN root_id TEXT`)
   } catch { /* column already exists */ }
 
   try {

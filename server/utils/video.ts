@@ -1,6 +1,7 @@
 import ffmpeg from 'fluent-ffmpeg'
-import { join } from 'path'
+
 import type { TrackInfo } from '../../types'
+import { resolveMediaPath } from './mediaRoots'
 
 const SUPPORTED_TEXT_CODECS = ['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text']
 
@@ -21,9 +22,8 @@ export const VideoService = {
     /**
      * Probe subtitle tracks for a video file
      */
-    async probeTracks(filePath: string): Promise<TrackInfo[]> {
-        const videoDir = process.env.VIDEO_DIR || '/data'
-        const fullPath = join(videoDir, filePath)
+    async probeTracks(filePath: string, rootId?: string | null): Promise<TrackInfo[]> {
+        const fullPath = await resolveMediaPath(filePath, rootId)
         console.log('[VideoService] Probing tracks for:', fullPath)
 
         return new Promise((resolve, reject) => {
@@ -50,9 +50,8 @@ export const VideoService = {
     /**
      * Extract subtitle track as SRT
      */
-    async extractSubtitle(videoFilePath: string, trackIndex: number, outputPath: string): Promise<string> {
-        const videoDir = process.env.VIDEO_DIR || '/data'
-        const fullPath = join(videoDir, videoFilePath)
+    async extractSubtitle(videoFilePath: string, trackIndex: number, outputPath: string, rootId?: string | null): Promise<string> {
+        const fullPath = await resolveMediaPath(videoFilePath, rootId)
 
         return new Promise((resolve, reject) => {
             ffmpeg(fullPath)

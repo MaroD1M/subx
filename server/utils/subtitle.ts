@@ -2,19 +2,15 @@ import SrtParser from 'srt-parser-2'
 import { parse as parseAss, compile as compileAss } from 'ass-compiler'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { createHash } from 'crypto'
-import { join, resolve, normalize } from 'path'
+import { join } from 'path'
 import type { SubtitleEntry } from '../../types'
 import { useDb } from './db'
+import { resolveMediaPath } from './mediaRoots'
 
 const srtParser = new SrtParser()
 
-export function safePath(userPath: string): string {
-    const videoDir = normalize(resolve(process.env.VIDEO_DIR || '/data'))
-    const resolved = normalize(resolve(videoDir, userPath))
-    if (!resolved.startsWith(videoDir + '/') && !resolved.startsWith(videoDir + '\\') && resolved !== videoDir) {
-        throw createError({ statusCode: 403, message: '路径越权' })
-    }
-    return resolved
+export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
+    return resolveMediaPath(userPath, rootId)
 }
 
 export const SubtitleService = {
