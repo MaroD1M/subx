@@ -19,26 +19,21 @@
           </div>
         </div>
 
-        <div class="space-y-2">
-          <div class="flex flex-wrap items-center gap-2 justify-between">
-            <div class="flex items-center gap-2 min-w-0">
-              <UBadge :color="isRootUnavailable ? 'error' : 'success'" variant="subtle">{{ isRootUnavailable ? '异常' : '健康' }}</UBadge>
-              <UBadge color="neutral" variant="subtle" class="truncate max-w-[240px]" :title="activeRootPath">{{ activeRootPath }}</UBadge>
-            </div>
-          </div>
-          <div class="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(132px,180px)_minmax(0,1fr)] xl:grid-cols-[minmax(136px,180px)_minmax(0,1fr)]">
-            <UFormField label="当前媒体库" description="切换不同挂载目录进行浏览。" class="min-w-0">
+        <div class="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(180px,220px)_minmax(0,1fr)] items-end">
+          <UFormField label="当前媒体库" class="min-w-0">
+            <div class="flex items-center gap-2">
+              <UBadge :color="isRootUnavailable ? 'error' : 'success'" variant="subtle">{{ isRootUnavailable ? '异常' : '可用' }}</UBadge>
               <USelect v-model="activeRootId" :items="rootItems" class="w-full" :disabled="!rootItems.length" @update:model-value="handleRootChange" />
-            </UFormField>
-            <UFormField label="快速筛选" description="按文件名或路径片段快速定位。" class="min-w-0">
-              <UInput v-model="searchQuery" icon="i-lucide-search" placeholder="例如：S01E01 / 中文字幕 / mkv" class="w-full" />
-            </UFormField>
-          </div>
+            </div>
+          </UFormField>
+          <UFormField label="快速筛选" class="min-w-0">
+            <UInput v-model="searchQuery" icon="i-lucide-search" placeholder="例如：S01E01 / 中文字幕 / mkv" class="w-full" />
+          </UFormField>
         </div>
       </div>
 
-      <div v-if="searchQuery" class="mb-3 space-y-2">
-        <div v-if="searchQuery" class="rounded-xl border border-primary-100 dark:border-primary-900/40 bg-primary-50/70 dark:bg-primary-950/20 px-3 py-2 flex flex-wrap items-center gap-2 justify-between">
+      <div v-if="searchQuery" class="mb-3">
+        <div class="rounded-xl border border-primary-100 dark:border-primary-900/40 bg-primary-50/70 dark:bg-primary-950/20 px-3 py-2 flex flex-wrap items-center gap-2 justify-between">
           <div class="min-w-0">
             <p class="text-[10px] uppercase tracking-wider text-primary-500">筛选中</p>
             <p class="text-xs text-gray-700 dark:text-gray-300 break-all">当前关键字：{{ searchQuery }}</p>
@@ -58,7 +53,7 @@
             <div v-if="isRootUnavailable" class="space-y-3">
               <p class="text-sm font-medium text-amber-600 dark:text-amber-400">当前媒体库暂不可访问</p>
               <p class="text-xs text-neutral-400 max-w-xs">{{ rootAccessMessage }}</p>
-              <p class="text-[11px] text-neutral-400">请检查 Docker 挂载路径、目录权限，或前往媒体库管理页重新检测。</p>
+              <p class="text-[11px] text-neutral-400">请检查挂载路径与目录权限。</p>
               <div class="flex items-center justify-center gap-2 flex-wrap">
                 <UButton label="前往媒体库管理" size="xs" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
                 <UButton label="重新刷新" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :loading="loadingFiles" @click="refreshFiles" />
@@ -66,7 +61,7 @@
             </div>
             <div v-else class="space-y-3">
               <p class="text-sm font-medium text-gray-600 dark:text-gray-300">当前媒体库暂无可显示内容</p>
-              <p class="text-xs text-neutral-400">可检查挂载目录、切换媒体库，或刷新后重试。</p>
+              
               <div class="flex items-center justify-center gap-2 flex-wrap">
                 <UButton label="刷新文件列表" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :loading="loadingFiles" @click="refreshFiles" />
                 <UButton label="管理媒体库" size="xs" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
@@ -137,15 +132,14 @@
             </div>
           </div>
 
-          <div class="w-full h-2 my-3 rounded-full bg-gray-200/80 dark:bg-gray-700/80 hover:bg-primary-300 dark:hover:bg-primary-700 cursor-row-resize transition-colors" :class="{ 'bg-primary-400 dark:bg-primary-600': resizeMode === 'right' }" title="拖动调整上下分区高度" @mousedown.prevent="startResize('right', $event)" />
+          <div class="w-full h-2 my-2 rounded-full bg-gray-200/80 dark:bg-gray-700/80 hover:bg-primary-300 dark:hover:bg-primary-700 cursor-row-resize transition-colors" :class="{ 'bg-primary-400 dark:bg-primary-600': resizeMode === 'right' }" title="拖动调整上下分区高度" @mousedown.prevent="startResize('right', $event)" />
 
-          <div class="flex-1 min-h-0 pt-3 border-t border-gray-200/90 dark:border-gray-700/90 flex flex-col bg-white/45 dark:bg-gray-900/30 rounded-xl px-2">
+          <div class="flex-1 min-h-0 pt-2 border-t border-gray-200/90 dark:border-gray-700/90 flex flex-col bg-white/45 dark:bg-gray-900/30 rounded-xl px-2">
             <div class="relative flex-1 min-h-0">
               <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
-                <div class="space-y-3.5 p-0.5">
+                <div class="space-y-3 p-0.5">
                   <div class="space-y-1">
                     <p class="section-title">基础设置</p>
-                    <p class="text-[11px] text-gray-500 dark:text-gray-400">先选择翻译风格、输出模式和目标语言，再开始任务。</p>
                   </div>
                   <UFormField label="翻译风格">
                     <USelect v-model="options.stylePreset" :items="styleOptions" class="w-full" :ui="{ width: 'w-full' }" :disabled="options.outputMode === 'original'" />
@@ -168,10 +162,9 @@
                   <p v-if="options.outputMode === 'original'" class="text-[11px] text-amber-600 dark:text-amber-400">已选择仅导出原字幕：将跳过 AI 翻译，仅导出所选字幕轨道。</p>
                 </div>
 
-                <div class="space-y-3.5 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
+                <div class="space-y-3 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
                   <div class="space-y-1">
                     <p class="section-title">字幕输出</p>
-                    <p class="text-[11px] text-gray-500 dark:text-gray-400">可选择导出格式、字幕样式和双语布局。</p>
                   </div>
                   <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     <UFormField label="字幕格式">
@@ -188,13 +181,12 @@
               </div>
             </div>
 
-            <div class="mt-3 pt-3 px-2.5 pb-2.5 border border-gray-200/85 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/68 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.24)] shrink-0">
+            <div class="mt-2 px-2.5 py-2.5 border border-gray-200/85 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/68 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.24)] shrink-0">
               <p class="section-title mb-2">操作</p>
               <div class="flex gap-2.5">
                 <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
                 <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
               </div>
-              <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-2">任务创建后可在右上角「任务历史」中追踪进度与结果。</p>
             </div>
           </div>
         </div>
@@ -206,8 +198,8 @@
             <UIcon name="i-lucide-file-video-2" class="w-12 h-12 text-neutral-300" />
           </div>
           <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">当前未选择文件</h4>
-          <p class="text-sm text-neutral-500 leading-relaxed">请先在左侧文件浏览器中选择一个视频或字幕文件。支持提取 MKV 内嵌字幕，也支持直接翻译独立的 `.srt`、`.vtt`、`.ass`、`.ssa` 文件。</p>
-          <p class="text-xs text-neutral-400">媒体库管理与任务历史入口已保留在页面顶部，避免与字幕工作区混在一起。</p>
+          <p class="text-sm text-neutral-500 leading-relaxed">请先在左侧选择一个视频或字幕文件。</p>
+          
         </div>
       </div>
     </div>

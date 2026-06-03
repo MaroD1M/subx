@@ -99,8 +99,7 @@
 
         <div v-if="showResponses && task.step === 'done'" class="rounded-2xl bg-gray-950 text-gray-100 p-4 ring-1 ring-white/10 space-y-4">
           <div v-if="responsesLoading" class="flex items-center gap-2 text-xs text-gray-400">
-            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
-            正在加载 Token 统计...
+            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载 Token 统计...
           </div>
           <div v-else-if="responsesSummary" class="space-y-4">
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -110,7 +109,6 @@
               <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
             </div>
             <div>
-              <p class="text-[11px] text-gray-500 mb-2">以下为每个翻译分块的 Token 消耗统计。</p>
               <div class="max-h-48 overflow-y-auto custom-scrollbar">
               <table class="w-full text-left">
                 <thead>

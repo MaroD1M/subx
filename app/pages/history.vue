@@ -4,7 +4,7 @@
       <div class="space-y-2">
         <UBreadcrumb :links="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '历史', icon: 'i-lucide-history' }]" />
         <h2 class="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">翻译历史</h2>
-        <p class="text-neutral-500 max-w-2xl leading-relaxed">查看您之前的翻译任务，下载已翻译的字幕文件，或检查失败任务的错误日志。</p>
+        <p class="text-neutral-500 max-w-2xl leading-relaxed">查看任务结果与历史记录。</p>
       </div>
       <div class="flex items-center gap-2 md:pb-0.5">
         <UButton label="返回首页" variant="outline" color="neutral" icon="i-lucide-arrow-left" to="/" />
@@ -82,8 +82,8 @@
             <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-error-600 dark:text-error-400" />
           </div>
           <div class="space-y-1">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">确定要执行清空操作吗？</h3>
-            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">您将失去对这些历史记录和底层的所有访问权限及缓存数据。仍在运行或排队中的任务将不受此操作影响。</p>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">确认清空历史？</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">已完成和失败任务将被删除，运行中任务不受影响。</p>
           </div>
         </div>
       </template>

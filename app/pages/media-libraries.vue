@@ -4,7 +4,7 @@
       <div class="space-y-2">
         <UBreadcrumb :links="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '媒体库管理', icon: 'i-lucide-library-big', to: '/media-libraries' }]" />
         <h2 class="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">媒体库管理</h2>
-        <p class="text-neutral-500 max-w-3xl leading-relaxed">为不同磁盘或目录配置独立媒体库。这里填写的必须是容器内路径，例如 <code>/media/movies</code>，不是宿主机路径。</p>
+        <p class="text-neutral-500 max-w-3xl leading-relaxed">管理首页可浏览的媒体目录。</p>
       </div>
       <div class="flex items-center gap-2 md:pb-0.5">
         <UButton label="返回首页" variant="outline" icon="i-lucide-arrow-left" color="neutral" to="/" />
@@ -15,7 +15,6 @@
       <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
         <div>
           <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">媒体库概览</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">建议先补全路径，再批量检测，最后保存。</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <UBadge color="neutral" variant="subtle">总数 {{ mediaRoots.length }}</UBadge>
@@ -41,7 +40,7 @@
             <UFormField label="媒体库名称">
               <UInput v-model="root.name" placeholder="例如：电影库 / 剧集库" class="w-full" />
             </UFormField>
-            <UFormField label="容器内路径" description="填写容器内路径，不是宿主机路径。">
+            <UFormField label="容器内路径">
               <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
                 <UInput v-model="root.path" placeholder="/media/movies" class="w-full min-w-0" />
                 <UButton label="检测路径" icon="i-lucide-search-check" color="neutral" variant="soft" :loading="inspectingId === root.id" @click="inspectRoot(root)" />
@@ -57,7 +56,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
               <UButton :label="root.isDefault ? '当前默认' : '设为默认'" icon="i-lucide-star" size="sm" color="primary" variant="soft" :disabled="root.isDefault" @click="setDefaultRoot(index)" />
               <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 px-3 py-2">
-                <span class="text-sm text-gray-600 dark:text-gray-300">通用启用</span>
+                <span class="text-sm text-gray-600 dark:text-gray-300">启用此媒体库</span>
                 <USwitch v-model="root.enabled" color="primary" />
               </div>
             </div>
@@ -82,7 +81,7 @@
         <UIcon name="i-lucide-library-big" class="w-8 h-8 mx-auto text-gray-300 dark:text-gray-600" />
         <div>
           <p class="text-sm font-medium text-gray-700 dark:text-gray-200">当前还没有媒体库</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">点击“新增媒体库”，填写容器内路径后保存即可。</p>
+          
         </div>
         <UButton label="新增媒体库" icon="i-lucide-plus" color="primary" variant="soft" @click="addMediaRoot" />
       </div>
@@ -92,8 +91,8 @@
       <template #default="{ open }">
         <div class="flex items-center justify-between gap-3 cursor-pointer" @click="helpOpen = !helpOpen">
           <div>
-            <p class="text-sm font-semibold text-amber-700 dark:text-amber-300">帮助与排障</p>
-            <p class="text-xs text-amber-700/80 dark:text-amber-200/80 mt-1">常见挂载、路径和权限问题说明。</p>
+            <p class="text-sm font-semibold text-amber-700 dark:text-amber-300">挂载与排障</p>
+            
           </div>
           <UButton :icon="helpOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" color="neutral" variant="ghost" size="sm" />
         </div>
@@ -101,17 +100,16 @@
       <template #content>
         <div v-if="helpOpen" class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4 text-xs leading-relaxed">
           <div class="rounded-2xl border border-white/70 dark:border-white/5 bg-white/70 dark:bg-gray-900/20 p-4 space-y-2 text-gray-600 dark:text-gray-300">
-            <p class="font-semibold text-gray-800 dark:text-gray-100">配置提示</p>
-            <p>1. 先将宿主机目录挂载到容器内，例如 <code>/volume1/movies:/media/movies</code>。</p>
-            <p>2. 在本页填写容器内路径 <code>/media/movies</code>，不要填写宿主机路径。</p>
-            <p>3. 保存前先点击“检测路径”，确保目录存在且容器有读取权限。</p>
-            <p>4. 将最常用的媒体库设为默认库，首页文件浏览器会优先打开它。</p>
+            <p class="font-semibold text-gray-800 dark:text-gray-100">快速检查</p>
+            <p>1. 先确认宿主机目录已挂载到容器。</p>
+            <p>2. 本页只填写容器内路径。</p>
+            <p>3. 保存前先点“检测路径”。</p>
           </div>
           <div class="rounded-2xl border border-white/70 dark:border-white/5 bg-white/70 dark:bg-gray-900/20 p-4 space-y-2 text-amber-700/90 dark:text-amber-200/85">
             <p class="font-semibold text-amber-800 dark:text-amber-100">常见问题</p>
-            <p>目录不存在：通常是挂载错误，或误填了宿主机路径。</p>
-            <p>权限不足：请检查宿主机权限、容器运行用户，必要时临时使用 root 验证。</p>
-            <p>保存被阻止：默认会拦截不可访问的已启用媒体库，可先停用再保存。</p>
+            <p>目录不存在：通常是挂载错误或路径填错。</p>
+            <p>权限不足：请检查宿主机权限与容器运行用户。</p>
+            <p>无法保存：可先停用异常媒体库再保存。</p>
           </div>
         </div>
       </template>
