@@ -13,7 +13,7 @@
         <div>
           <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">模型与连接</p>
         </div>
-        <UButton label="没有密钥？" variant="link" color="primary" size="xs" class="p-0 font-bold" @click="isHelpOpen = true" />
+        <UButton label="接口说明" variant="link" color="primary" size="xs" class="p-0 font-bold" @click="isGuideOpen = true" />
       </div>
 
       <div class="space-y-1">
@@ -33,8 +33,11 @@
             <UInput v-else v-model="config.defaultModel" placeholder="手动输入模型名，例如 gpt-4o-mini" class="flex-1" />
             <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="sm" :loading="fetchingModels" @click="tryFetchModels" title="获取模型列表" />
           </div>
-          <div v-if="modelItems.length" class="flex items-center justify-between gap-3 p-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40">
-            
+          <div class="flex items-center justify-between gap-3 p-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40">
+            <div class="space-y-0.5">
+              <p class="text-xs font-medium text-gray-700 dark:text-gray-300">手动填写模型名称</p>
+              <p class="text-[11px] text-gray-500 dark:text-gray-400">开启后跳过模型列表，直接输入模型 ID。</p>
+            </div>
             <USwitch v-model="useManualModelInput" />
           </div>
           <div v-if="fetchingModels" class="flex items-center gap-2 text-xs text-gray-500"><UIcon name="i-lucide-loader-2" class="w-3 h-3 animate-spin" />获取中...</div>
@@ -46,8 +49,8 @@
 
     <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 p-4 sm:p-5 space-y-5">
       <div>
-          <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">翻译默认参数</p>
-        </div>
+        <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">翻译默认参数</p>
+      </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <UFormField label="目标语言">
@@ -105,12 +108,14 @@
         </div>
       </template>
     </UModal>
+
+    <AiProviderGuideDrawer v-model:open="isGuideOpen" @apply="applyProviderGuide" />
   </div>
 </template>
 
 <script setup lang="ts">
 const emit = defineEmits(['close'])
-const isHelpOpen = ref(false)
+const isGuideOpen = ref(false)
 const { data } = await useFetch('/api/config')
 const config = ref<any>(data.value || {})
 const pending = ref(false)
@@ -166,13 +171,20 @@ const hasUnsavedChanges = computed(() => initialSnapshot.value !== '' && current
 onMounted(() => {
   const savedMode = localStorage.getItem(MODEL_INPUT_MODE_KEY)
   if (savedMode === 'manual') useManualModelInput.value = true
-  if (config.value?.apiKey && config.value?.apiBaseUrl) tryFetchModels()
   initialSnapshot.value = currentSnapshot.value
+
+  if (!useManualModelInput.value && config.value?.apiKey && config.value?.apiBaseUrl) {
+    tryFetchModels()
+  }
 })
 
 watch(useManualModelInput, (val) => {
   if (!import.meta.client) return
   localStorage.setItem(MODEL_INPUT_MODE_KEY, val ? 'manual' : 'select')
+
+  if (!val && !modelItems.value.length && config.value?.apiKey?.trim() && config.value?.apiBaseUrl?.trim()) {
+    tryFetchModels()
+  }
 })
 
 async function tryFetchModels() {
@@ -190,6 +202,18 @@ async function tryFetchModels() {
     modelItems.value = []
   } finally {
     fetchingModels.value = false
+  }
+}
+
+function applyProviderGuide(payload: { apiBaseUrl?: string, defaultModel?: string, useManualModelInput?: boolean }) {
+  if (payload.apiBaseUrl) config.value.apiBaseUrl = payload.apiBaseUrl
+  if (payload.defaultModel) config.value.defaultModel = payload.defaultModel
+  if (typeof payload.useManualModelInput === 'boolean') {
+    useManualModelInput.value = payload.useManualModelInput
+  }
+
+  if (!payload.useManualModelInput && config.value?.apiKey?.trim() && config.value?.apiBaseUrl?.trim()) {
+    tryFetchModels()
   }
 }
 
