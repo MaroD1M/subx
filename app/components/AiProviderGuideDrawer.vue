@@ -1,16 +1,19 @@
 <template>
-  <UModal
+  <USlideover
     v-model:open="openState"
+    side="right"
     title="AI 接入指引"
     description="选择服务商后查看填写方式，并可一键应用示例配置。"
     :ui="{
-      width: '!max-w-none w-screen h-screen sm:h-auto sm:w-auto',
-      content: 'sm:ml-auto sm:mr-0 sm:h-screen sm:max-h-screen sm:w-[min(92vw,1080px)] sm:rounded-none sm:rounded-l-3xl'
+      content: 'w-full sm:max-w-6xl',
+      header: 'flex items-start gap-3 p-4 sm:px-6 min-h-16 border-b border-gray-100 dark:border-gray-800',
+      body: 'p-0 overflow-hidden',
+      footer: 'hidden'
     }"
   >
-    <template #content>
-      <div class="flex h-screen max-h-screen min-h-screen flex-col overflow-hidden md:flex-row sm:h-[100dvh] sm:min-h-[100dvh]">
-        <aside class="w-full border-b border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-950/40 md:w-56 md:border-b-0 md:border-r md:p-4">
+    <template #body>
+      <div class="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden md:flex-row">
+        <aside class="w-full shrink-0 border-b border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-950/40 md:w-64 md:border-b-0 md:border-r">
           <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">服务商</p>
           <div class="space-y-2">
             <button
@@ -37,70 +40,76 @@
           </div>
         </aside>
 
-        <section class="flex-1 overflow-y-auto p-5 sm:p-6 md:p-7">
-          <div v-if="activeProvider" class="space-y-6">
-            <div class="flex flex-col gap-4 border-b border-gray-100 pb-4 dark:border-gray-800 lg:flex-row lg:items-start lg:justify-between">
-              <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ activeProvider.name }}</h3>
-                  <span :class="compatibilityClass(activeProvider.compatibility)" class="rounded-full px-2.5 py-1 text-[11px] font-medium">
-                    {{ compatibilityLabel(activeProvider.compatibility) }}
-                  </span>
+        <section class="flex min-h-0 flex-1 flex-col bg-white dark:bg-gray-950">
+          <div v-if="activeProvider" class="flex min-h-0 flex-1 flex-col">
+            <div class="border-b border-gray-100 px-5 py-5 dark:border-gray-800 sm:px-6">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ activeProvider.name }}</h3>
+                    <span :class="compatibilityClass(activeProvider.compatibility)" class="rounded-full px-2.5 py-1 text-[11px] font-medium">
+                      {{ compatibilityLabel(activeProvider.compatibility) }}
+                    </span>
+                  </div>
+                  <p class="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ activeProvider.description }}</p>
+                  <a
+                    v-if="activeProvider.officialUrl"
+                    :href="activeProvider.officialUrl"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
+                  >
+                    {{ activeProvider.officialLabel || '前往官网 / 控制台' }}
+                    <UIcon name="i-lucide-arrow-up-right" class="h-3.5 w-3.5" />
+                  </a>
                 </div>
-                <p class="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ activeProvider.description }}</p>
-                <a
-                  v-if="activeProvider.officialUrl"
-                  :href="activeProvider.officialUrl"
-                  target="_blank"
-                  rel="noreferrer"
-                  class="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
-                >
-                  {{ activeProvider.officialLabel || '前往官网 / 控制台' }}
-                  <UIcon name="i-lucide-arrow-up-right" class="h-3.5 w-3.5" />
-                </a>
-              </div>
-              <div class="flex shrink-0 items-center gap-3">
-                <UButton label="应用示例" color="primary" @click="applyProvider(activeProvider)" />
+                <div class="flex shrink-0 items-center gap-3">
+                  <UButton label="应用示例" color="primary" @click="applyProvider(activeProvider)" />
+                </div>
               </div>
             </div>
 
-            <div class="grid gap-3">
-              <div class="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/40">
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">推荐基础 URL</p>
-                <p class="mt-2 text-sm font-medium leading-6 text-gray-900 break-words dark:text-gray-100">{{ activeProvider.apiBaseUrl || '请以服务商文档提供的兼容地址为准' }}</p>
+            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+              <div class="space-y-4">
+                <div class="grid gap-3">
+                  <div class="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/40">
+                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400">推荐基础 URL</p>
+                    <p class="mt-2 break-words text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">{{ activeProvider.apiBaseUrl || '请以服务商文档提供的兼容地址为准' }}</p>
+                  </div>
+                  <div class="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/40">
+                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400">模型填写建议</p>
+                    <p class="mt-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">{{ activeProvider.defaultModel || '请填写服务商提供的模型 ID' }}</p>
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ activeProvider.recommendManualModel ? '推荐开启手动填写模型名称。' : '可优先尝试自动获取模型列表。' }}</p>
+                  </div>
+                </div>
+
+                <div class="rounded-2xl border border-gray-100 bg-white/80 p-5 dark:border-gray-800 dark:bg-gray-950/30">
+                  <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">接入步骤</p>
+                  <ul class="mt-4 space-y-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+                    <li v-for="(step, index) in activeProvider.steps" :key="step" class="flex gap-3">
+                      <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[11px] font-semibold text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">{{ index + 1 }}</span>
+                      <span>{{ step }}</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div class="rounded-2xl border border-gray-100 bg-white/80 p-5 dark:border-gray-800 dark:bg-gray-950/30">
+                  <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">补充说明</p>
+                  <ul class="mt-4 space-y-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+                    <li class="flex gap-2">
+                      <UIcon name="i-lucide-link" class="mt-1 h-4 w-4 shrink-0 text-gray-400" />
+                      <span>{{ activeProvider.supportsModelList ? '通常支持自动获取模型列表。' : '如果无法获取模型列表，可直接手动填写模型名称。' }}</span>
+                    </li>
+                    <li v-for="note in activeProvider.notes" :key="note" class="flex gap-2">
+                      <UIcon name="i-lucide-info" class="mt-1 h-4 w-4 shrink-0 text-gray-400" />
+                      <span>{{ note }}</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
-              <div class="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/40">
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">模型填写建议</p>
-                <p class="mt-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">{{ activeProvider.defaultModel || '请填写服务商提供的模型 ID' }}</p>
-                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ activeProvider.recommendManualModel ? '推荐开启手动填写模型名称。' : '可优先尝试自动获取模型列表。' }}</p>
-              </div>
             </div>
 
-            <div class="rounded-2xl border border-gray-100 bg-white/80 p-5 dark:border-gray-800 dark:bg-gray-950/30">
-              <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">接入步骤</p>
-              <ul class="mt-4 space-y-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
-                <li v-for="(step, index) in activeProvider.steps" :key="step" class="flex gap-3">
-                  <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[11px] font-semibold text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">{{ index + 1 }}</span>
-                  <span>{{ step }}</span>
-                </li>
-              </ul>
-            </div>
-
-            <div class="rounded-2xl border border-gray-100 bg-white/80 p-5 dark:border-gray-800 dark:bg-gray-950/30">
-              <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">补充说明</p>
-              <ul class="mt-4 space-y-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
-                <li class="flex gap-2">
-                  <UIcon name="i-lucide-link" class="mt-1 h-4 w-4 shrink-0 text-gray-400" />
-                  <span>{{ activeProvider.supportsModelList ? '通常支持自动获取模型列表。' : '如果无法获取模型列表，可直接手动填写模型名称。' }}</span>
-                </li>
-                <li v-for="note in activeProvider.notes" :key="note" class="flex gap-2">
-                  <UIcon name="i-lucide-info" class="mt-1 h-4 w-4 shrink-0 text-gray-400" />
-                  <span>{{ note }}</span>
-                </li>
-              </ul>
-            </div>
-
-            <div class="sticky bottom-0 flex items-center justify-end gap-3 border-t border-gray-100 bg-white/95 pt-4 pb-1 dark:border-gray-800 dark:bg-gray-950/95">
+            <div class="flex items-center justify-end gap-3 border-t border-gray-100 bg-white/95 px-5 py-4 dark:border-gray-800 dark:bg-gray-950/95 sm:px-6">
               <UButton label="关闭" color="neutral" variant="ghost" @click="openState = false" />
               <UButton label="应用示例" color="primary" @click="applyProvider(activeProvider)" />
             </div>
@@ -108,7 +117,7 @@
         </section>
       </div>
     </template>
-  </UModal>
+  </USlideover>
 </template>
 
 <script setup lang="ts">

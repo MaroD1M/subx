@@ -76,13 +76,33 @@
         </UFormField>
       </div>
 
-      <div class="rounded-xl bg-gray-50/80 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800 p-3.5">
-        <div class="flex items-center justify-between gap-3 cursor-pointer" @click="config.streamUsage = !config.streamUsage">
+      <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/40 overflow-hidden">
+        <button
+          type="button"
+          class="w-full flex items-center justify-between gap-3 p-3.5 text-left"
+          @click="advancedOpen = !advancedOpen"
+        >
           <div class="space-y-0.5">
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">流式统计 (Stream Usage)</label>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400">部分第三方 API 不兼容时可关闭。</p>
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">高级设置</p>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">兼容性与高级调试选项，默认可保持关闭。</p>
           </div>
-          <USwitch v-model="config.streamUsage" @click.stop />
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="w-4 h-4 text-gray-400 transition-transform"
+            :class="advancedOpen ? 'rotate-180' : ''"
+          />
+        </button>
+
+        <div v-if="advancedOpen" class="border-t border-gray-100 dark:border-gray-800 p-3.5">
+          <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5">
+            <div class="flex items-center justify-between gap-3 cursor-pointer" @click="config.streamUsage = !config.streamUsage">
+              <div class="space-y-0.5">
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">流式 Token 统计</label>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400">用于记录流式返回中的 Token 使用量。部分兼容接口不支持，遇到报错时可关闭。</p>
+              </div>
+              <USwitch v-model="config.streamUsage" @click.stop />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -116,6 +136,7 @@
 <script setup lang="ts">
 const emit = defineEmits(['close'])
 const isGuideOpen = ref(false)
+const advancedOpen = ref(false)
 const { data } = await useFetch('/api/config')
 const config = ref<any>(data.value || {})
 const pending = ref(false)
