@@ -80,6 +80,15 @@ export function useDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS task_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      step TEXT,
+      level TEXT NOT NULL DEFAULT 'info',
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS auth (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       passkey_hash TEXT NOT NULL,

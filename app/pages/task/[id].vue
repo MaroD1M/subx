@@ -189,7 +189,7 @@ async function cancelTask() {
     task.value.step = 'error'
     task.value.error = '用户取消任务'
     task.value.currentText = null
-    logs.value.push({ type: 'error', message: '任务已被手动取消', timestamp: new Date().toLocaleTimeString() })
+    appendLog({ type: 'error', message: '任务已被手动取消', timestamp: new Date().toLocaleTimeString() })
     if (eventSource.value) eventSource.value.close()
     toast.add({ title: '已取消', description: '任务已成功取消', color: 'success' })
   } catch {
@@ -204,6 +204,19 @@ watch(logs, () => {
     if (logContainer.value) logContainer.value.scrollTop = logContainer.value.scrollHeight
   })
 }, { deep: true })
+
+function appendLog(entry: { type: 'info' | 'error', message: string, timestamp: string }) {
+  const key = `${entry.type}|${entry.timestamp}|${entry.message}`
+  if (logKeys.value.has(key)) return
+  logKeys.value.add(key)
+  logs.value.push(entry)
+}
+
+function resetLogs(entries: Array<{ type: 'info' | 'error', message: string, timestamp: string }>) {
+  logs.value = []
+  logKeys.value = new Set()
+  for (const entry of entries) appendLog(entry)
+}
 
 const statusLabel = computed(() => {
   switch (task.value.step) {
@@ -238,8 +251,13 @@ onUnmounted(() => {
 
 onMounted(async () => {
   try {
-    const result = await $fetch(`/api/tasks/${taskId}`)
+    const [result, logResult] = await Promise.all([
+      $fetch(`/api/tasks/${taskId}`),
+      $fetch(`/api/tasks/${taskId}/logs`).catch(() => ({ logs: [] }))
+    ])
     const initialTask = result?.task
+    const historyLogs = (logResult as any)?.logs || []
+
     if (initialTask) {
       task.value = {
         ...task.value,
@@ -253,13 +271,19 @@ onMounted(async () => {
         filePath: initialTask.filePath || '',
         rootName: initialTask.rootName || ''
       }
-      if (initialTask.status === 'done') {
-        logs.value = [{ type: 'info', message: '任务已完成，成功从历史记录加载数据。', timestamp: new Date().toLocaleTimeString() }]
-        task.value.currentText = null
-      } else if (initialTask.status === 'error') {
-        logs.value = [{ type: 'error', message: `任务失败: ${initialTask.error}`, timestamp: new Date().toLocaleTimeString() }]
-        task.value.currentText = null
-      }
+    }
+
+    if (historyLogs.length > 0) {
+      resetLogs(historyLogs.map((log: any) => ({
+        type: log.level === 'error' ? 'error' : 'info',
+        message: log.message,
+        timestamp: new Date(log.createdAt).toLocaleTimeString()
+      })))
+    } else if (initialTask?.status === 'error' && initialTask.error) {
+      resetLogs([{ type: 'error', message: `任务失败: ${initialTask.error}`, timestamp: new Date().toLocaleTimeString() }])
+      task.value.currentText = null
+    } else if (initialTask?.status === 'done') {
+      task.value.currentText = null
     }
   } catch (e) {
     console.warn('[Task] Unable to fetch initial task state', e)
@@ -270,7 +294,7 @@ onMounted(async () => {
   let reconnectAttempts = 0
   const MAX_RECONNECT_ATTEMPTS = 10
   const BASE_RECONNECT_DELAY = 1000
-  let lastLoggedStep = null
+  let lastLoggedStep = task.value.step || null
   let isIntentionalClose = false
 
   function connectSSE() {
@@ -293,25 +317,27 @@ onMounted(async () => {
 
       if (data.step && data.step !== lastLoggedStep) {
         lastLoggedStep = data.step
-        const stepNames = {
-          queued: '入队',
-          extracting: '提取字幕',
-          parsing: '解析文本',
-          translating: 'AI 翻译',
-          exporting: '导出文件',
-          done: '完成',
-          error: '出错'
+        if (!data.log) {
+          const stepNames = {
+            queued: '入队',
+            extracting: '提取字幕',
+            parsing: '解析文本',
+            translating: 'AI 翻译',
+            exporting: '导出文件',
+            done: '完成',
+            error: '出错'
+          }
+          const currentStepName = stepNames[data.step] || data.step
+          appendLog({
+            type: data.step === 'error' ? 'error' : 'info',
+            message: data.step === 'error' ? '状态变更: 任务失败' : `状态变更: ${currentStepName}`,
+            timestamp: new Date().toLocaleTimeString()
+          })
         }
-        const currentStepName = stepNames[data.step] || data.step
-        logs.value.push({
-          type: data.step === 'error' ? 'error' : 'info',
-          message: data.step === 'error' ? '状态变更: 任务失败' : `状态变更: ${currentStepName}`,
-          timestamp: new Date().toLocaleTimeString()
-        })
       }
 
       if (data.log) {
-        logs.value.push({
+        appendLog({
           type: data.step === 'error' || data.log.includes('!!!') ? 'error' : 'info',
           message: data.log,
           timestamp: new Date().toLocaleTimeString()
@@ -327,11 +353,11 @@ onMounted(async () => {
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000)
         reconnectAttempts++
-        logs.value.push({ type: 'info', message: `连接中断，${delay / 1000}s 后自动重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, timestamp: new Date().toLocaleTimeString() })
+        appendLog({ type: 'info', message: `连接中断，${delay / 1000}s 后自动重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, timestamp: new Date().toLocaleTimeString() })
         if (reconnectTimer.value) clearTimeout(reconnectTimer.value)
         reconnectTimer.value = setTimeout(connectSSE, delay)
       } else {
-        logs.value.push({ type: 'error', message: '实时连接已断开，请刷新页面获取最新状态', timestamp: new Date().toLocaleTimeString() })
+        appendLog({ type: 'error', message: '实时连接已断开，请刷新页面获取最新状态', timestamp: new Date().toLocaleTimeString() })
       }
     }
   }

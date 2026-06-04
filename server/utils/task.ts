@@ -15,6 +15,12 @@ import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
 
 export const taskEvents = new EventEmitter()
 
+function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'error' | 'warn', message: string) {
+    const db = useDb()
+    db.prepare('INSERT INTO task_logs (task_id, step, level, message, created_at) VALUES (?, ?, ?, ?, datetime('now'))')
+        .run(taskId, step, level, message)
+}
+
 class TaskQueue {
     private queue: { taskId: string, openaiConfig: any, resolve: (value: void) => void, reject: (reason: any) => void }[] = [];
     private active = 0;
@@ -120,6 +126,7 @@ export const TaskService = {
             task.taskId, task.filePath, task.rootId || null, task.sourceType, task.trackIndex,
             task.model, task.targetLanguage, task.outputMode, task.stylePreset || 'default', task.subtitleFormat || 'srt', task.subtitleStylePreset || 'bilingual_simple', task.bilingualLayout || 'translated_first', 'queued', 0
         )
+        writeTaskLog(task.taskId!, 'queued', 'info', '任务已创建，等待执行')
         return this.getTask(task.taskId!)
     },
 
