@@ -81,17 +81,24 @@
             </div>
             <UBadge color="neutral" variant="subtle">共 {{ logs.length }} 条日志</UBadge>
           </div>
-          <div class="space-y-1.5 h-48 overflow-y-auto custom-scrollbar" ref="logContainer">
-            <p v-for="(log, i) in logs" :key="i" :class="[log.type === 'error' ? 'text-red-400' : 'text-gray-400']">
-              <ClientOnly><span class="text-gray-600 mr-2">[{{ log.timestamp }}]</span></ClientOnly>
-              <span class="text-primary-500 mr-2">$</span>
-              {{ log.message }}
-            </p>
-            <p v-if="task.currentText" class="text-emerald-400">
-              <ClientOnly><span class="text-gray-600 mr-2">[{{ new Date().toLocaleTimeString() }}]</span></ClientOnly>
-              <span class="text-primary-500 mr-2">$</span>
-              {{ task.currentText }}
-            </p>
+          <div class="space-y-2 h-48 overflow-y-auto custom-scrollbar" ref="logContainer">
+            <div
+              v-for="(log, i) in logs"
+              :key="i"
+              class="rounded-xl border px-3 py-2 flex items-start gap-3"
+              :class="logItemClass(log)"
+            >
+              <ClientOnly><span class="text-[10px] text-gray-500 shrink-0 mt-0.5">{{ log.timestamp }}</span></ClientOnly>
+              <UBadge size="sm" variant="soft" :color="logBadgeColor(log)" class="shrink-0">{{ logCategoryLabel(log) }}</UBadge>
+              <div class="min-w-0 flex-1">
+                <p class="leading-relaxed break-words" :class="logMessageClass(log)">{{ log.message }}</p>
+              </div>
+            </div>
+            <div v-if="task.currentText" class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 flex items-start gap-3">
+              <ClientOnly><span class="text-[10px] text-gray-500 shrink-0 mt-0.5">{{ new Date().toLocaleTimeString() }}</span></ClientOnly>
+              <UBadge size="sm" variant="soft" color="success" class="shrink-0">实时进度</UBadge>
+              <p class="min-w-0 flex-1 leading-relaxed break-words text-emerald-300">{{ task.currentText }}</p>
+            </div>
           </div>
         </div>
 
@@ -167,7 +174,7 @@ const toast = useToast()
 const logContainer = ref(null)
 const eventSource = ref(null)
 const reconnectTimer = ref(null)
-const logs = ref([])
+const logs = ref<Array<{ type: 'info' | 'error', message: string, timestamp: string }>>([])
 const logKeys = ref(new Set<string>())
 const connectionState = ref<'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'history-only' | 'idle'>('connecting')
 const reconnectStatusText = ref('')
@@ -227,6 +234,60 @@ function resetLogs(entries: Array<{ type: 'info' | 'error', message: string, tim
   logs.value = []
   logKeys.value = new Set()
   for (const entry of entries) appendLog(entry)
+}
+
+function logCategoryLabel(log: { type: 'info' | 'error', message: string }) {
+  const text = log.message || ''
+  if (log.type === 'error' || /失败|错误|中断|断开|异常|取消|error/i.test(text)) return '错误'
+  if (/导出|保存|输出文件|write/i.test(text)) return '导出'
+  if (/翻译|文本块|chunk|tokens|模型|术语表|风格/i.test(text)) return '翻译'
+  if (/提取|解析|SRT|字幕|初始化|队列|状态变更|创建|加载/i.test(text)) return '系统'
+  return '过程'
+}
+
+function logBadgeColor(log: { type: 'info' | 'error', message: string }) {
+  switch (logCategoryLabel(log)) {
+    case '错误':
+      return 'error'
+    case '导出':
+      return 'success'
+    case '翻译':
+      return 'primary'
+    case '系统':
+      return 'warning'
+    default:
+      return 'neutral'
+  }
+}
+
+function logItemClass(log: { type: 'info' | 'error', message: string }) {
+  switch (logCategoryLabel(log)) {
+    case '错误':
+      return 'border-red-500/20 bg-red-500/10'
+    case '导出':
+      return 'border-emerald-500/20 bg-emerald-500/10'
+    case '翻译':
+      return 'border-primary-500/20 bg-primary-500/10'
+    case '系统':
+      return 'border-amber-500/20 bg-amber-500/10'
+    default:
+      return 'border-white/10 bg-white/5'
+  }
+}
+
+function logMessageClass(log: { type: 'info' | 'error', message: string }) {
+  switch (logCategoryLabel(log)) {
+    case '错误':
+      return 'text-red-300'
+    case '导出':
+      return 'text-emerald-300'
+    case '翻译':
+      return 'text-primary-200'
+    case '系统':
+      return 'text-amber-200'
+    default:
+      return 'text-gray-300'
+  }
 }
 
 const statusLabel = computed(() => {
