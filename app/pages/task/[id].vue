@@ -39,6 +39,14 @@
 
         <USeparator />
 
+        <div v-if="connectionBanner" class="rounded-2xl border p-4 flex items-start gap-3" :class="connectionBannerClass">
+          <UIcon :name="connectionBanner.icon" class="w-5 h-5 mt-0.5 shrink-0" :class="connectionBanner.iconClass" />
+          <div class="space-y-1">
+            <p class="text-sm font-bold" :class="connectionBanner.titleClass">{{ connectionBanner.title }}</p>
+            <p class="text-xs leading-relaxed" :class="connectionBanner.textClass">{{ connectionBanner.message }}</p>
+          </div>
+        </div>
+
         <div class="grid grid-cols-2 lg:grid-cols-5 gap-6">
           <div class="space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">媒体库</span>
@@ -159,8 +167,10 @@ const toast = useToast()
 const logContainer = ref(null)
 const eventSource = ref(null)
 const reconnectTimer = ref(null)
-const logs = ref([{ type: 'info', message: '任务初始化中，正在连接 SubX 引擎...', timestamp: new Date().toLocaleTimeString() }])
+const logs = ref([])
 const logKeys = ref(new Set<string>())
+const connectionState = ref<'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'history-only' | 'idle'>('connecting')
+const reconnectStatusText = ref('')
 
 async function fetchResponses() {
   responsesLoading.value = true
@@ -232,6 +242,75 @@ const statusLabel = computed(() => {
   }
 })
 
+const connectionBanner = computed(() => {
+  if (task.value.step === 'done' || task.value.step === 'error') {
+    return {
+      title: '历史记录模式',
+      message: '当前展示的是已持久化的任务日志，无需保持实时连接。',
+      icon: 'i-lucide-history',
+      iconClass: 'text-gray-500',
+      titleClass: 'text-gray-800 dark:text-gray-200',
+      textClass: 'text-gray-600 dark:text-gray-400'
+    }
+  }
+
+  switch (connectionState.value) {
+    case 'connecting':
+      return {
+        title: '正在连接实时进度',
+        message: '页面正在与任务实时进度流建立连接。',
+        icon: 'i-lucide-loader-2',
+        iconClass: 'text-primary-500 animate-spin',
+        titleClass: 'text-primary-800 dark:text-primary-300',
+        textClass: 'text-primary-700 dark:text-primary-400'
+      }
+    case 'connected':
+      return {
+        title: '实时连接正常',
+        message: '当前页面正在接收任务执行中的实时进度。',
+        icon: 'i-lucide-wifi',
+        iconClass: 'text-emerald-500',
+        titleClass: 'text-emerald-800 dark:text-emerald-300',
+        textClass: 'text-emerald-700 dark:text-emerald-400'
+      }
+    case 'reconnecting':
+      return {
+        title: '实时连接中断，正在重连',
+        message: reconnectStatusText.value || '页面会自动重试连接，不影响后台任务继续执行。',
+        icon: 'i-lucide-refresh-cw',
+        iconClass: 'text-amber-500 animate-spin',
+        titleClass: 'text-amber-800 dark:text-amber-300',
+        textClass: 'text-amber-700 dark:text-amber-400'
+      }
+    case 'disconnected':
+      return {
+        title: '实时连接已断开',
+        message: '请刷新页面以重新获取最新任务状态。',
+        icon: 'i-lucide-unplug',
+        iconClass: 'text-red-500',
+        titleClass: 'text-red-800 dark:text-red-300',
+        textClass: 'text-red-700 dark:text-red-400'
+      }
+    default:
+      return null
+  }
+})
+
+const connectionBannerClass = computed(() => {
+  switch (connectionState.value) {
+    case 'connecting':
+      return 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800'
+    case 'connected':
+      return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+    case 'reconnecting':
+      return 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+    case 'disconnected':
+      return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+    default:
+      return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+  }
+})
+
 const stepIcon = computed(() => {
   switch (task.value.step) {
     case 'queued': return 'i-lucide-clock'
@@ -283,14 +362,19 @@ onMounted(async () => {
     } else if (initialTask?.status === 'error' && initialTask.error) {
       resetLogs([{ type: 'error', message: `任务失败: ${initialTask.error}`, timestamp: new Date().toLocaleTimeString() }])
       task.value.currentText = null
+      connectionState.value = 'history-only'
     } else if (initialTask?.status === 'done') {
       task.value.currentText = null
+      connectionState.value = 'history-only'
     }
   } catch (e) {
     console.warn('[Task] Unable to fetch initial task state', e)
   }
 
-  if (task.value.step === 'done' || task.value.step === 'error') return
+  if (task.value.step === 'done' || task.value.step === 'error') {
+    connectionState.value = 'history-only'
+    return
+  }
 
   let reconnectAttempts = 0
   const MAX_RECONNECT_ATTEMPTS = 10
@@ -299,11 +383,14 @@ onMounted(async () => {
   let isIntentionalClose = false
 
   function connectSSE() {
+    connectionState.value = reconnectAttempts > 0 ? 'reconnecting' : 'connecting'
     const es = new EventSource(`/api/sse/progress?taskId=${taskId}`)
     eventSource.value = es
 
     es.addEventListener('progress', (e) => {
       reconnectAttempts = 0
+      reconnectStatusText.value = ''
+      connectionState.value = 'connected'
       const data = JSON.parse(e.data)
       task.value = { ...task.value, ...data }
 
@@ -349,7 +436,10 @@ onMounted(async () => {
     es.onerror = () => {
       es.close()
       if (isIntentionalClose) return
-      if (task.value.step === 'done' || task.value.step === 'error') return
+      if (task.value.step === 'done' || task.value.step === 'error') {
+    connectionState.value = 'history-only'
+    return
+  }
 
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000)
@@ -358,7 +448,8 @@ onMounted(async () => {
         if (reconnectTimer.value) clearTimeout(reconnectTimer.value)
         reconnectTimer.value = setTimeout(connectSSE, delay)
       } else {
-        appendLog({ type: 'error', message: '实时连接已断开，请刷新页面获取最新状态', timestamp: new Date().toLocaleTimeString() })
+        connectionState.value = 'disconnected'
+        reconnectStatusText.value = ''
       }
     }
   }
