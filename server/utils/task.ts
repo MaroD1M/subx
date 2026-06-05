@@ -17,7 +17,7 @@ export const taskEvents = new EventEmitter()
 
 function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'error' | 'warn', message: string) {
     const db = useDb()
-    db.prepare('INSERT INTO task_logs (task_id, step, level, message, created_at) VALUES (?, ?, ?, ?, datetime('now'))')
+    db.prepare("INSERT INTO task_logs (task_id, step, level, message, created_at) VALUES (?, ?, ?, ?, datetime('now'))")
         .run(taskId, step, level, message)
 }
 

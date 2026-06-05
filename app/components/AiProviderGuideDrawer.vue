@@ -5,15 +5,15 @@
     title="AI 接入指引"
     description="选择服务商后查看填写方式，并可一键应用示例配置。"
     :ui="{
-      content: 'w-full sm:max-w-6xl',
-      header: 'flex items-start gap-3 p-4 sm:px-6 min-h-16 border-b border-gray-100 dark:border-gray-800',
-      body: 'p-0 overflow-hidden',
+      content: 'w-full sm:max-w-6xl h-[100dvh] sm:h-[100dvh]',
+      header: 'flex items-start gap-3 p-4 sm:px-6 min-h-16 border-b border-gray-100 dark:border-gray-800 shrink-0',
+      body: 'flex-1 min-h-0 p-0 overflow-hidden',
       footer: 'hidden'
     }"
   >
     <template #body>
-      <div class="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden md:flex-row">
-        <aside class="w-full shrink-0 border-b border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-950/40 md:w-64 md:border-b-0 md:border-r">
+      <div class="flex h-full min-h-0 flex-col overflow-hidden md:flex-row">
+        <aside class="w-full shrink-0 overflow-y-auto border-b border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-950/40 md:w-64 md:border-b-0 md:border-r">
           <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">服务商</p>
           <div class="space-y-2">
             <button
@@ -42,7 +42,7 @@
 
         <section class="flex min-h-0 flex-1 flex-col bg-white dark:bg-gray-950">
           <div v-if="activeProvider" class="flex min-h-0 flex-1 flex-col">
-            <div class="border-b border-gray-100 px-5 py-5 dark:border-gray-800 sm:px-6">
+            <div class="shrink-0 border-b border-gray-100 px-5 py-5 dark:border-gray-800 sm:px-6">
               <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
@@ -70,7 +70,7 @@
             </div>
 
             <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
-              <div class="space-y-4">
+              <div class="space-y-4 pb-4">
                 <div class="grid gap-3">
                   <div class="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/40">
                     <p class="text-xs font-medium text-gray-500 dark:text-gray-400">推荐基础 URL</p>
@@ -109,7 +109,7 @@
               </div>
             </div>
 
-            <div class="flex items-center justify-end gap-3 border-t border-gray-100 bg-white/95 px-5 py-4 dark:border-gray-800 dark:bg-gray-950/95 sm:px-6">
+            <div class="shrink-0 flex items-center justify-end gap-3 border-t border-gray-100 bg-white px-5 py-4 dark:border-gray-800 dark:bg-gray-950 sm:px-6">
               <UButton label="关闭" color="neutral" variant="ghost" @click="openState = false" />
               <UButton label="应用示例" color="primary" @click="applyProvider(activeProvider)" />
             </div>

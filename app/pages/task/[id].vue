@@ -133,7 +133,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 const route = useRoute()
 const taskId = route.params.id
 
@@ -160,6 +160,7 @@ const logContainer = ref(null)
 const eventSource = ref(null)
 const reconnectTimer = ref(null)
 const logs = ref([{ type: 'info', message: '任务初始化中，正在连接 SubX 引擎...', timestamp: new Date().toLocaleTimeString() }])
+const logKeys = ref(new Set<string>())
 
 async function fetchResponses() {
   responsesLoading.value = true
