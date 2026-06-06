@@ -88,6 +88,7 @@ async function translateChunkWithRetry(
 
         if (attempt > 0) {
             console.log(`[Retry] Task ${taskId} chunk ${chunkIndex}: 正在进行第 ${attempt}/${maxRetries} 次增量重试，剩余 ${remainingEntries.length} 条未翻译`)
+            writeTaskLog(taskId, 'translating', 'warn', `[重试] 块 #${chunkIndex + 1} 第 ${attempt}/${maxRetries} 次重试，剩余 ${remainingEntries.length} 条`)
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
         }
 
@@ -110,12 +111,14 @@ async function translateChunkWithRetry(
         } catch (e: any) {
             lastError = e
             console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
+            writeTaskLog(taskId, 'translating', 'warn', `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败：${e.message}`)
         }
     }
 
     // 检查是否还有遗漏
     if (remainingEntries.length > 0) {
         console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 在 ${maxRetries} 次重试后仍有 ${remainingEntries.length} 条翻译缺失，将保留原文继续任务。`)
+        writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} 仍有 ${remainingEntries.length} 条未成功翻译，已回退为原文`)
     }
 
     // 按照原始顺序组装结果

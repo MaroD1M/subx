@@ -6,6 +6,9 @@ import { SubtitleService } from './subtitle'
 import { appendFileSync, existsSync, readFileSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
+const STREAM_REQUEST_TIMEOUT_MS = 5 * 60 * 1000
+const STREAM_IDLE_TIMEOUT_MS = 45 * 1000
+
 interface StreamCallbacks {
     onEntryTranslated?: (entry: { id: string; translatedText: string }) => void
 }
@@ -138,7 +141,8 @@ export const TranslationService = {
             const requestOptions = {
                 model: model,
                 stream: true,
-                stream_options: streamUsage ? { include_usage: true } : undefined
+                stream_options: streamUsage ? { include_usage: true } : undefined,
+                timeout: STREAM_REQUEST_TIMEOUT_MS
             }
 
             const initialLog = `=== TASK INFO ===
@@ -170,10 +174,17 @@ ${prompt}
             }) as any
 
             let lastLogTime = Date.now()
+            let lastChunkTime = Date.now()
             let buffer = ''
             let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
 
             for await (const part of stream) {
+                if (Date.now() - lastChunkTime > STREAM_IDLE_TIMEOUT_MS) {
+                    try {
+                        stream.controller?.abort()
+                    } catch { /* ignore */ }
+                    throw new Error(`流式响应长时间无数据（>${Math.round(STREAM_IDLE_TIMEOUT_MS / 1000)}s），已中止本次请求`)
+                }
                 if (part.usage) {
                     usage = {
                         prompt_tokens: part.usage.prompt_tokens ?? 0,
@@ -183,6 +194,9 @@ ${prompt}
                 }
 
                 const content = part.choices[0]?.delta?.content || ''
+                if (content || part.usage) {
+                    lastChunkTime = Date.now()
+                }
                 fullContent += content
                 buffer += content
 
