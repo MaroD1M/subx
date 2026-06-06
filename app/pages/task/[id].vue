@@ -71,33 +71,40 @@
           </div>
         </div>
 
-        <div class="bg-gray-950 rounded-2xl p-4 font-mono text-xs overflow-hidden shadow-inner ring-1 ring-white/10 relative">
-          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-1.5">
-              <div class="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-              <div class="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-              <div class="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-              <span class="ml-2 text-gray-500 text-[10px] uppercase font-bold">处理日志</span>
+        <div class="rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white/80 dark:bg-gray-950/80 p-4 shadow-sm relative backdrop-blur-sm">
+          <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2 text-gray-700 dark:text-gray-200">
+                <UIcon name="i-lucide-logs" class="w-4 h-4 text-primary-500" />
+                <span class="text-sm font-semibold">任务执行日志</span>
+              </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">仅记录任务处理过程，不包含页面实时连接状态。</p>
             </div>
             <UBadge color="neutral" variant="subtle">共 {{ logs.length }} 条日志</UBadge>
           </div>
-          <div class="space-y-2 h-48 overflow-y-auto custom-scrollbar" ref="logContainer">
+          <div class="space-y-3 h-56 overflow-y-auto custom-scrollbar pr-1" ref="logContainer">
             <div
               v-for="(log, i) in logs"
               :key="i"
-              class="rounded-xl border px-3 py-2 flex items-start gap-3"
+              class="rounded-2xl border px-3 py-3 flex items-start gap-3 shadow-sm"
               :class="logItemClass(log)"
             >
-              <ClientOnly><span class="text-[10px] text-gray-500 shrink-0 mt-0.5">{{ log.timestamp }}</span></ClientOnly>
-              <UBadge size="sm" variant="soft" :color="logBadgeColor(log)" class="shrink-0">{{ logCategoryLabel(log) }}</UBadge>
-              <div class="min-w-0 flex-1">
-                <p class="leading-relaxed break-words" :class="logMessageClass(log)">{{ log.message }}</p>
+              <div class="flex flex-col items-start gap-2 shrink-0 min-w-[72px]">
+                <ClientOnly><span class="text-[10px] text-gray-500 dark:text-gray-400 leading-none">{{ log.timestamp }}</span></ClientOnly>
+                <UBadge size="sm" variant="soft" :color="logBadgeColor(log)" class="shrink-0">{{ logCategoryLabel(log) }}</UBadge>
+              </div>
+              <div class="min-w-0 flex-1 border-l border-black/5 dark:border-white/10 pl-3">
+                <p class="text-sm leading-6 break-words" :class="logMessageClass(log)">{{ log.message }}</p>
               </div>
             </div>
-            <div v-if="task.currentText" class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 flex items-start gap-3">
-              <ClientOnly><span class="text-[10px] text-gray-500 shrink-0 mt-0.5">{{ new Date().toLocaleTimeString() }}</span></ClientOnly>
-              <UBadge size="sm" variant="soft" color="success" class="shrink-0">实时进度</UBadge>
-              <p class="min-w-0 flex-1 leading-relaxed break-words text-emerald-300">{{ task.currentText }}</p>
+            <div v-if="task.currentText" class="rounded-2xl border border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-3 flex items-start gap-3 shadow-sm">
+              <div class="flex flex-col items-start gap-2 shrink-0 min-w-[72px]">
+                <ClientOnly><span class="text-[10px] text-gray-500 dark:text-gray-400 leading-none">{{ new Date().toLocaleTimeString() }}</span></ClientOnly>
+                <UBadge size="sm" variant="soft" color="success" class="shrink-0">实时进度</UBadge>
+              </div>
+              <div class="min-w-0 flex-1 border-l border-emerald-500/20 pl-3">
+                <p class="text-sm leading-6 break-words text-emerald-700 dark:text-emerald-300">{{ task.currentText }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -279,30 +286,30 @@ function logBadgeColor(log: { type: 'info' | 'error', message: string, category?
 function logItemClass(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
   switch (resolveLogCategory(log)) {
     case 'error':
-      return 'border-red-500/20 bg-red-500/10'
+      return 'border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10'
     case 'export':
-      return 'border-emerald-500/20 bg-emerald-500/10'
+      return 'border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10'
     case 'translation':
-      return 'border-primary-500/20 bg-primary-500/10'
+      return 'border-primary-200 dark:border-primary-500/20 bg-primary-50 dark:bg-primary-500/10'
     case 'system':
-      return 'border-amber-500/20 bg-amber-500/10'
+      return 'border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10'
     default:
-      return 'border-white/10 bg-white/5'
+      return 'border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5'
   }
 }
 
 function logMessageClass(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
   switch (resolveLogCategory(log)) {
     case 'error':
-      return 'text-red-300'
+      return 'text-red-700 dark:text-red-300'
     case 'export':
-      return 'text-emerald-300'
+      return 'text-emerald-700 dark:text-emerald-300'
     case 'translation':
-      return 'text-primary-200'
+      return 'text-primary-700 dark:text-primary-200'
     case 'system':
-      return 'text-amber-200'
+      return 'text-amber-700 dark:text-amber-200'
     default:
-      return 'text-gray-300'
+      return 'text-gray-700 dark:text-gray-300'
   }
 }
 
