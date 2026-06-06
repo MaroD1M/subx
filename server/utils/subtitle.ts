@@ -43,10 +43,30 @@ export const SubtitleService = {
     return text.replace(/\{[^}]+\}/g, '')
   },
 
+  stripBasicHtmlTags(text: string): string {
+    return text
+      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/<\/?\s*(i|b|u)\s*>/gi, '')
+      .replace(/<\s*font[^>]*>/gi, '')
+      .replace(/<\s*\/\s*font\s*>/gi, '')
+  },
+
+  cleanupVisibleSubtitleText(text: unknown): string {
+    return this.stripBasicHtmlTags(
+      this.stripInlineAssTags(
+        this.normalizeSubtitleText(text).replace(/\\[nN]/g, '\n')
+      )
+    ).trim()
+  },
+
   normalizeModelOutputText(text: unknown): string {
     const normalized = this.normalizeSubtitleText(text)
       .replace(/\\[nN]/g, '\n')
-    return this.extractLeadingCueTag(normalized).body.trim()
+
+    const withoutCueTags = normalized.replace(/(^|\n)\s*(?:\{\\[^}]+\}\s*)+/g, '$1')
+    const withoutStrayLeadingSlash = withoutCueTags.replace(/(^|\n)\\(?![Nnh{}\\])/g, '$1')
+
+    return this.stripBasicHtmlTags(this.stripInlineAssTags(withoutStrayLeadingSlash)).trim()
   },
 
   async parseSubtitle(filePath: string): Promise<SubtitleEntry[]> {
@@ -67,7 +87,7 @@ export const SubtitleService = {
           id: (index + 1).toString(),
           startTime: this.assSecondsToSrtTime(event.Start),
           endTime: this.assSecondsToSrtTime(event.End),
-          text: this.stripInlineAssTags(body).trim(),
+          text: this.cleanupVisibleSubtitleText(body),
           prefixTag: prefixTag || undefined
         }
       })
@@ -172,11 +192,6 @@ export const SubtitleService = {
 
   buildAssTextPayload(text: unknown, prefixTag = '') {
     const normalized = this.normalizeModelOutputText(text)
-      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
-      .replace(/<\/?\s*(i|b|u)\s*>/gi, '')
-      .replace(/<\s*font[^>]*>/gi, '')
-      .replace(/<\s*\/\s*font\s*>/gi, '')
-
     const escapedText = normalized
       .replace(/\\/g, '\\\\')
       .replace(/\{/g, '\\{')

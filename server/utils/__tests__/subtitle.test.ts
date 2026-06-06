@@ -18,6 +18,18 @@ describe('SubtitleService tag preservation', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  it('parses leading cue tags from srt without leaking into text', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-srt-parse-'))
+    const file = join(dir, 'sample.srt')
+    writeFileSync(file, `1\n00:00:01,000 --> 00:00:03,000\n{\\an8}Oh! Okay. Yeah.\nI just never thought about it that way.\n`, 'utf-8')
+
+    const entries = await SubtitleService.parseSubtitle(file)
+    expect(entries[0]?.prefixTag).toBe('{\\an8}')
+    expect(entries[0]?.text).toBe('Oh! Okay. Yeah.\nI just never thought about it that way.')
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   it('writes bilingual srt with single preserved cue tag', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'subx-srt-'))
     const out = join(dir, 'demo.output.srt')
@@ -34,6 +46,28 @@ describe('SubtitleService tag preservation', () => {
     const content = readFileSync(outputPath, 'utf-8').replace(/\r\n/g, '\n')
 
     expect(content).toContain('{\\an8}哦 行吧 对\n我从没这么想过\nOh! Okay. Yeah.\nI just never thought about it that way.')
+    expect(content).not.toContain('{\\an8}{\\an8}')
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('sanitizes stray backslashes and duplicated cue tags from model output', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-srt-stray-'))
+    const out = join(dir, 'demo.output.srt')
+    const entries: SubtitleEntry[] = [{
+      id: '1',
+      startTime: '00:00:01,000',
+      endTime: '00:00:03,000',
+      text: 'Oh! Okay. Yeah.\nI just never thought about it that way.',
+      translatedText: '{\\an8}\\哦 行吧 对\\n{\\an8}我从没这么想过',
+      prefixTag: '{\\an8}'
+    }]
+
+    const outputPath = await SubtitleService.writeSubtitle(entries, out, 'translated', 'srt', 'bilingual_simple', 'translated_first')
+    const content = readFileSync(outputPath, 'utf-8').replace(/\r\n/g, '\n')
+
+    expect(content).toContain('{\\an8}哦 行吧 对\n我从没这么想过')
+    expect(content).not.toContain('\\哦')
     expect(content).not.toContain('{\\an8}{\\an8}')
 
     rmSync(dir, { recursive: true, force: true })
