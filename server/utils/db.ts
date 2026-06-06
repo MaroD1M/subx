@@ -84,6 +84,7 @@ export function useDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       task_id TEXT NOT NULL,
       step TEXT,
+      category TEXT NOT NULL DEFAULT 'system',
       level TEXT NOT NULL DEFAULT 'info',
       message TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -137,6 +138,10 @@ export function useDb() {
 
   try {
     _db.exec(`ALTER TABLE task_responses ADD COLUMN total_tokens INTEGER DEFAULT 0`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE task_logs ADD COLUMN category TEXT NOT NULL DEFAULT 'system'`)
   } catch { /* column already exists */ }
 
   // Performance indexes

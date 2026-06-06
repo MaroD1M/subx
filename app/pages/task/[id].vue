@@ -174,7 +174,7 @@ const toast = useToast()
 const logContainer = ref(null)
 const eventSource = ref(null)
 const reconnectTimer = ref(null)
-const logs = ref<Array<{ type: 'info' | 'error', message: string, timestamp: string }>>([])
+const logs = ref<Array<{ type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }>>([])
 const logKeys = ref(new Set<string>())
 const connectionState = ref<'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'history-only' | 'idle'>('connecting')
 const reconnectStatusText = ref('')
@@ -223,67 +223,83 @@ watch(logs, () => {
   })
 }, { deep: true })
 
-function appendLog(entry: { type: 'info' | 'error', message: string, timestamp: string }) {
-  const key = `${entry.type}|${entry.timestamp}|${entry.message}`
+function appendLog(entry: { type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
+  const key = [entry.type, entry.timestamp, entry.category || '', entry.message].join('|')
   if (logKeys.value.has(key)) return
   logKeys.value.add(key)
   logs.value.push(entry)
 }
 
-function resetLogs(entries: Array<{ type: 'info' | 'error', message: string, timestamp: string }>) {
+function resetLogs(entries: Array<{ type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }>) {
   logs.value = []
   logKeys.value = new Set()
   for (const entry of entries) appendLog(entry)
 }
 
-function logCategoryLabel(log: { type: 'info' | 'error', message: string }) {
+function resolveLogCategory(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
+  if (log.category) return log.category
   const text = log.message || ''
-  if (log.type === 'error' || /失败|错误|中断|断开|异常|取消|error/i.test(text)) return '错误'
-  if (/导出|保存|输出文件|write/i.test(text)) return '导出'
-  if (/翻译|文本块|chunk|tokens|模型|术语表|风格/i.test(text)) return '翻译'
-  if (/提取|解析|SRT|字幕|初始化|队列|状态变更|创建|加载/i.test(text)) return '系统'
-  return '过程'
+  if (log.type === 'error' || /失败|错误|中断|断开|异常|取消|error/i.test(text)) return 'error'
+  if (/导出|保存|输出文件|write/i.test(text)) return 'export'
+  if (/翻译|文本块|chunk|tokens|模型|术语表|风格/i.test(text)) return 'translation'
+  if (/提取|解析|SRT|字幕|初始化|队列|状态变更|创建|加载/i.test(text)) return 'system'
+  return 'process'
 }
 
-function logBadgeColor(log: { type: 'info' | 'error', message: string }) {
-  switch (logCategoryLabel(log)) {
-    case '错误':
+function logCategoryLabel(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
+  switch (resolveLogCategory(log)) {
+    case 'error':
+      return '错误'
+    case 'export':
+      return '导出'
+    case 'translation':
+      return '翻译'
+    case 'system':
+      return '系统'
+    default:
+      return '过程'
+  }
+}
+
+function logBadgeColor(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
+  switch (resolveLogCategory(log)) {
+    case 'error':
       return 'error'
-    case '导出':
+    case 'export':
       return 'success'
-    case '翻译':
+    case 'translation':
       return 'primary'
-    case '系统':
+    case 'system':
       return 'warning'
     default:
       return 'neutral'
   }
 }
 
-function logItemClass(log: { type: 'info' | 'error', message: string }) {
-  switch (logCategoryLabel(log)) {
-    case '错误':
+function logItemClass(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
+  switch (resolveLogCategory(log)) {
+    case 'error':
       return 'border-red-500/20 bg-red-500/10'
-    case '导出':
+    case 'export':
       return 'border-emerald-500/20 bg-emerald-500/10'
-    case '翻译':
+    case 'translation':
       return 'border-primary-500/20 bg-primary-500/10'
-    case '系统':
+    case 'system':
       return 'border-amber-500/20 bg-amber-500/10'
     default:
       return 'border-white/10 bg-white/5'
   }
 }
 
-function logMessageClass(log: { type: 'info' | 'error', message: string }) {
-  switch (logCategoryLabel(log)) {
-    case '错误':
+function logMessageClass(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
+  switch (resolveLogCategory(log)) {
+    case 'error':
       return 'text-red-300'
-    case '导出':
+    case 'export':
       return 'text-emerald-300'
-    case '翻译':
+    case 'translation':
       return 'text-primary-200'
-    case '系统':
+    case 'system':
       return 'text-amber-200'
     default:
       return 'text-gray-300'
@@ -417,6 +433,7 @@ onMounted(async () => {
     if (historyLogs.length > 0) {
       resetLogs(historyLogs.map((log: any) => ({
         type: log.level === 'error' ? 'error' : 'info',
+        category: log.category || undefined,
         message: log.message,
         timestamp: new Date(log.createdAt).toLocaleTimeString()
       })))
@@ -479,6 +496,7 @@ onMounted(async () => {
           const currentStepName = stepNames[data.step] || data.step
           appendLog({
             type: data.step === 'error' ? 'error' : 'info',
+            category: data.step === 'error' ? 'error' : 'system',
             message: data.step === 'error' ? '状态变更: 任务失败' : `状态变更: ${currentStepName}`,
             timestamp: new Date().toLocaleTimeString()
           })
@@ -488,6 +506,7 @@ onMounted(async () => {
       if (data.log) {
         appendLog({
           type: data.step === 'error' || data.log.includes('!!!') ? 'error' : 'info',
+          category: data.category || undefined,
           message: data.log,
           timestamp: new Date().toLocaleTimeString()
         })

@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
 
   const db = useDb()
   const rows = db.prepare(`
-    SELECT id, task_id, step, level, message, created_at
+    SELECT id, task_id, step, category, level, message, created_at
     FROM task_logs
     WHERE task_id = ?
     ORDER BY id ASC
@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
       id: row.id,
       taskId: row.task_id,
       step: row.step,
+      category: row.category || 'system',
       level: row.level,
       message: row.message,
       createdAt: row.created_at
