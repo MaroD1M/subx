@@ -11,14 +11,14 @@
     <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 p-4 sm:p-5 space-y-5">
       <div class="flex items-center justify-between gap-3">
         <div>
-          <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">模型与连接</p>
+          <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">AI 连接</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">填写密钥、接口地址与默认模型。</p>
         </div>
         <UButton label="接口说明" variant="link" color="primary" size="xs" class="p-0 font-bold" @click="isGuideOpen = true" />
       </div>
 
       <div class="space-y-1">
-        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">OpenAI API 密钥</label>
-
+        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">API 密钥</label>
         <UInput v-model="config.apiKey" type="password" placeholder="sk-..." icon="i-lucide-key" class="w-full" @blur="tryFetchModels" />
       </div>
 
@@ -30,13 +30,13 @@
         <div class="space-y-2">
           <div class="flex gap-2">
             <USelect v-if="modelItems.length && !useManualModelInput" v-model="config.defaultModel" :items="modelItems" class="flex-1 min-w-0" :ui="{ width: 'w-full' }" />
-            <UInput v-else v-model="config.defaultModel" placeholder="手动输入模型名，例如 gpt-4o-mini" class="flex-1" />
-            <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="sm" :loading="fetchingModels" @click="tryFetchModels" title="获取模型列表" />
+            <UInput v-else v-model="config.defaultModel" placeholder="例如 gpt-4o-mini" class="flex-1" />
+            <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="sm" :loading="fetchingModels" title="获取模型列表" @click="tryFetchModels" />
           </div>
           <div class="flex items-center justify-between gap-3 p-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40">
             <div class="space-y-0.5">
               <p class="text-xs font-medium text-gray-700 dark:text-gray-300">手动填写模型名称</p>
-              <p class="text-[11px] text-gray-500 dark:text-gray-400">开启后跳过模型列表，直接输入模型 ID。</p>
+              <p class="text-[11px] text-gray-500 dark:text-gray-400">开启后直接输入模型 ID，不依赖模型列表。</p>
             </div>
             <USwitch v-model="useManualModelInput" />
           </div>
@@ -49,7 +49,8 @@
 
     <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 p-4 sm:p-5 space-y-5">
       <div>
-        <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">翻译默认参数</p>
+        <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">默认翻译行为</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">这些设置会作为新任务的默认值。</p>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -59,6 +60,20 @@
         <UFormField label="输出模式">
           <USelect v-model="config.outputMode" :items="outputModeItems" class="w-full" />
         </UFormField>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <UFormField label="翻译模式">
+          <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
+        </UFormField>
+
+        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3 flex items-center justify-between gap-3">
+          <div class="space-y-0.5">
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">未翻译即失败</p>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">发现未翻译片段时直接阻止导出，优先保证结果可靠。</p>
+          </div>
+          <USwitch v-model="config.failOnUntranslated" @click.stop />
+        </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
@@ -84,39 +99,17 @@
         >
           <div class="space-y-0.5">
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">高级设置</p>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400">兼容性与高级调试选项，默认可保持关闭。</p>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">仅在需要兼容性排查时使用。</p>
           </div>
-          <UIcon
-            name="i-lucide-chevron-down"
-            class="w-4 h-4 text-gray-400 transition-transform"
-            :class="advancedOpen ? 'rotate-180' : ''"
-          />
+          <UIcon :name="advancedOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="w-4 h-4 text-gray-400" />
         </button>
 
-        <div v-if="advancedOpen" class="border-t border-gray-100 dark:border-gray-800 p-3.5 space-y-3">
-          <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5 space-y-2">
-            <div class="space-y-0.5">
-              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">翻译返回模式</label>
-              <p class="text-[11px] text-gray-500 dark:text-gray-400">默认推荐非流式，兼容性更好。流式仅适合少数接口稳定的场景。</p>
-            </div>
-            <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
-          </div>
-
-          <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5">
-            <div class="flex items-center justify-between gap-3 cursor-pointer" @click="config.failOnUntranslated = !config.failOnUntranslated">
-              <div class="space-y-0.5">
-                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">翻译失败时终止导出</label>
-                <p class="text-[11px] text-gray-500 dark:text-gray-400">推荐开启。若检测到空译文、原文照抄或疑似未翻译，将直接报错并阻止生成错误双语字幕。</p>
-              </div>
-              <USwitch v-model="config.failOnUntranslated" @click.stop />
-            </div>
-          </div>
-
+        <div v-if="advancedOpen" class="px-3.5 pb-3.5 pt-0 space-y-3">
           <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5" :class="config.translationMode !== 'stream' ? 'opacity-60' : ''">
-            <div class="flex items-center justify-between gap-3 cursor-pointer" @click="toggleStreamUsage">
+            <div class="flex items-center justify-between gap-3">
               <div class="space-y-0.5">
                 <label class="text-sm font-medium text-gray-700 dark:text-gray-300">流式 Token 统计</label>
-                <p class="text-[11px] text-gray-500 dark:text-gray-400">仅在流式模式下生效，用于记录流式返回中的 Token 使用量。兼容性较弱，默认建议关闭。</p>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400">仅在流式模式下生效，兼容性较弱，默认建议关闭。</p>
               </div>
               <USwitch v-model="config.streamUsage" :disabled="config.translationMode !== 'stream'" @click.stop />
             </div>
@@ -283,20 +276,15 @@ function confirmCloseWithoutSaving() {
   emit('close')
 }
 
-function toggleStreamUsage() {
-  if (config.value.translationMode !== 'stream') return
-  config.value.streamUsage = !config.value.streamUsage
-}
-
 async function save() {
   pending.value = true
   try {
     await $fetch('/api/config', { method: 'PUT', body: { ...config.value } })
-    toast.add({ title: '成功', description: '设置已保存', color: 'success' })
+    toast.add({ title: '保存成功', description: '设置已保存', color: 'success' })
     initialSnapshot.value = currentSnapshot.value
     emit('close')
   } catch (e: any) {
-    toast.add({ title: '错误', description: e?.data?.message || e?.message || '无法保存设置，请检查登录状态', color: 'danger' })
+    toast.add({ title: '保存失败', description: e?.data?.message || e?.message || '无法保存设置，请检查登录状态', color: 'danger' })
   } finally {
     pending.value = false
   }

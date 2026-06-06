@@ -276,10 +276,10 @@ async function save() {
     await $fetch('/api/config', { method: 'PUT', body: { mediaRoots: roots } })
     await refresh()
     config.value = data.value || config.value
-    toast.add({ title: '成功', description: '媒体库设置已保存', color: 'success' })
+    toast.add({ title: '保存成功', description: '媒体库设置已保存', color: 'success' })
     navigateTo('/')
   } catch (e: any) {
-    toast.add({ title: '错误', description: e?.data?.message || e?.message || '无法保存媒体库设置', color: 'danger' })
+    toast.add({ title: '保存失败', description: e?.data?.message || e?.message || '无法保存媒体库设置', color: 'danger' })
   } finally {
     pending.value = false
   }

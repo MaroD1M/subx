@@ -39,14 +39,6 @@
 
         <USeparator />
 
-        <div v-if="connectionBanner" class="rounded-2xl border p-4 flex items-start gap-3" :class="connectionBannerClass">
-          <UIcon :name="connectionBanner.icon" class="w-5 h-5 mt-0.5 shrink-0" :class="connectionBanner.iconClass" />
-          <div class="space-y-1">
-            <p class="text-sm font-bold" :class="connectionBanner.titleClass">{{ connectionBanner.title }}</p>
-            <p class="text-xs leading-relaxed" :class="connectionBanner.textClass">{{ connectionBanner.message }}</p>
-          </div>
-        </div>
-
         <div class="grid grid-cols-2 lg:grid-cols-5 gap-6">
           <div class="space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">媒体库</span>
@@ -112,44 +104,79 @@
         <div class="flex items-center justify-between pt-4 gap-3 flex-wrap">
           <div class="flex items-center gap-3 flex-wrap">
             <UButton v-if="task.step === 'done'" label="下载结果" icon="i-lucide-download" color="primary" @click="downloadSrt" />
-            <UButton v-if="task.step === 'done'" label="返回工作区" icon="i-lucide-check-circle" color="secondary" to="/" />
+            <UButton v-if="task.step === 'done'" label="返回首页" icon="i-lucide-check-circle" color="secondary" to="/" />
             <UButton v-else-if="task.step === 'error'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
             <UButton v-else label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
           </div>
-          <UButton v-if="task.step === 'done'" :label="showResponses ? '隐藏 Token 统计' : '查看 Token 统计'" icon="i-lucide-chart-column-big" color="neutral" variant="ghost" @click="showResponses = !showResponses" />
         </div>
 
-        <div v-if="showResponses && task.step === 'done'" class="rounded-2xl bg-gray-950 text-gray-100 p-4 ring-1 ring-white/10 space-y-4">
-          <div v-if="responsesLoading" class="flex items-center gap-2 text-xs text-gray-400">
-            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载 Token 统计...
-          </div>
-          <div v-else-if="responsesSummary" class="space-y-4">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">分块数</span><p class="text-sm font-medium text-gray-100">{{ responsesSummary.totalChunks }}</p></div>
-              <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输入 Tokens</span><p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p></div>
-              <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
-              <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
-            </div>
+        <details v-if="showDiagnosticsSection" class="rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white/70 dark:bg-gray-950/60 p-4">
+          <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
             <div>
-              <div class="max-h-48 overflow-y-auto custom-scrollbar">
-              <table class="w-full text-left">
-                <thead>
-                  <tr class="text-gray-600 text-[10px] uppercase"><th class="pb-2 pr-4">块</th><th class="pb-2 pr-4">模型</th><th class="pb-2 pr-4">输入</th><th class="pb-2 pr-4">输出</th><th class="pb-2">合计</th></tr>
-                </thead>
-                <tbody class="text-gray-400">
-                  <tr v-for="r in responsesRecords" :key="r.id" class="border-t border-gray-800/50">
-                    <td class="py-1.5 pr-4 text-gray-500">#{{ r.chunk_index + 1 }}</td>
-                    <td class="py-1.5 pr-4 text-gray-300">{{ r.model }}</td>
-                    <td class="py-1.5 pr-4 text-amber-400">{{ (r.prompt_tokens || 0).toLocaleString() }}</td>
-                    <td class="py-1.5 pr-4 text-emerald-400">{{ (r.completion_tokens || 0).toLocaleString() }}</td>
-                    <td class="py-1.5 text-primary-400">{{ (r.total_tokens || 0).toLocaleString() }}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">诊断信息</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">连接状态、翻译模式与 Token 统计默认折叠显示。</p>
+            </div>
+            <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-400" />
+          </summary>
+
+          <div class="mt-4 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3">
+                <p class="text-[10px] uppercase font-bold tracking-widest text-neutral-500">翻译模式</p>
+                <p class="mt-1 text-sm font-medium text-gray-700 dark:text-gray-300">{{ translationModeLabel }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3">
+                <p class="text-[10px] uppercase font-bold tracking-widest text-neutral-500">连接状态</p>
+                <p class="mt-1 text-sm font-medium text-gray-700 dark:text-gray-300">{{ connectionBanner?.title || '无' }}</p>
+              </div>
+            </div>
+
+            <div v-if="connectionBanner" class="rounded-2xl border p-4 flex items-start gap-3" :class="connectionBannerClass">
+              <UIcon :name="connectionBanner.icon" class="w-5 h-5 mt-0.5 shrink-0" :class="connectionBanner.iconClass" />
+              <div class="space-y-1">
+                <p class="text-sm font-bold" :class="connectionBanner.titleClass">{{ connectionBanner.title }}</p>
+                <p class="text-xs leading-relaxed" :class="connectionBanner.textClass">{{ connectionBanner.message }}</p>
+              </div>
+            </div>
+
+            <div v-if="task.step === 'done'" class="space-y-3">
+              <div class="flex items-center justify-between">
+                <UButton :label="showResponses ? '隐藏 Token 统计' : '查看 Token 统计'" icon="i-lucide-chart-column-big" color="neutral" variant="ghost" @click="showResponses = !showResponses" />
+              </div>
+
+              <div v-if="showResponses" class="rounded-2xl bg-gray-950 text-gray-100 p-4 ring-1 ring-white/10 space-y-4">
+                <div v-if="responsesLoading" class="flex items-center gap-2 text-xs text-gray-400">
+                  <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载 Token 统计...
+                </div>
+                <div v-else-if="responsesSummary" class="space-y-4">
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">分块数</span><p class="text-sm font-medium text-gray-100">{{ responsesSummary.totalChunks }}</p></div>
+                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输入 Tokens</span><p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p></div>
+                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
+                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
+                  </div>
+                  <div class="max-h-48 overflow-y-auto custom-scrollbar">
+                    <table class="w-full text-left">
+                      <thead>
+                        <tr class="text-gray-600 text-[10px] uppercase"><th class="pb-2 pr-4">块</th><th class="pb-2 pr-4">模型</th><th class="pb-2 pr-4">输入</th><th class="pb-2 pr-4">输出</th><th class="pb-2">合计</th></tr>
+                      </thead>
+                      <tbody class="text-gray-400">
+                        <tr v-for="r in responsesRecords" :key="r.id" class="border-t border-gray-800/50">
+                          <td class="py-1.5 pr-4 text-gray-500">#{{ r.chunk_index + 1 }}</td>
+                          <td class="py-1.5 pr-4 text-gray-300">{{ r.model }}</td>
+                          <td class="py-1.5 pr-4 text-amber-400">{{ (r.prompt_tokens || 0).toLocaleString() }}</td>
+                          <td class="py-1.5 pr-4 text-emerald-400">{{ (r.completion_tokens || 0).toLocaleString() }}</td>
+                          <td class="py-1.5 text-primary-400">{{ (r.total_tokens || 0).toLocaleString() }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div v-else class="text-xs text-gray-400">暂无可用统计。</div>
               </div>
             </div>
           </div>
-        </div>
+        </details>
       </div>
     </div>
   </div>
@@ -177,6 +204,7 @@ const showResponses = ref(false)
 const responsesLoading = ref(false)
 const responsesRecords = ref([])
 const responsesSummary = ref(null)
+const showDiagnosticsSection = computed(() => !!connectionBanner.value || task.value.step === 'done')
 const cancelling = ref(false)
 const toast = useToast()
 const logContainer = ref(null)
@@ -217,9 +245,9 @@ async function cancelTask() {
     task.value.currentText = null
     appendLog({ type: 'error', message: '任务已被手动取消', timestamp: new Date().toLocaleTimeString() })
     if (eventSource.value) eventSource.value.close()
-    toast.add({ title: '已取消', description: '任务已成功取消', color: 'success' })
+    toast.add({ title: '取消成功', description: '任务已取消', color: 'success' })
   } catch {
-    toast.add({ title: '错误', description: '无法取消任务', color: 'error' })
+    toast.add({ title: '取消失败', description: '无法取消任务', color: 'error' })
   } finally {
     cancelling.value = false
   }
@@ -395,6 +423,8 @@ const connectionBannerClass = computed(() => {
       return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
   }
 })
+
+const translationModeLabel = computed(() => task.value.translationMode === 'stream' ? '流式' : '非流式')
 
 const stepIcon = computed(() => {
   switch (task.value.step) {

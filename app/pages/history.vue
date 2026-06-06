@@ -4,7 +4,7 @@
       <div class="space-y-2">
         <UBreadcrumb :links="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '历史', icon: 'i-lucide-history' }]" />
         <h2 class="text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">翻译历史</h2>
-        <p class="text-neutral-500 max-w-2xl leading-relaxed">查看任务结果与历史记录。</p>
+        <p class="text-neutral-500 max-w-2xl leading-relaxed">查看任务结果、失败原因与历史日志。</p>
       </div>
       <div class="flex items-center gap-2 md:pb-0.5">
         <UButton label="返回首页" variant="outline" color="neutral" icon="i-lucide-arrow-left" to="/" />
@@ -16,35 +16,33 @@
       <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-top', th: 'whitespace-nowrap', tr: 'group' }">
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
-            <div class="min-w-0">
-              <div class="flex items-start gap-2">
-                <p class="min-w-0 flex-1 text-sm font-medium text-gray-800 dark:text-gray-100 break-all" :class="isExpanded(row.original.taskId) ? '' : 'line-clamp-2'">
-                  {{ row.original.filePath }}
-                </p>
-                <UButton
-                  icon="i-lucide-copy"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  class="shrink-0 opacity-70 hover:opacity-100"
-                  title="复制完整路径"
-                  @click="copyPath(row.original.filePath)"
-                />
+            <div class="flex items-start gap-2">
+              <div class="min-w-0 flex-1 space-y-1">
+                <p class="text-sm font-medium text-gray-800 dark:text-gray-100 break-all">{{ fileName(row.original.filePath) }}</p>
+                <div class="flex items-center gap-2 flex-wrap text-[11px] text-gray-500 dark:text-gray-400">
+                  <span>{{ row.original.rootName || '默认媒体库' }}</span>
+                  <span class="text-[10px] text-gray-300 dark:text-gray-600">•</span>
+                  <span class="break-all" :class="isExpanded(row.original.taskId) ? '' : 'line-clamp-1'">{{ row.original.filePath }}</span>
+                  <UButton
+                    v-if="shouldShowExpand(row.original.filePath)"
+                    :label="isExpanded(row.original.taskId) ? '收起路径' : '展开路径'"
+                    size="xs"
+                    color="neutral"
+                    variant="ghost"
+                    class="h-5 px-1.5"
+                    @click="toggleExpanded(row.original.taskId)"
+                  />
+                </div>
               </div>
-              <div class="mt-1 flex items-center gap-2 flex-wrap">
-                <p class="text-[11px] text-gray-500 dark:text-gray-400">{{ row.original.rootName || '默认媒体库' }}</p>
-                <span class="text-[10px] text-gray-300 dark:text-gray-600">•</span>
-                <p class="text-[11px] text-gray-400 dark:text-gray-500 break-all">{{ fileName(row.original.filePath) }}</p>
-                <UButton
-                  v-if="shouldShowExpand(row.original.filePath)"
-                  :label="isExpanded(row.original.taskId) ? '收起' : '展开'"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  class="h-5 px-1.5"
-                  @click="toggleExpanded(row.original.taskId)"
-                />
-              </div>
+              <UButton
+                icon="i-lucide-copy"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                class="shrink-0 opacity-70 hover:opacity-100"
+                title="复制完整路径"
+                @click="copyPath(row.original.filePath)"
+              />
             </div>
           </div>
         </template>
@@ -54,7 +52,9 @@
         </template>
 
         <template #progress-cell="{ row }">
-          <div class="min-w-[62px] text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ row.original.progress }}%</div>
+          <div class="min-w-[62px] text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+            {{ isActiveStatus(row.original.status) ? `${row.original.progress}%` : '—' }}
+          </div>
         </template>
 
         <template #createdAt-cell="{ row }">
@@ -111,7 +111,7 @@ async function clearHistory() {
   isClearing.value = true
   try {
     const res = await $fetch('/api/tasks', { method: 'DELETE' })
-    toast.add({ title: '清理成功', description: `已清理 ${res.deletedCount} 条任务记录`, color: 'success' })
+    toast.add({ title: '清空成功', description: `已清理 ${res.deletedCount} 条任务记录`, color: 'success' })
     isClearModalOpen.value = false
     await refresh()
   } catch {
@@ -156,7 +156,7 @@ function toggleExpanded(taskId) {
 async function copyPath(filePath) {
   try {
     await navigator.clipboard.writeText(String(filePath || ''))
-    toast.add({ title: '复制成功', description: '完整路径已复制到剪贴板', color: 'success' })
+    toast.add({ title: '复制成功', description: '完整路径已复制', color: 'success' })
   } catch {
     toast.add({ title: '复制失败', description: '当前环境不支持复制路径', color: 'error' })
   }
@@ -180,8 +180,12 @@ function formatDate(value) {
   })
 }
 
+function isActiveStatus(status) {
+  return ['queued', 'extracting', 'parsing', 'translating', 'exporting'].includes(String(status || ''))
+}
+
 const columns = [
-  { accessorKey: 'filePath', header: '文件路径' },
+  { accessorKey: 'filePath', header: '文件' },
   { accessorKey: 'status', header: '状态' },
   { accessorKey: 'progress', header: '进度' },
   { accessorKey: 'createdAt', header: '创建时间' },
@@ -216,20 +220,5 @@ function statusColor(status) {
 .history-table :deep(th:nth-child(4)),
 .history-table :deep(td:nth-child(4)) {
   width: 148px;
-}
-
-.history-table :deep(th:last-child),
-.history-table :deep(td:last-child) {
-  width: 132px;
-  text-align: center;
-}
-
-.history-table :deep(th:last-child > div),
-.history-table :deep(td:last-child > div) {
-  justify-content: center;
-}
-
-.history-table :deep(td:last-child) {
-  vertical-align: middle;
 }
 </style>

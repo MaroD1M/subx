@@ -11,7 +11,7 @@
           <h3 class="text-[13px] font-semibold tracking-wide text-gray-700 dark:text-gray-300">文件浏览器</h3>
           <div class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
             <UButton label="媒体库" icon="i-lucide-library-big" color="neutral" variant="soft" size="xs" to="/media-libraries" />
-            <UButton label="折叠" icon="i-lucide-panel-left-close" color="neutral" variant="ghost" size="xs" title="折叠全部目录" @click="collapseAllDirectories" />
+            <UButton label="收起目录" icon="i-lucide-panel-left-close" color="neutral" variant="ghost" size="xs" title="收起全部目录" @click="collapseAllDirectories" />
             <UButton label="刷新" icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="xs" :loading="loadingFiles" @click="refreshFiles" title="刷新文件" />
             <UButton icon="i-lucide-folder-plus" color="neutral" variant="ghost" size="xs" title="新建文件夹" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="createFolder" />
             <UButton icon="i-lucide-pencil" color="neutral" variant="ghost" size="xs" title="重命名" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" :disabled="!selectedNode || !canMutateSelected" @click="renameNode" />
@@ -29,14 +29,8 @@
         </div>
       </div>
 
-      <div v-if="searchQuery" class="mb-3">
-        <div class="rounded-xl border border-primary-100 dark:border-primary-900/40 bg-primary-50/70 dark:bg-primary-950/20 px-3 py-2 flex flex-wrap items-center gap-2 justify-between">
-          <div class="min-w-0">
-            <p class="text-[10px] uppercase tracking-wider text-primary-500">筛选中</p>
-            <p class="text-xs text-gray-700 dark:text-gray-300 break-all">当前关键字：{{ searchQuery }}</p>
-          </div>
-          <UButton label="清除" size="2xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="searchQuery = ''" />
-        </div>
+      <div v-if="searchQuery" class="mb-3 flex justify-end">
+        <UButton label="清除筛选" size="2xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="searchQuery = ''" />
       </div>
 
       <div class="relative flex-1 min-h-0">
@@ -50,17 +44,16 @@
             <div v-if="isRootUnavailable" class="space-y-3">
               <p class="text-sm font-medium text-amber-600 dark:text-amber-400">当前媒体库暂不可访问</p>
               <p class="text-xs text-neutral-400 max-w-xs">{{ rootAccessMessage }}</p>
-              <p class="text-[11px] text-neutral-400">请检查挂载路径与目录权限。</p>
+
               <div class="flex items-center justify-center gap-2 flex-wrap">
-                <UButton label="前往媒体库管理" size="xs" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
-                <UButton label="重新刷新" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :loading="loadingFiles" @click="refreshFiles" />
+                <UButton label="管理媒体库" size="xs" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
+                <UButton label="刷新列表" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :loading="loadingFiles" @click="refreshFiles" />
               </div>
             </div>
             <div v-else class="space-y-3">
-              <p class="text-sm font-medium text-gray-600 dark:text-gray-300">当前媒体库暂无可显示内容</p>
-              
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-300">当前媒体库暂无内容</p>
               <div class="flex items-center justify-center gap-2 flex-wrap">
-                <UButton label="刷新文件列表" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :loading="loadingFiles" @click="refreshFiles" />
+                <UButton label="刷新列表" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" :loading="loadingFiles" @click="refreshFiles" />
                 <UButton label="管理媒体库" size="xs" color="primary" variant="soft" icon="i-lucide-library-big" to="/media-libraries" />
               </div>
             </div>
@@ -135,9 +128,7 @@
             <div class="relative flex-1 min-h-0">
               <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
                 <div class="space-y-3 p-0.5">
-                  <div class="space-y-1">
-                    <p class="section-title">基础设置</p>
-                  </div>
+
                   <UFormField label="翻译风格">
                     <USelect v-model="options.stylePreset" :items="styleOptions" class="w-full" :ui="{ width: 'w-full' }" :disabled="options.outputMode === 'original'" />
                   </UFormField>
@@ -160,9 +151,7 @@
                 </div>
 
                 <div class="space-y-3 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
-                  <div class="space-y-1">
-                    <p class="section-title">字幕输出</p>
-                  </div>
+
                   <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     <UFormField label="字幕格式">
                       <USelect v-model="options.subtitleFormat" :items="subtitleFormatItems" class="w-full" />
@@ -179,7 +168,6 @@
             </div>
 
             <div class="mt-2 px-2.5 py-2.5 border border-gray-200/85 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/68 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.24)] shrink-0">
-              <p class="section-title mb-2">操作</p>
               <div class="flex gap-2.5">
                 <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
                 <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
@@ -194,7 +182,7 @@
           <div class="mx-auto w-fit p-4 bg-gray-50 dark:bg-gray-900 rounded-full">
             <UIcon name="i-lucide-file-video-2" class="w-12 h-12 text-neutral-300" />
           </div>
-          <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">当前未选择文件</h4>
+          <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">尚未选择文件</h4>
           <p class="text-sm text-neutral-500 leading-relaxed">请先在左侧选择一个视频或字幕文件。</p>
           
         </div>
@@ -418,9 +406,8 @@ const totalSubtitleEntries = ref(0)
 const selectedTrackIndex = ref<number | null>(null)
 const launching = ref(false)
 const toastText = {
-  success: '操作成功',
-  error: '操作失败',
-  hint: '提示'
+  success: '成功',
+  error: '失败',
 }
 
 const styleOptions = STYLE_PRESETS.map(s => ({ label: s.name, value: s.id }))
@@ -577,7 +564,7 @@ async function submitFolderDialog() {
         return
       }
       await $fetch('/api/files/rename', { method: 'POST', body: { path: selectedNode.value.path, newName: value, rootId: selectedNode.value.rootId || activeRootId.value } })
-      toast.add({ title: toastText.success, description: '重命名成功', color: 'success' })
+      toast.add({ title: '重命名成功', description: '名称已更新', color: 'success' })
       selectedNode.value = null
       selectedFile.value = null
       tracks.value = []
@@ -597,7 +584,7 @@ async function confirmDeleteNode() {
   deleteDialogLoading.value = true
   try {
     await $fetch('/api/files/delete', { method: 'POST', body: { path: selectedNode.value.path, rootId: selectedNode.value.rootId || activeRootId.value } })
-    toast.add({ title: toastText.success, description: '删除成功', color: 'success' })
+    toast.add({ title: '删除成功', description: '所选内容已删除', color: 'success' })
     deleteDialogOpen.value = false
     selectedNode.value = null
     selectedFile.value = null
@@ -626,12 +613,11 @@ async function startTask(silent = false) {
         ...options.value
       }
     })
-    toast.add({ title: toastText.success, description: silent ? '已加入队列，可前往「任务历史」查看进度' : '正在打开任务详情', color: 'success' })
+    toast.add({ title: silent ? '已加入队列' : '任务已创建', description: silent ? '可前往「任务历史」查看进度' : '正在打开任务详情', color: 'success' })
     if (silent) {
       selectedFile.value = null
       tracks.value = []
       subtitlePreview.value = []
-      toast.add({ title: toastText.hint, description: '可点击右上角「任务历史」查看进度', color: 'neutral' })
     } else {
       navigateTo(`/task/${res.taskId}`)
     }
