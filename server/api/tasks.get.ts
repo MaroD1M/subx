@@ -1,6 +1,11 @@
 import { useDb } from '../utils/db'
 import { getMediaRoot } from '../utils/mediaRoots'
 
+function toUtcIsoString(value: string | null | undefined) {
+  if (!value) return value || ''
+  return value.includes('T') ? value : value.replace(' ', 'T') + 'Z'
+}
+
 export default defineEventHandler(async () => {
   const db = useDb()
   const rows = db.prepare(`
@@ -30,8 +35,8 @@ export default defineEventHandler(async () => {
       outputMode: task.output_mode,
       totalChunks: task.total_chunks,
       completedChunks: task.done_chunks,
-      createdAt: task.created_at,
-      updatedAt: task.updated_at
+      createdAt: toUtcIsoString(task.created_at),
+      updatedAt: toUtcIsoString(task.updated_at)
     }
   }))
 

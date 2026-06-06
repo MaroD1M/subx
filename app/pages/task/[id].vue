@@ -37,6 +37,26 @@
           </div>
         </div>
 
+        <div v-if="task.step === 'error' && failureSummary" class="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/90 dark:bg-amber-900/20 p-4 space-y-3">
+          <div class="flex items-start gap-3">
+            <UIcon :name="failureSummary.icon" class="w-5 h-5 text-amber-500 mt-0.5" />
+            <div class="min-w-0 space-y-1">
+              <p class="text-sm font-bold text-amber-900 dark:text-amber-200">{{ failureSummary.title }}</p>
+              <p class="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">{{ failureSummary.summary }}</p>
+            </div>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-3 text-xs">
+            <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+              <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">失败类型</p>
+              <p class="mt-1 font-medium text-amber-900 dark:text-amber-100">{{ failureSummary.typeLabel }}</p>
+            </div>
+            <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2 sm:col-span-2">
+              <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">关键细节</p>
+              <p class="mt-1 font-medium text-amber-900 dark:text-amber-100 break-words">{{ failureSummary.detail }}</p>
+            </div>
+          </div>
+        </div>
+
         <USeparator />
 
         <div class="grid grid-cols-2 lg:grid-cols-5 gap-6">
@@ -72,11 +92,22 @@
               </div>
               <p class="text-xs text-gray-500 dark:text-gray-400">仅记录任务处理过程，不包含页面实时连接状态。</p>
             </div>
-            <UBadge color="neutral" variant="subtle">共 {{ logs.length }} 条日志</UBadge>
+            <div class="flex items-center gap-2 self-start sm:self-auto">
+              <UBadge color="neutral" variant="subtle">显示 {{ displayedLogs.length }} / {{ logs.length }} 条</UBadge>
+              <UButton
+                v-if="logs.length > compactLogLimit"
+                :label="showAllLogs ? '收起次要日志' : '显示全部日志'"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                class="h-7 px-2"
+                @click="showAllLogs = !showAllLogs"
+              />
+            </div>
           </div>
           <div class="space-y-3 h-56 overflow-y-auto custom-scrollbar pr-1 sm:pr-2" ref="logContainer">
             <div
-              v-for="(log, i) in logs"
+              v-for="(log, i) in displayedLogs"
               :key="i"
               class="rounded-2xl border px-3 py-3 flex flex-col sm:flex-row items-start gap-3 shadow-sm"
               :class="logItemClass(log)"
@@ -91,7 +122,7 @@
             </div>
             <div v-if="task.currentText" class="rounded-2xl border border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-3 flex flex-col sm:flex-row items-start gap-3 shadow-sm">
               <div class="flex w-full sm:w-auto flex-row sm:flex-col items-center sm:items-start justify-between gap-2 shrink-0 sm:min-w-[78px]">
-                <ClientOnly><span class="text-[10px] text-gray-500 dark:text-gray-400 leading-none">{{ new Date().toLocaleTimeString() }}</span></ClientOnly>
+                <ClientOnly><span class="text-[10px] text-gray-500 dark:text-gray-400 leading-none">{{ currentTextTimestamp || formatTime() }}</span></ClientOnly>
                 <UBadge size="sm" variant="soft" color="success" class="shrink-0">实时进度</UBadge>
               </div>
               <div class="min-w-0 w-full flex-1 border-t sm:border-t-0 sm:border-l border-emerald-500/20 pt-3 sm:pt-0 sm:pl-3">
@@ -211,9 +242,23 @@ const logContainer = ref(null)
 const eventSource = ref(null)
 const reconnectTimer = ref(null)
 const logs = ref<Array<{ type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }>>([])
+const showAllLogs = ref(false)
+const compactLogLimit = 12
+const currentTextTimestamp = ref('')
 const logKeys = ref(new Set<string>())
 const connectionState = ref<'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'history-only' | 'idle'>('connecting')
 const reconnectStatusText = ref('')
+
+function formatClock(date = new Date()) {
+  return date.toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+function formatTime(value?: string | null) {
+  if (!value) return formatClock()
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return formatClock(date)
+}
 
 async function fetchResponses() {
   responsesLoading.value = true
@@ -243,7 +288,7 @@ async function cancelTask() {
     task.value.step = 'error'
     task.value.error = '用户取消任务'
     task.value.currentText = null
-    appendLog({ type: 'error', message: '任务已被手动取消', timestamp: new Date().toLocaleTimeString() })
+    appendLog({ type: 'error', message: '任务已被手动取消', timestamp: formatClock(), category: 'error' })
     if (eventSource.value) eventSource.value.close()
     toast.add({ title: '取消成功', description: '任务已取消', color: 'success' })
   } catch {
@@ -311,6 +356,28 @@ function logBadgeColor(log: { type: 'info' | 'error', message: string, category?
       return 'neutral'
   }
 }
+
+const displayedLogs = computed(() => {
+  if (showAllLogs.value || logs.value.length <= compactLogLimit) return logs.value
+
+  const importantIndices = new Set<number>()
+  for (let i = 0; i < logs.value.length; i++) {
+    const log = logs.value[i]
+    const category = resolveLogCategory(log)
+    if (log.type === 'error' || category === 'system' || category === 'export') {
+      importantIndices.add(i)
+    }
+  }
+
+  const recentStart = Math.max(0, logs.value.length - 4)
+  for (let i = recentStart; i < logs.value.length; i++) importantIndices.add(i)
+
+  return logs.value.filter((_, index) => importantIndices.has(index))
+})
+
+watch(() => task.value.currentText, (value) => {
+  if (value) currentTextTimestamp.value = formatTime()
+})
 
 function logItemClass(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
   switch (resolveLogCategory(log)) {
@@ -426,6 +493,95 @@ const connectionBannerClass = computed(() => {
 
 const translationModeLabel = computed(() => task.value.translationMode === 'stream' ? '流式' : '非流式')
 
+function normalizeFailureMessage(message?: string | null) {
+  return String(message || '').replace(/^!!!\s*/, '').trim()
+}
+
+const failureSummary = computed(() => {
+  if (task.value.step !== 'error') return null
+
+  const sourceText = normalizeFailureMessage(task.value.error) || normalizeFailureMessage(logs.value.slice().reverse().find(log => log.type === 'error')?.message)
+  if (!sourceText) return null
+
+  if (sourceText.includes('[条目缺失]')) {
+    return {
+      icon: 'i-lucide-list-x',
+      title: '翻译返回不完整',
+      summary: '模型有响应，但缺少部分字幕条目。系统通常会自动重试缺失条目。',
+      typeLabel: '缺少条目',
+      detail: sourceText.replace('[条目缺失]', '').trim() || '部分字幕条目未返回'
+    }
+  }
+
+  if (sourceText.includes('[解析为空]')) {
+    return {
+      icon: 'i-lucide-file-search',
+      title: '返回内容无法解析',
+      summary: '模型返回了内容，但格式不符合预期，无法还原成逐条字幕。',
+      typeLabel: '解析异常',
+      detail: sourceText.replace('[解析为空]', '').trim() || '返回内容为空或格式异常'
+    }
+  }
+
+  if (sourceText.includes('[疑似拒答]')) {
+    return {
+      icon: 'i-lucide-shield-alert',
+      title: '模型疑似拒答或被拦截',
+      summary: '模型可能触发了安全策略，没有返回可用译文。',
+      typeLabel: '拒答/拦截',
+      detail: sourceText.replace('[疑似拒答]', '').trim() || '未产出可用译文'
+    }
+  }
+
+  if (sourceText.includes('[无有效译文]')) {
+    return {
+      icon: 'i-lucide-message-circle-warning',
+      title: '返回了内容，但没有有效译文',
+      summary: '模型可能输出了原文、空白内容，或输出内容不具备可用翻译价值。',
+      typeLabel: '无有效译文',
+      detail: sourceText.replace('[无有效译文]', '').trim() || '未检测到有效译文'
+    }
+  }
+
+  if (/鉴权|api key|unauthorized|authentication/i.test(sourceText)) {
+    return {
+      icon: 'i-lucide-key-round',
+      title: '鉴权配置异常',
+      summary: '请优先检查 API Key、供应商地址与模型配置是否正确。',
+      typeLabel: '鉴权失败',
+      detail: sourceText
+    }
+  }
+
+  if (/超时|timeout|timed out/i.test(sourceText)) {
+    return {
+      icon: 'i-lucide-timer-off',
+      title: '请求超时',
+      summary: '可能是网络波动、模型响应慢，或当前请求过大。',
+      typeLabel: '超时',
+      detail: sourceText
+    }
+  }
+
+  if (/网络|network|fetch failed|econnreset|enotfound/i.test(sourceText)) {
+    return {
+      icon: 'i-lucide-wifi-off',
+      title: '网络连接异常',
+      summary: '当前任务未能稳定连接模型服务。',
+      typeLabel: '网络异常',
+      detail: sourceText
+    }
+  }
+
+  return {
+    icon: 'i-lucide-circle-alert',
+    title: '任务执行失败',
+    summary: '请先看失败类型与关键细节，再决定是否重试或调整配置。',
+    typeLabel: '其他问题',
+    detail: sourceText
+  }
+})
+
 const stepIcon = computed(() => {
   switch (task.value.step) {
     case 'queued': return 'i-lucide-clock'
@@ -473,10 +629,10 @@ onMounted(async () => {
         type: log.level === 'error' ? 'error' : 'info',
         category: log.category || undefined,
         message: log.message,
-        timestamp: new Date(log.createdAt).toLocaleTimeString()
+        timestamp: formatTime(log.createdAt)
       })))
     } else if (initialTask?.status === 'error' && initialTask.error) {
-      resetLogs([{ type: 'error', message: `任务失败: ${initialTask.error}`, timestamp: new Date().toLocaleTimeString() }])
+      resetLogs([{ type: 'error', message: `任务失败: ${initialTask.error}`, timestamp: formatClock(), category: 'error' }])
       task.value.currentText = null
       connectionState.value = 'history-only'
     } else if (initialTask?.status === 'done') {
@@ -536,7 +692,7 @@ onMounted(async () => {
             type: data.step === 'error' ? 'error' : 'info',
             category: data.step === 'error' ? 'error' : 'system',
             message: data.step === 'error' ? '状态变更: 任务失败' : `状态变更: ${currentStepName}`,
-            timestamp: new Date().toLocaleTimeString()
+            timestamp: formatClock()
           })
         }
       }
@@ -546,7 +702,7 @@ onMounted(async () => {
           type: data.step === 'error' || data.log.includes('!!!') ? 'error' : 'info',
           category: data.category || undefined,
           message: data.log,
-          timestamp: new Date().toLocaleTimeString()
+          timestamp: formatClock()
         })
       }
     })
@@ -555,14 +711,14 @@ onMounted(async () => {
       es.close()
       if (isIntentionalClose) return
       if (task.value.step === 'done' || task.value.step === 'error') {
-    connectionState.value = 'history-only'
-    return
-  }
+        connectionState.value = 'history-only'
+        return
+      }
 
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000)
         reconnectAttempts++
-        appendLog({ type: 'info', message: `连接中断，${delay / 1000}s 后自动重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, timestamp: new Date().toLocaleTimeString() })
+        appendLog({ type: 'info', message: `连接中断，${delay / 1000}s 后自动重连 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, timestamp: formatClock() })
         if (reconnectTimer.value) clearTimeout(reconnectTimer.value)
         reconnectTimer.value = setTimeout(connectSSE, delay)
       } else {

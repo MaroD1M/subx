@@ -84,6 +84,8 @@ export interface FileNode {
   path: string
   isDir: boolean
   children?: FileNode[]
+  hasChildren?: boolean
+  loaded?: boolean
   rootId?: string
   rootName?: string
 }

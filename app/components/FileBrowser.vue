@@ -251,9 +251,9 @@ const folderDialogLoading = ref(false)
 const deleteDialogOpen = ref(false)
 const deleteDialogLoading = ref(false)
 
-const { data: files, refresh, pending: loadingFiles, error: filesError } = await useFetch('/api/files', {
-  query: computed(() => activeRootId.value ? { rootId: activeRootId.value } : {})
-})
+const files = ref<FileNode[]>([])
+const loadingFiles = ref(false)
+const filesError = ref<any>(null)
 
 const rootItems = computed(() => {
   const configured = Array.isArray(appConfig.value?.mediaRoots) ? [...appConfig.value.mediaRoots].filter((root: any) => root.enabled !== false && root.name && root.path).sort((a: any, b: any) => {
@@ -266,10 +266,14 @@ const rootItems = computed(() => {
   return [{ label: '默认媒体库', value: 'default' }]
 })
 
-watch(rootItems, (items) => {
+watch(rootItems, async (items) => {
   if (!items.length) return
-  if (!items.find((item: any) => item.value === activeRootId.value)) {
-    activeRootId.value = items[0].value
+  const nextRootId = items.find((item: any) => item.value === activeRootId.value)?.value || items[0].value
+  if (nextRootId !== activeRootId.value) {
+    activeRootId.value = nextRootId
+  }
+  if (!files.value.length && activeRootId.value) {
+    await loadRootNodes()
   }
 }, { immediate: true })
 
@@ -301,10 +305,7 @@ function filterNodes(nodes: FileNode[], keyword: string): FileNode[] {
     .filter(Boolean) as FileNode[]
 }
 
-const displayNodes = computed<FileNode[]>(() => {
-  const current = files.value || []
-  return filterNodes(current, searchQuery.value)
-})
+const displayNodes = computed<FileNode[]>(() => filterNodes(files.value || [], searchQuery.value))
 
 const selectedNodeKey = computed(() => {
   if (!selectedNode.value) return ''
@@ -357,15 +358,20 @@ function ensureExpandedForNode(node: FileNode) {
   setExpandedKeys(rootId, keys)
 }
 
-function toggleDirectory(node: FileNode) {
+async function toggleDirectory(node: FileNode) {
   if (!node.isDir) return
   const rootId = node.rootId || activeRootId.value || 'default'
   const key = buildNodeKey(node.path, rootId)
   const current = expandedTreeState.value[rootId] || []
-  const next = current.includes(key)
-    ? current.filter(item => item !== key)
-    : [...current, key]
-  setExpandedKeys(rootId, next)
+  const isOpen = current.includes(key)
+
+  if (isOpen) {
+    setExpandedKeys(rootId, current.filter(item => item !== key))
+    return
+  }
+
+  setExpandedKeys(rootId, [...current, key])
+  await loadDirectoryChildren(node)
 }
 
 function collapseAllDirectories() {
@@ -374,6 +380,41 @@ function collapseAllDirectories() {
 }
 
 
+async function loadRootNodes() {
+  if (!activeRootId.value) return
+  loadingFiles.value = true
+  filesError.value = null
+  try {
+    files.value = await $fetch('/api/files', { query: { rootId: activeRootId.value } })
+  } catch (e: any) {
+    filesError.value = e
+    files.value = []
+  } finally {
+    loadingFiles.value = false
+  }
+}
+
+function updateNodeTree(nodes: FileNode[], targetPath: string, updater: (node: FileNode) => FileNode): FileNode[] {
+  return nodes.map((node) => {
+    if (node.path === targetPath) return updater(node)
+    if (node.children?.length) {
+      return { ...node, children: updateNodeTree(node.children, targetPath, updater) }
+    }
+    return node
+  })
+}
+
+async function loadDirectoryChildren(node: FileNode) {
+  if (!node.isDir || node.loaded) return
+  const rootId = node.rootId || activeRootId.value
+  try {
+    const children = await $fetch('/api/files', { query: { rootId, path: node.path } })
+    files.value = updateNodeTree(files.value, node.path, current => ({ ...current, children, loaded: true, hasChildren: children.length > 0 }))
+  } catch (e: any) {
+    toast.add({ title: toastText.error, description: e?.data?.message || '无法加载目录内容', color: 'danger' })
+  }
+}
+
 async function handleRootChange() {
   searchQuery.value = ''
   selectedNode.value = null
@@ -381,11 +422,11 @@ async function handleRootChange() {
   tracks.value = []
   subtitlePreview.value = []
   totalSubtitleEntries.value = 0
-  await refresh()
+  await loadRootNodes()
 }
 
 async function refreshFiles() {
-  await refresh()
+  await loadRootNodes()
   if (filesError.value) {
     toast.add({ title: toastText.error, description: filesError.value.data?.message || '请检查媒体目录挂载和权限', color: 'danger' })
     return
@@ -396,7 +437,7 @@ async function refreshFiles() {
 watch(filesError, (err: any) => {
   if (!err) return
   toast.add({ title: toastText.error, description: err.data?.message || '请检查媒体目录挂载和权限', color: 'danger' })
-}, { immediate: true })
+})
 
 const tracks = ref<any[]>([])
 const pendingTracks = ref(false)
@@ -571,7 +612,7 @@ async function submitFolderDialog() {
       subtitlePreview.value = []
     }
     closeFolderDialog(true)
-    await refresh()
+    await loadRootNodes()
   } catch (e: any) {
     toast.add({ title: toastText.error, description: e?.data?.message || (folderDialogMode.value === 'create' ? '无法创建文件夹' : '无法重命名'), color: 'danger' })
   } finally {
@@ -590,7 +631,7 @@ async function confirmDeleteNode() {
     selectedFile.value = null
     tracks.value = []
     subtitlePreview.value = []
-    await refresh()
+    await loadRootNodes()
   } catch (e: any) {
     toast.add({ title: toastText.error, description: e?.data?.message || '无法删除目标', color: 'danger' })
   } finally {
@@ -682,7 +723,7 @@ const resizeHint = computed(() => {
   return ''
 })
 
-onMounted(() => {
+onMounted(async () => {
   if (import.meta.client) {
     const raw = localStorage.getItem(LAYOUT_STORAGE_KEY)
     if (raw) {

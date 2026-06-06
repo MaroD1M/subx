@@ -6,82 +6,118 @@ import { getMediaRoot, getMediaRoots } from '../utils/mediaRoots'
 
 const SUPPORTED_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.ts', '.srt', '.ass', '.ssa', '.vtt']
 
-async function scanRoot(root: MediaRoot): Promise<FileNode[]> {
-  const normalizedVideoDir = normalize(resolve(root.path))
+function isSupportedFile(name: string) {
+  const ext = name.substring(name.lastIndexOf('.')).toLowerCase()
+  return SUPPORTED_EXTENSIONS.includes(ext)
+}
+
+function isInsideRoot(rootPath: string, targetPath: string) {
+  const resolvedRoot = normalize(resolve(rootPath))
+  const resolvedTarget = normalize(resolve(targetPath))
+  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + '/') || resolvedTarget.startsWith(resolvedRoot + '\\')
+}
+
+async function readDirectoryNodes(root: MediaRoot, dirPath = ''): Promise<FileNode[]> {
+  const normalizedRoot = normalize(resolve(root.path))
 
   try {
-    await access(normalizedVideoDir, constants.R_OK)
+    await access(normalizedRoot, constants.R_OK)
   } catch (e: any) {
     throw createError({
       statusCode: 500,
-      message: `视频目录不可读: ${normalizedVideoDir}，请检查挂载路径和权限 (${e?.code || 'UNKNOWN'})`
+      message: `视频目录不可读: ${normalizedRoot}，请检查挂载路径和权限 (${e?.code || 'UNKNOWN'})`
     })
   }
 
-  async function scan(dir: string): Promise<FileNode[]> {
+  const absoluteDir = dirPath ? resolve(normalizedRoot, dirPath) : normalizedRoot
+  if (!isInsideRoot(normalizedRoot, absoluteDir)) {
+    throw createError({ statusCode: 403, message: '目录路径越界' })
+  }
+
+  let items: string[]
+  try {
+    items = await readdir(absoluteDir)
+  } catch (e: any) {
+    throw createError({
+      statusCode: 500,
+      message: `目录读取失败: ${dirPath || '/'} (${e?.code || 'UNKNOWN'})`
+    })
+  }
+
+  const nodes: FileNode[] = []
+
+  for (const item of items) {
+    if (item.startsWith('.')) continue
+    const fullPath = join(absoluteDir, item)
+
+    let stats
     try {
-      const items = await readdir(dir)
-      const nodes: FileNode[] = []
+      stats = await stat(fullPath)
+    } catch {
+      continue
+    }
 
-      for (const item of items) {
-        if (item.startsWith('.')) continue
-        const fullPath = join(dir, item)
-        const stats = await stat(fullPath)
-        const isDir = stats.isDirectory()
-        const ext = item.substring(item.lastIndexOf('.')).toLowerCase()
+    if (!isInsideRoot(normalizedRoot, fullPath)) continue
+    const relPath = relative(normalizedRoot, fullPath).replaceAll('\\', '/')
 
-        if (isDir) {
-          const children = await scan(fullPath)
-          nodes.push({
-            name: item,
-            path: relative(normalizedVideoDir, fullPath).replaceAll('\\', '/'),
-            isDir: true,
-            children,
-            rootId: root.id,
-            rootName: root.name
-          })
-        } else if (SUPPORTED_EXTENSIONS.includes(ext)) {
-          const relPath = relative(normalizedVideoDir, fullPath).replaceAll('\\', '/')
-          const resolved = normalize(resolve(normalizedVideoDir, relPath))
-          if (resolved.startsWith(normalizedVideoDir + '/') || resolved.startsWith(normalizedVideoDir + '\\') || resolved === normalizedVideoDir) {
-            nodes.push({
-              name: item,
-              path: relPath,
-              isDir: false,
-              rootId: root.id,
-              rootName: root.name
-            })
-          }
-        }
+    if (stats.isDirectory()) {
+      let hasChildren = false
+      try {
+        const childNames = await readdir(fullPath)
+        hasChildren = childNames.some(name => !name.startsWith('.'))
+      } catch {
+        hasChildren = false
       }
 
-      return nodes
-    } catch (e) {
-      console.error('Scan failed:', dir, e)
-      return []
+      nodes.push({
+        name: item,
+        path: relPath,
+        isDir: true,
+        children: [],
+        hasChildren,
+        loaded: false,
+        rootId: root.id,
+        rootName: root.name
+      })
+      continue
+    }
+
+    if (isSupportedFile(item)) {
+      nodes.push({
+        name: item,
+        path: relPath,
+        isDir: false,
+        rootId: root.id,
+        rootName: root.name
+      })
     }
   }
 
-  return scan(normalizedVideoDir)
+  nodes.sort((a, b) => {
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1
+    return a.name.localeCompare(b.name, 'zh-CN')
+  })
+
+  return nodes
 }
 
 export default defineEventHandler(async (event) => {
-  const { rootId } = getQuery(event) as { rootId?: string }
+  const { rootId, path } = getQuery(event) as { rootId?: string, path?: string }
 
   if (rootId) {
     const root = await getMediaRoot(rootId)
-    return scanRoot(root)
+    return readDirectoryNodes(root, path || '')
   }
 
   const roots = await getMediaRoots()
-  const scanned = await Promise.all(roots.map(scanRoot))
-
-  return scanned.map((children, index) => ({
-    name: roots[index].name,
+  return roots.map((root) => ({
+    name: root.name,
     path: '',
     isDir: true,
-    children,
-    rootId: roots[index].id,
-    rootName: roots[index].name
+    children: [],
+    hasChildren: true,
+    loaded: false,
+    rootId: root.id,
+    rootName: root.name
   }))
 })

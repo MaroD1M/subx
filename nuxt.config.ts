@@ -1,6 +1,6 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
-  devtools: { enabled: true },
+  devtools: { enabled: process.env.NODE_ENV !== 'production' },
 
   // Enable Nuxt 4 compatibility
   future: {
@@ -52,11 +52,23 @@ export default defineNuxtConfig({
 
   // Nitro server configuration
   nitro: {
-    experimental: {
-      openAPI: true
-    },
     externals: {
       external: ['better-sqlite3']
+    }
+  },
+
+  vite: {
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+            if (id.includes('/openai/')) return 'vendor-openai'
+            if (id.includes('/@nuxt/ui/') || id.includes('/@iconify-json/') || id.includes('/@nuxt/icon/')) return 'vendor-ui'
+            if (id.includes('/vue/') || id.includes('/vue-router/')) return 'vendor-vue'
+          }
+        }
+      }
     }
   },
 

@@ -3,11 +3,21 @@ import { existsSync } from 'fs'
 import { useDb } from './db'
 import type { AppConfig, MediaRoot } from '../../types'
 
+let lastLogCleanupAt = 0
+let configCache: AppConfig | null = null
+let configCacheAt = 0
+const CONFIG_CACHE_TTL_MS = 5000
+
 export const ConfigService = {
     /**
      * Get all configuration
      */
-    async getConfig(): Promise<AppConfig> {
+    async getConfig(forceFresh = false): Promise<AppConfig> {
+        const now = Date.now()
+        if (!forceFresh && configCache && now - configCacheAt < CONFIG_CACHE_TTL_MS) {
+            return { ...configCache, glossary: { ...configCache.glossary }, mediaRoots: Array.isArray(configCache.mediaRoots) ? [...configCache.mediaRoots] : [] }
+        }
+
         const db = useDb()
         const rows = db.prepare('SELECT key, value FROM config').all() as any[]
 
@@ -47,7 +57,14 @@ export const ConfigService = {
             }
         })
 
-        return config
+        configCache = {
+            ...config,
+            glossary: { ...config.glossary },
+            mediaRoots: Array.isArray(config.mediaRoots) ? [...config.mediaRoots] : []
+        }
+        configCacheAt = now
+
+        return { ...configCache, glossary: { ...configCache.glossary }, mediaRoots: Array.isArray(configCache.mediaRoots) ? [...configCache.mediaRoots] : [] }
     },
 
     /**
@@ -59,6 +76,15 @@ export const ConfigService = {
 
         const stmt = db.prepare('INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))')
         stmt.run(key, valStr)
+        configCache = null
+        configCacheAt = 0
+    },
+
+    async cleanupLogsIfNeeded() {
+        const now = Date.now()
+        if (now - lastLogCleanupAt < 6 * 60 * 60 * 1000) return
+        lastLogCleanupAt = now
+        await this.cleanupLogs()
     },
 
     /**

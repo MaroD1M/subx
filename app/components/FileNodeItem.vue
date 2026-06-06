@@ -30,6 +30,8 @@
     </div>
 
     <div v-if="isOpen && node.isDir" class="ml-3 mt-1 space-y-1 border-l border-gray-100 dark:border-gray-800">
+      <div v-if="node.hasChildren && !node.loaded" class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">加载中...</div>
+      <div v-else-if="node.loaded && !node.children?.length" class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">空目录</div>
       <template v-for="child in node.children" :key="`${child.rootId || 'default'}:${child.path}`">
         <FileNodeItem
           :node="child"

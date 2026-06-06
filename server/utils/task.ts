@@ -80,52 +80,105 @@ async function translateChunkWithRetry(
     streamUsage: boolean = false,
     useStreaming: boolean = false
 ): Promise<SubtitleEntry[]> {
-    let lastError: Error | null = null
     const finalResults = new Map<string, SubtitleEntry>()
-    let remainingEntries = [...chunk]
+    let unresolvedEntries = [...chunk]
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        if (remainingEntries.length === 0) break
+        if (unresolvedEntries.length === 0) break
 
         if (attempt > 0) {
-            console.log(`[Retry] Task ${taskId} chunk ${chunkIndex}: 正在进行第 ${attempt}/${maxRetries} 次增量重试，剩余 ${remainingEntries.length} 条未翻译`)
-            writeTaskLog(taskId, 'translating', 'warn', `[重试] 块 #${chunkIndex + 1} 第 ${attempt}/${maxRetries} 次重试，剩余 ${remainingEntries.length} 条`)
+            console.log(`[Retry] Task ${taskId} chunk ${chunkIndex}: 正在进行第 ${attempt}/${maxRetries} 次增量重试，剩余 ${unresolvedEntries.length} 条待处理`)
+            writeTaskLog(taskId, 'translating', 'warn', `[重试] 块 #${chunkIndex + 1} 第 ${attempt}/${maxRetries} 次重试，仅补译剩余 ${unresolvedEntries.length} 条`)
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
         }
 
         try {
             const results = await TranslationService.translateChunk(
-                openai, remainingEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming
+                openai, unresolvedEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming
             )
 
+            const expectedCount = unresolvedEntries.length
+            const returnedIds = new Set<string>()
             for (const entry of results) {
+                const id = String(entry.id)
+                returnedIds.add(id)
                 if (entry.translatedText && entry.translatedText !== entry.text) {
-                    finalResults.set(String(entry.id), entry)
+                    finalResults.set(id, entry)
                 }
             }
 
-            remainingEntries = remainingEntries.filter(e => !finalResults.has(String(e.id)))
+            const missingIds = unresolvedEntries
+                .map(entry => String(entry.id))
+                .filter(id => !returnedIds.has(id))
+            const unresolvedIds = unresolvedEntries
+                .map(entry => String(entry.id))
+                .filter(id => !finalResults.has(id))
+            unresolvedEntries = unresolvedEntries.filter(entry => unresolvedIds.includes(String(entry.id)))
 
-            if (remainingEntries.length === 0) {
+            if (unresolvedEntries.length === 0) {
                 break
             }
+
+            const missingSuffix = missingIds.length > 0 ? `，缺失 ID: ${missingIds.join(', ')}` : ''
+            writeTaskLog(
+                taskId,
+                'translating',
+                'warn',
+                `[校验] 块 #${chunkIndex + 1} AI 返回 ${results.length}/${expectedCount}，有效 ${expectedCount - unresolvedEntries.length}/${expectedCount}，待补译 ${unresolvedEntries.length} 条${missingSuffix}`
+            )
         } catch (e: any) {
-            lastError = e
             console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
-            writeTaskLog(taskId, 'translating', 'warn', `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败：${e.message}`)
+            const detail = String(e?.message || 'unknown')
+            const reason = detail.includes('[条目缺失]') ? '返回缺条' : detail.includes('[解析为空]') ? '空响应/格式异常' : detail.includes('[疑似拒答]') ? '疑似拒答/过滤' : detail.includes('[无有效译文]') ? '无有效译文' : '请求失败'
+            writeTaskLog(taskId, 'translating', 'warn', `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}`)
         }
     }
 
-    // 检查是否还有遗漏
-    if (remainingEntries.length > 0) {
-        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 在 ${maxRetries} 次重试后仍有 ${remainingEntries.length} 条翻译缺失，将保留原文继续任务。`)
-        writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} 仍有 ${remainingEntries.length} 条未成功翻译，已回退为原文`)
+    if (unresolvedEntries.length > 0) {
+        const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
+        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 常规重试后仍有 ${unresolvedEntries.length} 条待处理，开始逐条补译。`)
+        writeTaskLog(taskId, 'translating', 'warn', `[补译] 块 #${chunkIndex + 1} 逐条补译 ${unresolvedEntries.length} 条：${ids}`)
+
+        for (const entry of unresolvedEntries) {
+            try {
+                const singleResults = await TranslationService.translateChunk(
+                    openai,
+                    [{ ...entry }],
+                    targetLanguage,
+                    glossary,
+                    previousContext,
+                    model,
+                    taskId,
+                    chunkIndex,
+                    stylePrompt,
+                    callbacks,
+                    false,
+                    maxRetries + 1,
+                    false
+                )
+                const singleTranslated = singleResults[0]
+                if (singleTranslated?.translatedText && singleTranslated.translatedText !== singleTranslated.text) {
+                    finalResults.set(String(entry.id), { ...entry, translatedText: singleTranslated.translatedText })
+                    writeTaskLog(taskId, 'translating', 'info', `[补译成功] 块 #${chunkIndex + 1} 条目 #${entry.id} 已单条补译成功`)
+                } else {
+                    writeTaskLog(taskId, 'translating', 'warn', `[补译未命中] 块 #${chunkIndex + 1} 条目 #${entry.id} 返回为空或与原文一致`)
+                }
+            } catch (singleError: any) {
+                writeTaskLog(taskId, 'translating', 'warn', `[补译失败] 块 #${chunkIndex + 1} 条目 #${entry.id} 单条补译失败：${singleError?.message || 'unknown'}`)
+            }
+        }
     }
 
-    // 按照原始顺序组装结果
+    const stillMissing = chunk.filter(entry => !finalResults.has(String(entry.id)))
+    if (stillMissing.length > 0) {
+        const ids = stillMissing.map(entry => `#${entry.id}`).join(', ')
+        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 补译后仍有 ${stillMissing.length} 条缺失，将回退为原文。`)
+        writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} ${stillMissing.length} 条未成功翻译，已回退原文：${ids}`)
+    }
+
     return chunk.map(entry => {
         const translated = finalResults.get(String(entry.id))
-        return translated || { ...entry, translatedText: entry.text } // 最终保底填入原文
+        return translated || { ...entry, translatedText: entry.text }
     })
 }
 
@@ -186,7 +239,7 @@ export const TaskService = {
     },
 
     async process(taskId: string, openaiConfig: { apiKey: string, baseUrl?: string }) {
-        await ConfigService.cleanupLogs()
+        await ConfigService.cleanupLogsIfNeeded()
         const task = this.getTask(taskId)
         const root = await getMediaRoot(task.rootId)
         const videoDir = root.path
@@ -402,20 +455,42 @@ export const TaskService = {
             await Promise.all(promises)
 
             await this.updateStatus(taskId, 'exporting', 90, { log: '正在合成并保存最终字幕文件...' })
-            const translatedEntries = Array.from(translatedMap.values())
+            let translatedEntries = Array.from(translatedMap.values())
             translatedEntries.sort((a, b) => Number(a.id) - Number(b.id))
 
             if (task.outputMode !== 'original') {
+                const repaired = SubtitleService.repairTranslatedEntries(
+                    translatedEntries,
+                    task.targetLanguage,
+                    task.outputMode as 'translated' | 'bilingual' | 'original'
+                )
+                translatedEntries = repaired.entries
+
+                if (repaired.repaired > 0) {
+                    const repairSummary = Object.entries(repaired.issueCounts)
+                        .map(([issueReason, count]) => issueReason + ':' + count)
+                        .join(', ')
+                    writeTaskLog(taskId, 'exporting', repaired.fallbacked > 0 ? 'warn' : 'info', '[修复] 已自动修正 ' + repaired.repaired + ' 条字幕（' + (repairSummary || 'no-details') + '）')
+                }
+
                 const issues = SubtitleService.validateTranslatedEntries(translatedEntries, task.targetLanguage)
                 if (issues.length > 0) {
+                    const hardIssues = issues.filter(issue => issue.severity !== 'soft')
+                    const softIssues = issues.filter(issue => issue.severity === 'soft')
+                    const allowSoftFallback = hardIssues.length === 0 && (softIssues.length <= 1 || softIssues.length / Math.max(translatedEntries.length, 1) <= 0.005)
                     const preview = issues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
-                    writeTaskLog(taskId, 'exporting', 'error', `[拦截] 检测到 ${issues.length} 条字幕未获得有效翻译：${preview}`)
 
-                    if (config.failOnUntranslated !== false) {
-                        throw new Error(`翻译不完整：检测到 ${issues.length} 条字幕未获得有效译文，已停止导出`)
+                    if (allowSoftFallback) {
+                        writeTaskLog(taskId, 'exporting', 'warn', `[宽松导出] 检测到 ${softIssues.length} 条低风险未有效翻译字幕，已继续导出：${preview}`)
+                    } else {
+                        writeTaskLog(taskId, 'exporting', 'error', `[拦截] 检测到 ${issues.length} 条字幕未获得有效翻译（硬性 ${hardIssues.length} / 软性 ${softIssues.length}）：${preview}`)
+
+                        if (config.failOnUntranslated !== false) {
+                            throw new Error(`翻译不完整：检测到 ${issues.length} 条未有效翻译字幕（硬性 ${hardIssues.length} / 软性 ${softIssues.length}），已停止导出`)
+                        }
+
+                        writeTaskLog(taskId, 'exporting', 'warn', `[宽松导出] 检测到 ${issues.length} 条未有效翻译字幕，但已按配置继续导出`)
                     }
-
-                    writeTaskLog(taskId, 'exporting', 'warn', `[宽松导出] 检测到 ${issues.length} 条未有效翻译字幕，但已按配置继续导出`)
                 }
             }
 

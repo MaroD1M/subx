@@ -213,7 +213,7 @@ onMounted(() => {
   if (savedMode === 'manual') useManualModelInput.value = true
   initialSnapshot.value = currentSnapshot.value
 
-  if (!useManualModelInput.value && config.value?.apiKey && config.value?.apiBaseUrl) {
+  if (!useManualModelInput.value && config.value?.apiKey?.trim()) {
     tryFetchModels()
   }
 })
@@ -228,15 +228,15 @@ watch(useManualModelInput, (val) => {
   if (!import.meta.client) return
   localStorage.setItem(MODEL_INPUT_MODE_KEY, val ? 'manual' : 'select')
 
-  if (!val && !modelItems.value.length && config.value?.apiKey?.trim() && config.value?.apiBaseUrl?.trim()) {
+  if (!val && !modelItems.value.length && config.value?.apiKey?.trim()) {
     tryFetchModels()
   }
 })
 
 async function tryFetchModels() {
   const apiKey = config.value?.apiKey?.trim()
-  const baseURL = config.value?.apiBaseUrl?.trim()
-  if (!apiKey || !baseURL) return
+  const baseURL = config.value?.apiBaseUrl?.trim() || 'https://api.openai.com/v1'
+  if (!apiKey) return
 
   fetchingModels.value = true
   modelError.value = ''
@@ -258,7 +258,7 @@ function applyProviderGuide(payload: { apiBaseUrl?: string, defaultModel?: strin
     useManualModelInput.value = payload.useManualModelInput
   }
 
-  if (!payload.useManualModelInput && config.value?.apiKey?.trim() && config.value?.apiBaseUrl?.trim()) {
+  if (!payload.useManualModelInput && config.value?.apiKey?.trim()) {
     tryFetchModels()
   }
 }

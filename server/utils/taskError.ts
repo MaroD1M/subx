@@ -1,5 +1,5 @@
 export interface TaskErrorInfo {
-  type: 'auth' | 'rate_limit' | 'model' | 'network' | 'timeout' | 'provider' | 'unknown'
+  type: 'auth' | 'rate_limit' | 'model' | 'network' | 'timeout' | 'provider' | 'parse' | 'content' | 'unknown'
   summary: string
 }
 
@@ -23,6 +23,12 @@ export function classifyTaskError(message: string): TaskErrorInfo {
   }
   if (text.includes('5xx') || text.includes('500') || text.includes('502') || text.includes('503') || text.includes('504')) {
     return { type: 'provider', summary: '供应商服务异常：上游服务暂不可用' }
+  }
+  if (text.includes('[解析为空]') || text.includes('[条目缺失]') || text.includes('解析失败') || text.includes('翻译条目不完整')) {
+    return { type: 'parse', summary: '返回解析异常：模型有响应，但格式不完整或缺少条目' }
+  }
+  if (text.includes('[无有效译文]') || text.includes('[疑似拒答]') || text.includes('翻译结果为空')) {
+    return { type: 'content', summary: '返回内容异常：模型未给出可用译文，可能被拒答或内容被过滤' }
   }
 
   return { type: 'unknown', summary: '未知错误：请查看任务详情日志' }

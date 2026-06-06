@@ -1,5 +1,10 @@
 import { useDb } from '../../../utils/db'
 
+function toUtcIsoString(value: string | null | undefined) {
+  if (!value) return value || ''
+  return value.includes('T') ? value : value.replace(' ', 'T') + 'Z'
+}
+
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) {
@@ -22,7 +27,7 @@ export default defineEventHandler(async (event) => {
       category: row.category || 'system',
       level: row.level,
       message: row.message,
-      createdAt: row.created_at
+      createdAt: toUtcIsoString(row.created_at)
     }))
   }
 })

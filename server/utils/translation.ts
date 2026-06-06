@@ -51,30 +51,74 @@ ${contextText}
 ${inputLines}`
 }
 
-function parseStreamedTranslations(fullContent: string): Map<string, string> {
-    const result = new Map<string, string>()
-    // 兼容多种换行符和分隔符
-    const blocks = fullContent.split(/\n\s*\n|\n(?=\d+[\n:.])/)
+function normalizeAiOutput(raw: string): string {
+    return String(raw || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/^\s*```[^\n]*$/gm, '')
+        .replace(/^\s*[-*]\s+/gm, '')
+        .trim()
+}
 
-    for (const block of blocks) {
-        const lines = block.trim().split('\n')
-        if (lines.length < 2) {
-            // 尝试处理单行格式，例如 "121. 翻译内容" 或 "121: 翻译内容"
-            const singleLineMatch = block.trim().match(/^(\d+)[.:：\s]+(.+)$/)
-            if (singleLineMatch && singleLineMatch[1] && singleLineMatch[2]) {
-                result.set(singleLineMatch[1], singleLineMatch[2].trim())
-            }
+function extractIdFromLine(line: string): string | null {
+    const normalized = line.trim().replace(/^[（(【\[]?(?:id|ID)[:：#\s]*/, '').replace(/[）)】\]]$/, '')
+    const match = normalized.match(/^(\d+)(?:[.:：)、\]\s-].*)?$/)
+    return match?.[1] || null
+}
+
+function detectOutputAnomaly(fullContent: string): 'empty' | 'refusal' | 'filtered' | 'other' {
+    const normalized = normalizeAiOutput(fullContent).toLowerCase()
+    if (!normalized) return 'empty'
+    if (/无法|不能|抱歉|对不起|sorry|cannot|can\'t|unable|i can\'t|i cannot|policy|safety/.test(normalized)) return 'refusal'
+    if (/\[content filtered\]|\[filtered\]|content omitted|内容已过滤|已过滤/.test(normalized)) return 'filtered'
+    return 'other'
+}
+
+function parseStreamedTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
+    const result = new Map<string, string>()
+    const normalized = normalizeAiOutput(fullContent)
+    const expectedSet = new Set(expectedIds)
+    const lines = normalized.split('\n')
+
+    let currentId = ''
+    let buffer: string[] = []
+
+    const flush = () => {
+        if (!currentId) return
+        result.set(currentId, buffer.join('\n').trim())
+        currentId = ''
+        buffer = []
+    }
+
+    for (const rawLine of lines) {
+        const line = rawLine.trimEnd()
+        const maybeId = extractIdFromLine(line)
+        if (maybeId && (!expectedSet.size || expectedSet.has(maybeId))) {
+            flush()
+            currentId = maybeId
+            const remainder = line.replace(/^(\d+)(?:[.:：)、\]\s-]+)?/, '').trim()
+            if (remainder) buffer.push(remainder)
             continue
         }
 
-        let idLine = lines[0]?.trim() || ''
-        // 去除可能的序号后缀，如 "121." -> "121"
-        idLine = idLine.replace(/[.:：]$/, '')
-        
-        if (!idLine || !/^\d+$/.test(idLine)) continue
+        if (!currentId) continue
+        if (!line.trim() && buffer.length === 0) continue
+        buffer.push(rawLine)
+    }
+    flush()
 
-        const translatedText = lines.slice(1).join('\n').trim()
-        result.set(idLine, translatedText || '')
+    if (result.size > 0) return result
+
+    const blocks = normalized.split(/\n\s*\n+/)
+    for (const block of blocks) {
+        const trimmed = block.trim()
+        if (!trimmed) continue
+        const singleLineMatch = trimmed.match(/^(\d+)[.:：\s]+(.+)$/)
+        if (singleLineMatch && singleLineMatch[1] && singleLineMatch[2]) {
+            if (!expectedSet.size || expectedSet.has(singleLineMatch[1])) {
+                result.set(singleLineMatch[1], singleLineMatch[2].trim())
+            }
+        }
     }
 
     return result
@@ -284,17 +328,25 @@ End Time: ${new Date().toISOString()}
             throw e
         }
 
-        const translatedMap = parseStreamedTranslations(fullContent)
+        const expectedIds = chunk.map(entry => String(entry.id))
+        const translatedMap = parseStreamedTranslations(fullContent, expectedIds)
 
         if (translatedMap.size === 0) {
-            console.warn(`[Parser] 警告: 解析出的翻译条目为空! 原始内容长度: ${fullContent.length}`)
+            const anomaly = detectOutputAnomaly(fullContent)
+            console.warn(`[Parser] 警告: 解析出的翻译条目为空! 原始内容长度: ${fullContent.length}, 异常类型: ${anomaly}`)
             if (fullContent.length > 0) {
                 console.warn(`[Parser] 原始内容前200字符: ${fullContent.substring(0, 200)}`)
             }
-            throw new Error(`解析失败: AI 返回内容为空或格式错误 (Length: ${fullContent.length})`)
+            if (anomaly === 'refusal') {
+                throw new Error(`[疑似拒答] 模型返回了拒答/安全拦截内容，未产出可解析译文 (Length: ${fullContent.length})`)
+            }
+            if (anomaly === 'filtered') {
+                throw new Error(`[解析为空] 模型返回内容疑似被过滤，未产出可解析译文 (Length: ${fullContent.length})`)
+            }
+            throw new Error(`[解析为空] AI 返回内容为空或格式错误 (Length: ${fullContent.length})`)
         } else if (translatedMap.size !== chunk.length) {
-            const missingIds = chunk.map(e => String(e.id)).filter(id => !translatedMap.has(id))
-            const msg = `翻译条目不完整 (AI返回 ${translatedMap.size}/${chunk.length})。缺失 ID: ${missingIds.slice(0, 10).join(', ')}${missingIds.length > 10 ? '...' : ''}`
+            const missingIds = expectedIds.filter(id => !translatedMap.has(id))
+            const msg = `[条目缺失] 已解析 ${translatedMap.size}/${chunk.length}，缺失 ID: ${missingIds.slice(0, 10).join(', ')}${missingIds.length > 10 ? '...' : ''}`
             console.warn(`[Parser] ${msg}`)
             throw new Error(msg)
         }
@@ -313,7 +365,11 @@ End Time: ${new Date().toISOString()}
         ).length
 
         if (verbalEntries.length > 0 && translatedVerbalCount === 0) {
-            throw new Error(`翻译结果为空: chunk ${chunkIndex} 包含 ${verbalEntries.length} 条语音条目但无有效翻译 (AI返回 ${fullContent.length} bytes, 原始内容: "${fullContent.substring(0, 100)}")`)
+            const anomaly = detectOutputAnomaly(fullContent)
+            if (anomaly === 'refusal') {
+                throw new Error(`[疑似拒答] chunk ${chunkIndex} 包含 ${verbalEntries.length} 条语音条目，但模型未给出有效译文`)
+            }
+            throw new Error(`[无有效译文] chunk ${chunkIndex} 包含 ${verbalEntries.length} 条语音条目，但无有效译文 (AI返回 ${fullContent.length} bytes, 原始内容: "${fullContent.substring(0, 100)}")`)
         }
 
         return result
@@ -321,22 +377,13 @@ End Time: ${new Date().toISOString()}
 
     parseNewEntries(buffer: string, startIndex: number, chunk: SubtitleEntry[]): { id: string; translatedText: string }[] {
         const entries: { id: string; translatedText: string }[] = []
-        const blocks = buffer.split(/\n\s*\n/)
-        const chunkIds = new Set(chunk.map(e => String(e.id)))
+        const parsed = parseStreamedTranslations(buffer, chunk.map(e => String(e.id)))
+        const allIds = Array.from(parsed.keys())
 
-        for (let i = startIndex; i < blocks.length - 1; i++) {
-            const block = blocks[i]?.trim()
-            if (!block) continue
-
-            const lines = block.split('\n')
-            if (lines.length < 2) continue
-
-            const idLine = lines[0]?.trim()
-            if (!idLine || !/^\d+$/.test(idLine)) continue
-            if (!chunkIds.has(idLine)) continue
-
-            const translatedText = lines.slice(1).join('\n').trim()
-            entries.push({ id: idLine, translatedText: translatedText || '' })
+        for (let i = startIndex; i < allIds.length; i++) {
+            const id = allIds[i]
+            const translatedText = parsed.get(id) || ''
+            entries.push({ id, translatedText })
         }
 
         return entries

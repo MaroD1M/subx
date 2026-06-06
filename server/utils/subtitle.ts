@@ -20,7 +20,7 @@ type FormattingTarget = 'srt' | 'ass'
 type FormattingToken = { placeholder: string, value: string }
 type TemplateSlot = { placeholder?: string, text: string }
 type AssSegment = { tags: string[], text: string, drawing?: unknown[] }
-type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy', original: string, translated: string }
+type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate', original: string, translated: string, severity?: 'soft' | 'hard' }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
   return resolveMediaPath(userPath, rootId)
@@ -31,6 +31,15 @@ export const SubtitleService = {
     const trimmed = text.trim()
     if (!trimmed) return true
     if (/^[\*\-\.，。！？、…\s]+$/.test(trimmed)) return true
+    return false
+  },
+
+  isLowValueText(text: string): boolean {
+    const normalized = this.normalizeComparisonText(text)
+    if (!normalized) return true
+    if (/^(ha|ah|oh|uh|um|hmm|mm|ok|okay|yeah|yes|no|hey|yo)+$/i.test(normalized)) return true
+    if (/^[啊哦嗯呃欸唉哎哈嘿喂诶噢好呀嘛呢啦哦哇]+$/u.test(normalized)) return true
+    if (normalized.length <= 2) return true
     return false
   },
 
@@ -364,6 +373,111 @@ export const SubtitleService = {
     return visible > 0 && letters / visible >= 0.7
   },
 
+  splitBilingualLines(text: unknown): string[] {
+    return this.normalizeSubtitleText(text)
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+  },
+
+  dedupeRepeatedLines(text: unknown): string {
+    const lines = this.splitBilingualLines(text)
+    if (lines.length <= 1) return this.normalizeSubtitleText(text)
+
+    const deduped = []
+    let previousKey = ''
+    for (const line of lines) {
+      const key = this.normalizeComparisonText(line)
+      if (!key || key !== previousKey) {
+        deduped.push(line)
+        previousKey = key
+      }
+    }
+
+    return deduped.join('\n')
+  },
+
+  removeOriginalFromBilingualTail(original: string, translated: string): string {
+    const originalKey = this.normalizeComparisonText(original)
+    const lines = this.splitBilingualLines(translated)
+    if (lines.length <= 1 || !originalKey) return this.normalizeSubtitleText(translated)
+
+    const filtered = lines.filter((line, index) => {
+      if (index === 0) return true
+      return this.normalizeComparisonText(line) !== originalKey
+    })
+
+    return filtered.join('\n')
+  },
+
+  repairTranslatedText(entry: SubtitleEntry, targetLanguage: string, outputMode: OutputMode = 'translated'): { text: string, fallbackUsed: boolean, reasons: string[] } {
+    const reasons: string[] = []
+    const original = String(entry.text || '')
+    let translated = String(entry.translatedText || '')
+
+    translated = this.dedupeRepeatedLines(translated)
+    translated = this.removeOriginalFromBilingualTail(original, translated)
+
+    const stabilized = this.stabilizeFormattingPlaceholders(translated, original, entry.formattingTokens || [])
+    const normalizedTranslated = this.normalizeModelOutputText(stabilized)
+    const normalizedOriginal = this.normalizeComparisonText(original)
+    const normalizedOutput = this.normalizeComparisonText(normalizedTranslated)
+    const shouldCheckLatinHeavy = /^zh|^ja|^ko/i.test(targetLanguage)
+
+    if (!normalizedOutput) {
+      reasons.push('missing')
+      return { text: original, fallbackUsed: true, reasons }
+    }
+
+    if (normalizedOriginal && normalizedOriginal === normalizedOutput) {
+      reasons.push('same_as_source')
+      return { text: original, fallbackUsed: true, reasons }
+    }
+
+    const bilingualLines = this.splitBilingualLines(normalizedTranslated)
+    if (outputMode === 'bilingual' && bilingualLines.length >= 2) {
+      const first = this.normalizeComparisonText(bilingualLines[0])
+      const second = this.normalizeComparisonText(bilingualLines[1])
+      if (first && second && first === second) {
+        reasons.push('bilingual_duplicate')
+        return { text: bilingualLines[0], fallbackUsed: false, reasons }
+      }
+    }
+
+    if (shouldCheckLatinHeavy && this.looksLatinHeavy(normalizedTranslated) && this.looksLatinHeavy(original)) {
+      reasons.push('latin_heavy')
+      return { text: original, fallbackUsed: true, reasons }
+    }
+
+    return { text: normalizedTranslated, fallbackUsed: false, reasons }
+  },
+
+  repairTranslatedEntries(entries: SubtitleEntry[], targetLanguage: string, outputMode: OutputMode = 'translated'): { entries: SubtitleEntry[], repaired: number, fallbacked: number, issueCounts: Record<string, number> } {
+    let repaired = 0
+    let fallbacked = 0
+    const issueCounts: Record<string, number> = {}
+
+    const nextEntries = entries.map(entry => {
+      if (this.isNonVerbal(entry.text) || outputMode === 'original') return entry
+
+      const repairedResult = this.repairTranslatedText(entry, targetLanguage, outputMode)
+      if (repairedResult.reasons.length > 0) {
+        repaired += 1
+        if (repairedResult.fallbackUsed) fallbacked += 1
+        for (const reason of repairedResult.reasons) {
+          issueCounts[reason] = (issueCounts[reason] || 0) + 1
+        }
+      }
+
+      return {
+        ...entry,
+        translatedText: repairedResult.text
+      }
+    })
+
+    return { entries: nextEntries, repaired, fallbacked, issueCounts }
+  },
+
   validateTranslatedEntries(entries: SubtitleEntry[], targetLanguage: string): TranslationValidationIssue[] {
     const shouldCheckLatinHeavy = /^zh|^ja|^ko/i.test(targetLanguage)
     const issues: TranslationValidationIssue[] = []
@@ -376,17 +490,17 @@ export const SubtitleService = {
       const normalizedTranslated = this.normalizeComparisonText(translated)
 
       if (!normalizedTranslated) {
-        issues.push({ id: String(entry.id), reason: 'missing', original, translated })
+        issues.push({ id: String(entry.id), reason: 'missing', original, translated, severity: this.isLowValueText(original) ? 'soft' : 'hard' })
         continue
       }
 
       if (normalizedOriginal && normalizedOriginal === normalizedTranslated) {
-        issues.push({ id: String(entry.id), reason: 'same_as_source', original, translated })
+        issues.push({ id: String(entry.id), reason: 'same_as_source', original, translated, severity: this.isLowValueText(original) ? 'soft' : 'hard' })
         continue
       }
 
       if (shouldCheckLatinHeavy && this.looksLatinHeavy(translated) && this.looksLatinHeavy(original)) {
-        issues.push({ id: String(entry.id), reason: 'latin_heavy', original, translated })
+        issues.push({ id: String(entry.id), reason: 'latin_heavy', original, translated, severity: this.isLowValueText(original) ? 'soft' : 'hard' })
       }
     }
 
