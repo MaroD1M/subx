@@ -11,12 +11,14 @@ const srtParser = new SrtParser()
 const ASS_TEXT_SAMPLE_HEADER = `[Script Info]\nScriptType: V4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,`
 
 const formattingTokenPattern = /\{[^}]+\}|<\/?\s*(?:i|b|u)\s*>|<\s*font[^>]*>|<\s*\/\s*font\s*>/gi
+const formattingPlaceholderPattern = /__SUBX_FMT_\d+__/g
 
 type OutputMode = 'translated' | 'bilingual' | 'original'
 type SubtitleFormat = 'srt' | 'ass' | 'both'
 type BilingualLayout = 'translated_first' | 'original_first'
 type FormattingTarget = 'srt' | 'ass'
 type FormattingToken = { placeholder: string, value: string }
+type TemplateSlot = { placeholder?: string, text: string }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
   return resolveMediaPath(userPath, rootId)
@@ -82,6 +84,130 @@ export const SubtitleService = {
       restored = restored.split(token.placeholder).join(value)
     }
     return restored
+  },
+
+  extractFormattingPlaceholderSequence(text: string): string[] {
+    return text.match(formattingPlaceholderPattern) || []
+  },
+
+  splitTemplateSlots(text: string, formattingTokens: FormattingToken[] = []): TemplateSlot[] {
+    if (formattingTokens.length === 0) {
+      return [{ text }]
+    }
+
+    const slots: TemplateSlot[] = []
+    let cursor = 0
+
+    for (const token of formattingTokens) {
+      const index = text.indexOf(token.placeholder, cursor)
+      if (index === -1) continue
+
+      slots.push({ text: text.slice(cursor, index) })
+      slots.push({ placeholder: token.placeholder, text: '' })
+      cursor = index + token.placeholder.length
+    }
+
+    slots.push({ text: text.slice(cursor) })
+    return slots.length > 0 ? slots : [{ text }]
+  },
+
+  splitTextByWeights(text: string, weights: number[]): string[] {
+    if (weights.length === 0) return [text]
+
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+    if (totalWeight <= 0) {
+      return weights.map((_, index) => index === 0 ? text : '')
+    }
+
+    const characters = Array.from(text)
+    const totalChars = characters.length
+    const segments = new Array(weights.length).fill('')
+
+    let consumed = 0
+    for (let i = 0; i < weights.length; i++) {
+      const remainingWeight = weights.slice(i).reduce((sum, weight) => sum + weight, 0)
+      const remainingChars = totalChars - consumed
+      const take = i === weights.length - 1
+        ? remainingChars
+        : Math.max(0, Math.min(remainingChars, Math.round((weights[i] / remainingWeight) * remainingChars)))
+
+      segments[i] = characters.slice(consumed, consumed + take).join('')
+      consumed += take
+    }
+
+    if (consumed < totalChars) {
+      segments[segments.length - 1] += characters.slice(consumed).join('')
+    }
+
+    return segments
+  },
+
+  remapReorderedFormattingPlaceholders(text: string, expectedSequence: string[], actualSequence: string[]): string | null {
+    if (expectedSequence.length === 0 || expectedSequence.length !== actualSequence.length) {
+      return null
+    }
+
+    const expectedSet = new Set(expectedSequence)
+    if (actualSequence.some(placeholder => !expectedSet.has(placeholder))) {
+      return null
+    }
+
+    const uniqueActual = new Set(actualSequence)
+    if (uniqueActual.size !== actualSequence.length) {
+      return null
+    }
+
+    const pattern = /(__SUBX_FMT_\d+__)/g
+    const segments = this.normalizeSubtitleText(text).split(pattern)
+    const mappedText = new Map<string, string>()
+
+    for (let i = 1; i < segments.length; i += 2) {
+      mappedText.set(segments[i], segments[i + 1] || '')
+    }
+
+    return expectedSequence.map(placeholder => `${placeholder}${mappedText.get(placeholder) || ''}`).join('')
+  },
+
+  rebuildFormattingPlaceholders(text: string, templateText: string, formattingTokens: FormattingToken[] = []): string {
+    if (formattingTokens.length === 0) return text
+
+    const plainText = this.normalizeSubtitleText(text).replace(formattingPlaceholderPattern, '')
+    const slots = this.splitTemplateSlots(templateText, formattingTokens)
+    const textSlots = slots.filter(slot => !slot.placeholder)
+    const weights = textSlots.map(slot => Array.from(slot.text.replace(/\s+/g, '')).length)
+    const distributed = this.splitTextByWeights(
+      plainText,
+      weights.some(Boolean) ? weights : textSlots.map((_, index) => index === 0 ? 1 : 0)
+    )
+
+    let textIndex = 0
+    return slots.map((slot) => {
+      if (slot.placeholder) return slot.placeholder
+      const value = distributed[textIndex] || ''
+      textIndex += 1
+      return value
+    }).join('')
+  },
+
+  stabilizeFormattingPlaceholders(text: unknown, templateText: unknown, formattingTokens: FormattingToken[] = []): string {
+    const normalized = this.normalizeSubtitleText(text).replace(/\\[nN]/g, '\n')
+    if (formattingTokens.length === 0) return normalized
+
+    const expectedSequence = formattingTokens.map(token => token.placeholder)
+    const actualSequence = this.extractFormattingPlaceholderSequence(normalized)
+    const isExactMatch = expectedSequence.length === actualSequence.length
+      && expectedSequence.every((placeholder, index) => placeholder === actualSequence[index])
+
+    if (isExactMatch) {
+      return normalized
+    }
+
+    const reordered = this.remapReorderedFormattingPlaceholders(normalized, expectedSequence, actualSequence)
+    if (reordered) {
+      return reordered
+    }
+
+    return this.rebuildFormattingPlaceholders(normalized, this.normalizeSubtitleText(templateText), formattingTokens)
   },
 
   stripInlineAssTags(text: string): string {
@@ -171,7 +297,12 @@ export const SubtitleService = {
 
   getDisplayText(entry: SubtitleEntry, outputMode: OutputMode, bilingualLayout: BilingualLayout): string {
     const originalText = String(entry.text ?? '')
-    const translatedText = this.normalizeModelOutputText(entry.translatedText ?? entry.text ?? '')
+    const stabilizedTranslatedText = this.stabilizeFormattingPlaceholders(
+      entry.translatedText ?? entry.text ?? '',
+      originalText,
+      entry.formattingTokens || []
+    )
+    const translatedText = this.normalizeModelOutputText(stabilizedTranslatedText)
 
     if (outputMode === 'original') {
       return originalText

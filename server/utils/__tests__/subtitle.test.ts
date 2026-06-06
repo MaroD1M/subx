@@ -113,6 +113,72 @@ describe('SubtitleService formatting preservation', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  it('preserves ass karaoke and multiple style blocks during rewrite', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-ass-karaoke-'))
+    const source = join(dir, 'source.ass')
+    const out = join(dir, 'result.srt')
+    writeFileSync(source, `[Script Info]
+ScriptType: V4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\an8}{\\k20}Hel{\\k30}{\\i1}lo{\\i0} {\\b1}world{\\b0}`, 'utf-8')
+
+    const entries: SubtitleEntry[] = [{
+      id: '1',
+      startTime: '00:00:01,000',
+      endTime: '00:00:03,000',
+      text: '__SUBX_FMT_1__Hel__SUBX_FMT_2____SUBX_FMT_3__lo__SUBX_FMT_4__ __SUBX_FMT_5__world__SUBX_FMT_6__',
+      translatedText: '__SUBX_FMT_1__你__SUBX_FMT_2____SUBX_FMT_3__好__SUBX_FMT_4__ __SUBX_FMT_5__世界__SUBX_FMT_6__',
+      prefixTag: '{\\an8}',
+      formattingTokens: [
+        { placeholder: '__SUBX_FMT_1__', value: '{\\k20}' },
+        { placeholder: '__SUBX_FMT_2__', value: '{\\k30}' },
+        { placeholder: '__SUBX_FMT_3__', value: '{\\i1}' },
+        { placeholder: '__SUBX_FMT_4__', value: '{\\i0}' },
+        { placeholder: '__SUBX_FMT_5__', value: '{\\b1}' },
+        { placeholder: '__SUBX_FMT_6__', value: '{\\b0}' }
+      ]
+    }]
+
+    const outputPath = await SubtitleService.writeSubtitle(entries, out, 'translated', 'ass', 'bilingual_simple', 'translated_first', source)
+    const content = readFileSync(outputPath, 'utf-8')
+
+    expect(content).toContain(String.raw`{\an8}{\k20}你{\k30}{\i1}好{\i0} {\b1}世界{\b0}`)
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('rebuilds formatting placeholders when model output loses them', () => {
+    const rebuilt = SubtitleService.stabilizeFormattingPlaceholders(
+      '你好世界',
+      '__SUBX_FMT_1__Hello__SUBX_FMT_2__ world',
+      [
+        { placeholder: '__SUBX_FMT_1__', value: '{\\i1}' },
+        { placeholder: '__SUBX_FMT_2__', value: '{\\i0}' }
+      ]
+    )
+
+    expect(rebuilt).toBe('__SUBX_FMT_1__你好__SUBX_FMT_2__世界')
+  })
+
+  it('rebuilds placeholder order when model output reorders style blocks', () => {
+    const rebuilt = SubtitleService.stabilizeFormattingPlaceholders(
+      '__SUBX_FMT_2__世界__SUBX_FMT_1__你好',
+      '__SUBX_FMT_1__Hello__SUBX_FMT_2__ world',
+      [
+        { placeholder: '__SUBX_FMT_1__', value: '{\\i1}' },
+        { placeholder: '__SUBX_FMT_2__', value: '{\\i0}' }
+      ]
+    )
+
+    expect(rebuilt).toBe('__SUBX_FMT_1__你好__SUBX_FMT_2__世界')
+  })
+
   it('rewrites ass while preserving leading position tag and line breaks', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'subx-ass-write-'))
     const source = join(dir, 'source.ass')
