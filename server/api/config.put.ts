@@ -14,6 +14,7 @@ const ALLOWED_KEYS = new Set([
   'chunkSize',
   'concurrency',
   'maxRetries',
+  'translationMode',
   'glossary',
   'streamUsage',
   'logRetentionDays',

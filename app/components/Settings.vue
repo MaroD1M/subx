@@ -93,14 +93,22 @@
           />
         </button>
 
-        <div v-if="advancedOpen" class="border-t border-gray-100 dark:border-gray-800 p-3.5">
-          <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5">
-            <div class="flex items-center justify-between gap-3 cursor-pointer" @click="config.streamUsage = !config.streamUsage">
+        <div v-if="advancedOpen" class="border-t border-gray-100 dark:border-gray-800 p-3.5 space-y-3">
+          <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5 space-y-2">
+            <div class="space-y-0.5">
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">翻译返回模式</label>
+              <p class="text-[11px] text-gray-500 dark:text-gray-400">默认推荐非流式，兼容性更好。流式仅适合少数接口稳定的场景。</p>
+            </div>
+            <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
+          </div>
+
+          <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5" :class="config.translationMode !== 'stream' ? 'opacity-60' : ''">
+            <div class="flex items-center justify-between gap-3 cursor-pointer" @click="toggleStreamUsage">
               <div class="space-y-0.5">
                 <label class="text-sm font-medium text-gray-700 dark:text-gray-300">流式 Token 统计</label>
-                <p class="text-[11px] text-gray-500 dark:text-gray-400">用于记录流式返回中的 Token 使用量。部分兼容接口不支持，遇到报错时可关闭。</p>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400">仅在流式模式下生效，用于记录流式返回中的 Token 使用量。兼容性较弱，默认建议关闭。</p>
               </div>
-              <USwitch v-model="config.streamUsage" @click.stop />
+              <USwitch v-model="config.streamUsage" :disabled="config.translationMode !== 'stream'" @click.stop />
             </div>
           </div>
         </div>
@@ -147,12 +155,17 @@ const outputModeItems = [
   { label: '双语对照', value: 'bilingual' },
   { label: '仅导出原字幕', value: 'original' }
 ]
+const translationModeItems = [
+  { label: '非流式（推荐）', value: 'non_stream' },
+  { label: '流式（兼容性较弱）', value: 'stream' }
+]
 
 if (config.value) {
   if (config.value.chunkSize) config.value.chunkSize = Number(config.value.chunkSize)
   if (config.value.concurrency) config.value.concurrency = Number(config.value.concurrency)
   if (config.value.maxRetries) config.value.maxRetries = Number(config.value.maxRetries)
   if (config.value.logRetentionDays) config.value.logRetentionDays = Number(config.value.logRetentionDays)
+  if (!config.value.translationMode) config.value.translationMode = 'non_stream'
   if (config.value.streamUsage === undefined) config.value.streamUsage = false
 }
 
@@ -181,6 +194,7 @@ function buildConfigSnapshot(value: any) {
     concurrency: Number(value?.concurrency || 0),
     maxRetries: Number(value?.maxRetries || 0),
     logRetentionDays: Number(value?.logRetentionDays || 0),
+    translationMode: String(value?.translationMode || 'non_stream'),
     streamUsage: !!value?.streamUsage,
     glossary: value?.glossary || {}
   })
@@ -196,6 +210,12 @@ onMounted(() => {
 
   if (!useManualModelInput.value && config.value?.apiKey && config.value?.apiBaseUrl) {
     tryFetchModels()
+  }
+})
+
+watch(() => config.value.translationMode, (val) => {
+  if (val !== 'stream') {
+    config.value.streamUsage = false
   }
 })
 
@@ -249,6 +269,11 @@ function handleClose() {
 function confirmCloseWithoutSaving() {
   closeConfirmOpen.value = false
   emit('close')
+}
+
+function toggleStreamUsage() {
+  if (config.value.translationMode !== 'stream') return
+  config.value.streamUsage = !config.value.streamUsage
 }
 
 async function save() {

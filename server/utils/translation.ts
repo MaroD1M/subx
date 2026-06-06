@@ -93,7 +93,8 @@ export const TranslationService = {
         stylePrompt?: string,
         callbacks?: StreamCallbacks,
         streamUsage: boolean = false,
-        attempt: number = 0
+        attempt: number = 0,
+        useStreaming: boolean = false
     ): Promise<SubtitleEntry[]> {
         const glossaryText = Object.entries(glossary)
             .map(([key, value]) => `${key} -> ${value}`)
@@ -140,8 +141,8 @@ export const TranslationService = {
             // 写入初始日志
             const requestOptions = {
                 model: model,
-                stream: true,
-                stream_options: streamUsage ? { include_usage: true } : undefined,
+                stream: useStreaming,
+                stream_options: useStreaming && streamUsage ? { include_usage: true } : undefined,
                 timeout: STREAM_REQUEST_TIMEOUT_MS
             }
 
@@ -151,6 +152,7 @@ Chunk Index: ${chunkIndex}
 Attempt: ${attempt}
 Model: ${model}
 Target: ${targetLanguage}
+Translation Mode: ${useStreaming ? 'STREAM' : 'NON_STREAM'}
 Stream Usage Toggle: ${streamUsage ? 'ON' : 'OFF'}
 Timestamp: ${new Date().toISOString()}
 
@@ -167,10 +169,10 @@ ${prompt}
 `
             appendFileSync(logFile, initialLog)
 
-            const stream = await openai.chat.completions.create({
+            const response = await openai.chat.completions.create({
                 ...requestOptions,
                 messages,
-                stream: true
+                stream: useStreaming
             }) as any
 
             let lastLogTime = Date.now()
@@ -178,10 +180,20 @@ ${prompt}
             let buffer = ''
             let usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
 
-            for await (const part of stream) {
+            if (!useStreaming) {
+                const content = response.choices?.[0]?.message?.content || ''
+                fullContent = typeof content === 'string' ? content : ''
+                buffer = fullContent
+                usage = {
+                    prompt_tokens: response.usage?.prompt_tokens ?? 0,
+                    completion_tokens: response.usage?.completion_tokens ?? 0,
+                    total_tokens: response.usage?.total_tokens ?? 0
+                }
+                appendFileSync(logFile, fullContent)
+            } else for await (const part of response) {
                 if (Date.now() - lastChunkTime > STREAM_IDLE_TIMEOUT_MS) {
                     try {
-                        stream.controller?.abort()
+                        response.controller?.abort()
                     } catch { /* ignore */ }
                     throw new Error(`流式响应长时间无数据（>${Math.round(STREAM_IDLE_TIMEOUT_MS / 1000)}s），已中止本次请求`)
                 }
@@ -238,7 +250,7 @@ Tokens: ${usage.total_tokens} (P: ${usage.prompt_tokens}, C: ${usage.completion_
 End Time: ${new Date().toISOString()}
 `)
 
-            console.log(`[Stream] Task ${taskId} chunk ${chunkIndex} complete, total ${fullContent.length} bytes, tokens: ${usage.total_tokens} (prompt: ${usage.prompt_tokens}, completion: ${usage.completion_tokens})`)
+            console.log(`[${useStreaming ? 'Stream' : 'NonStream'}] Task ${taskId} chunk ${chunkIndex} complete, total ${fullContent.length} bytes, tokens: ${usage.total_tokens} (prompt: ${usage.prompt_tokens}, completion: ${usage.completion_tokens})`)
 
             if (taskId) {
                 try {

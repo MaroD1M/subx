@@ -20,6 +20,7 @@ export const ConfigService = {
             chunkSize: 2000,
             concurrency: 3,
             maxRetries: 3,
+            translationMode: 'non_stream',
             streamUsage: false,
             logRetentionDays: 7,
             glossary: {},
@@ -36,6 +37,8 @@ export const ConfigService = {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'
+            } else if (row.key === 'translationMode') {
+                config.translationMode = row.value === 'stream' ? 'stream' : 'non_stream'
             } else {
                 (config as any)[row.key] = row.value
             }

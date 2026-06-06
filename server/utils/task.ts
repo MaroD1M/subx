@@ -77,7 +77,8 @@ async function translateChunkWithRetry(
     stylePrompt: string,
     maxRetries: number,
     callbacks?: { onEntryTranslated?: (entry: { id: string; translatedText: string }) => void },
-    streamUsage: boolean = false
+    streamUsage: boolean = false,
+    useStreaming: boolean = false
 ): Promise<SubtitleEntry[]> {
     let lastError: Error | null = null
     const finalResults = new Map<string, SubtitleEntry>()
@@ -94,7 +95,7 @@ async function translateChunkWithRetry(
 
         try {
             const results = await TranslationService.translateChunk(
-                openai, remainingEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt
+                openai, remainingEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming
             )
 
             for (const entry of results) {
@@ -346,7 +347,8 @@ export const TaskService = {
                                 }
                             }
                         },
-                        config.streamUsage || false
+                        (config.translationMode === 'stream') && (config.streamUsage || false),
+                        config.translationMode === 'stream'
                     )
 
                     const aiResultByOriginalId = new Map<string, SubtitleEntry>()
