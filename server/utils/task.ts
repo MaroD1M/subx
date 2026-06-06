@@ -134,12 +134,12 @@ export const TaskService = {
         const db = useDb()
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, subtitle_format, subtitle_style_preset, bilingual_layout, status, progress, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, translation_mode, subtitle_format, subtitle_style_preset, bilingual_layout, status, progress, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
             task.taskId, task.filePath, task.rootId || null, task.sourceType, task.trackIndex,
-            task.model, task.targetLanguage, task.outputMode, task.stylePreset || 'default', task.subtitleFormat || 'srt', task.subtitleStylePreset || 'bilingual_simple', task.bilingualLayout || 'translated_first', 'queued', 0
+            task.model, task.targetLanguage, task.outputMode, task.stylePreset || 'default', task.translationMode || 'non_stream', task.subtitleFormat || 'srt', task.subtitleStylePreset || 'bilingual_simple', task.bilingualLayout || 'translated_first', 'queued', 0
         )
         writeTaskLog(task.taskId!, 'queued', 'info', '任务已创建，等待执行')
         return this.getTask(task.taskId!)
@@ -158,6 +158,7 @@ export const TaskService = {
             targetLanguage: task.target_lang,
             outputMode: task.output_mode,
             stylePreset: task.style_preset || 'default',
+            translationMode: task.translation_mode || 'non_stream',
             subtitleFormat: task.subtitle_format || 'srt',
             subtitleStylePreset: task.subtitle_style_preset || 'bilingual_simple',
             bilingualLayout: task.bilingual_layout || 'translated_first',

@@ -168,6 +168,7 @@ const task = ref({
   error: null,
   model: null,
   targetLanguage: null,
+  translationMode: 'non_stream',
   filePath: '',
   rootName: ''
 })

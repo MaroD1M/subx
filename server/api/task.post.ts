@@ -22,6 +22,7 @@ export default defineEventHandler(async (event) => {
       targetLanguage: targetLanguage || config.targetLanguage,
       outputMode: outputMode || 'translated',
       stylePreset: stylePreset || 'default',
+      translationMode: config.translationMode || 'non_stream',
       subtitleFormat: subtitleFormat || config.subtitleFormat || 'srt',
       subtitleStylePreset: subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
       bilingualLayout: bilingualLayout || config.bilingualLayout || 'translated_first'
@@ -50,6 +51,7 @@ export default defineEventHandler(async (event) => {
       targetLanguage: oldTask.targetLanguage || config.targetLanguage,
       outputMode: oldTask.outputMode || 'translated',
       stylePreset: oldTask.stylePreset || 'default',
+      translationMode: oldTask.translationMode || config.translationMode || 'non_stream',
       subtitleFormat: oldTask.subtitleFormat || config.subtitleFormat || 'srt',
       subtitleStylePreset: oldTask.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
       bilingualLayout: oldTask.bilingualLayout || config.bilingualLayout || 'translated_first'
