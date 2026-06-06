@@ -3,9 +3,10 @@ export interface SubtitleEntry {
   id: string
   startTime: string      // "00:00:01,000"
   endTime: string        // "00:00:03,500"
-  text: string           // 原文
+  text: string           // 原文（可能包含格式占位符）
   translatedText?: string // 译文
   prefixTag?: string     // 前导定位/样式标签，如 {\an8}
+  formattingTokens?: Array<{ placeholder: string, value: string }> // 行内格式标记占位信息
 }
 
 /** 翻译分块 */

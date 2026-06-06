@@ -8,11 +8,15 @@ import { useDb } from './db'
 import { resolveMediaPath } from './mediaRoots'
 
 const srtParser = new SrtParser()
-const assPrefixTagCache = new Map<string, Array<Record<string, unknown>>>()
+const ASS_TEXT_SAMPLE_HEADER = `[Script Info]\nScriptType: V4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,`
+
+const formattingTokenPattern = /\{[^}]+\}|<\/?\s*(?:i|b|u)\s*>|<\s*font[^>]*>|<\s*\/\s*font\s*>/gi
 
 type OutputMode = 'translated' | 'bilingual' | 'original'
 type SubtitleFormat = 'srt' | 'ass' | 'both'
 type BilingualLayout = 'translated_first' | 'original_first'
+type FormattingTarget = 'srt' | 'ass'
+type FormattingToken = { placeholder: string, value: string }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
   return resolveMediaPath(userPath, rootId)
@@ -39,6 +43,47 @@ export const SubtitleService = {
     }
   },
 
+  buildFormattingPlaceholder(index: number): string {
+    return `__SUBX_FMT_${index}__`
+  },
+
+  protectFormattingTokens(text: unknown): { text: string, formattingTokens: FormattingToken[] } {
+    const normalized = this.normalizeSubtitleText(text).replace(/\\[nN]/g, '\n')
+    const formattingTokens: FormattingToken[] = []
+    let tokenIndex = 0
+
+    const protectedText = normalized.replace(formattingTokenPattern, (match) => {
+      tokenIndex += 1
+      const placeholder = this.buildFormattingPlaceholder(tokenIndex)
+      formattingTokens.push({ placeholder, value: match })
+      return placeholder
+    })
+
+    return { text: protectedText.trim(), formattingTokens }
+  },
+
+  convertFormattingTokenToAss(value: string): string {
+    if (/^<\s*i\s*>$/i.test(value)) return '{\\i1}'
+    if (/^<\s*\/\s*i\s*>$/i.test(value)) return '{\\i0}'
+    if (/^<\s*b\s*>$/i.test(value)) return '{\\b1}'
+    if (/^<\s*\/\s*b\s*>$/i.test(value)) return '{\\b0}'
+    if (/^<\s*u\s*>$/i.test(value)) return '{\\u1}'
+    if (/^<\s*\/\s*u\s*>$/i.test(value)) return '{\\u0}'
+    if (/^<\s*font[^>]*>$/i.test(value) || /^<\s*\/\s*font\s*>$/i.test(value)) return ''
+    return value
+  },
+
+  restoreFormattingTokens(text: unknown, formattingTokens: FormattingToken[] = [], target: FormattingTarget): string {
+    let restored = this.normalizeSubtitleText(text)
+    for (const token of formattingTokens) {
+      const value = target === 'ass'
+        ? this.convertFormattingTokenToAss(token.value)
+        : token.value
+      restored = restored.split(token.placeholder).join(value)
+    }
+    return restored
+  },
+
   stripInlineAssTags(text: string): string {
     return text.replace(/\{[^}]+\}/g, '')
   },
@@ -51,18 +96,8 @@ export const SubtitleService = {
       .replace(/<\s*\/\s*font\s*>/gi, '')
   },
 
-  cleanupVisibleSubtitleText(text: unknown): string {
-    return this.stripBasicHtmlTags(
-      this.stripInlineAssTags(
-        this.normalizeSubtitleText(text).replace(/\\[nN]/g, '\n')
-      )
-    ).trim()
-  },
-
   normalizeModelOutputText(text: unknown): string {
-    const normalized = this.normalizeSubtitleText(text)
-      .replace(/\\[nN]/g, '\n')
-
+    const normalized = this.normalizeSubtitleText(text).replace(/\\[nN]/g, '\n')
     const withoutCueTags = normalized.replace(/(^|\n)\s*(?:\{\\[^}]+\}\s*)+/g, '$1')
     const withoutStrayLeadingSlash = withoutCueTags.replace(/(^|\n)\\(?![Nnh{}\\])/g, '$1')
 
@@ -82,13 +117,15 @@ export const SubtitleService = {
 
         const normalizedRaw = String(rawText).replace(/\\[nN]/g, '\n')
         const { prefixTag, body } = this.extractLeadingCueTag(normalizedRaw)
+        const protectedBody = this.protectFormattingTokens(body)
 
         return {
           id: (index + 1).toString(),
           startTime: this.assSecondsToSrtTime(event.Start),
           endTime: this.assSecondsToSrtTime(event.End),
-          text: this.cleanupVisibleSubtitleText(body),
-          prefixTag: prefixTag || undefined
+          text: protectedBody.text,
+          prefixTag: prefixTag || undefined,
+          formattingTokens: protectedBody.formattingTokens.length > 0 ? protectedBody.formattingTokens : undefined
         }
       })
     }
@@ -96,12 +133,14 @@ export const SubtitleService = {
     const srtEntries = srtParser.fromSrt(content)
     return srtEntries.map(entry => {
       const { prefixTag, body } = this.extractLeadingCueTag(entry.text)
+      const protectedBody = this.protectFormattingTokens(body)
       return {
         id: entry.id,
         startTime: entry.startTime,
         endTime: entry.endTime,
-        text: body,
-        prefixTag: prefixTag || undefined
+        text: protectedBody.text,
+        prefixTag: prefixTag || undefined,
+        formattingTokens: protectedBody.formattingTokens.length > 0 ? protectedBody.formattingTokens : undefined
       }
     })
   },
@@ -153,7 +192,8 @@ export const SubtitleService = {
       startMs: this.srtTimeToMs(String(entry.startTime)),
       endMs: this.srtTimeToMs(String(entry.endTime)),
       text: this.sanitizeSrtText(this.getDisplayText(entry, outputMode, bilingualLayout)),
-      prefixTag: entry.prefixTag || ''
+      prefixTag: entry.prefixTag || '',
+      formattingTokens: entry.formattingTokens || []
     }))
   },
 
@@ -172,41 +212,31 @@ export const SubtitleService = {
       .replace(/<\s*\/\s*font\s*>/gi, '')
   },
 
-  buildSrtText(text: unknown, prefixTag?: string): string {
-    const normalized = this.sanitizeSrtText(text)
+  buildSrtText(text: unknown, prefixTag = '', formattingTokens: FormattingToken[] = []): string {
+    const restored = this.restoreFormattingTokens(text, formattingTokens, 'srt')
+    const normalized = this.sanitizeSrtText(restored)
     return prefixTag ? `${prefixTag}${normalized}` : normalized
   },
 
-  getAssPrefixTags(prefixTag?: string): Array<Record<string, unknown>> {
-    if (!prefixTag) return []
-    if (assPrefixTagCache.has(prefixTag)) {
-      return assPrefixTagCache.get(prefixTag)!
+  parseAssTextPayload(rawText: string) {
+    const parsed = parseAss(`${ASS_TEXT_SAMPLE_HEADER}${rawText}`)
+    const textPayload = (parsed.events.dialogue[0] as any)?.Text
+    if (textPayload?.parsed) {
+      return textPayload
     }
-
-    const sample = `[Script Info]\nScriptType: V4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,${prefixTag}X`
-    const parsed = parseAss(sample)
-    const tags = ((parsed.events.dialogue[0] as any)?.Text?.parsed?.[0]?.tags || []) as Array<Record<string, unknown>>
-    assPrefixTagCache.set(prefixTag, tags)
-    return tags
-  },
-
-  buildAssTextPayload(text: unknown, prefixTag = '') {
-    const normalized = this.normalizeModelOutputText(text)
-    const escapedText = normalized
-      .replace(/\\/g, '\\\\')
-      .replace(/\{/g, '\\{')
-      .replace(/\}/g, '\\}')
-      .replace(/\n/g, '\\N')
 
     return {
-      raw: `${prefixTag}${escapedText}`,
-      combined: escapedText,
-      parsed: [{
-        tags: this.getAssPrefixTags(prefixTag),
-        text: escapedText,
-        drawing: []
-      }]
+      raw: rawText,
+      combined: rawText,
+      parsed: [{ tags: [], text: rawText, drawing: [] }]
     }
+  },
+
+  buildAssTextPayload(text: unknown, prefixTag = '', formattingTokens: FormattingToken[] = []) {
+    const normalized = this.normalizeModelOutputText(text)
+    const restored = this.restoreFormattingTokens(normalized, formattingTokens, 'ass')
+    const assRawText = `${prefixTag}${restored.replace(/\n/g, '\\N')}`
+    return this.parseAssTextPayload(assRawText)
   },
 
   buildAssStyle(subtitleStylePreset = 'bilingual_simple') {
@@ -271,7 +301,7 @@ export const SubtitleService = {
           MarginR: 0,
           MarginV: 0,
           Effect: null,
-          Text: this.buildAssTextPayload(entry.text, entry.prefixTag)
+          Text: this.buildAssTextPayload(entry.text, entry.prefixTag, entry.formattingTokens)
         }))
       }
     }
@@ -295,7 +325,7 @@ export const SubtitleService = {
 
       return {
         ...dialogue,
-        Text: this.buildAssTextPayload(nextEntry.text, nextEntry.prefixTag || originalPrefixTag)
+        Text: this.buildAssTextPayload(nextEntry.text, nextEntry.prefixTag || originalPrefixTag, nextEntry.formattingTokens)
       }
     })
 
@@ -321,7 +351,7 @@ export const SubtitleService = {
       id: entry.id,
       startTime: this.msToSrtTime(entry.startMs),
       endTime: this.msToSrtTime(entry.endMs),
-      text: this.buildSrtText(entry.text, entry.prefixTag)
+      text: this.buildSrtText(entry.text, entry.prefixTag, entry.formattingTokens)
     }))
 
     const basePath = outputPath.replace(/\.[^.]+$/, '')

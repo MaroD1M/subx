@@ -5,7 +5,7 @@ import { tmpdir } from 'os'
 import { SubtitleService } from '../subtitle'
 import type { SubtitleEntry } from '../../../types'
 
-describe('SubtitleService tag preservation', () => {
+describe('SubtitleService formatting preservation', () => {
   it('parses leading cue tags from ass without leaking into text', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'subx-ass-'))
     const file = join(dir, 'sample.ass')
@@ -18,14 +18,28 @@ describe('SubtitleService tag preservation', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('parses leading cue tags from srt without leaking into text', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'subx-srt-parse-'))
-    const file = join(dir, 'sample.srt')
-    writeFileSync(file, `1\n00:00:01,000 --> 00:00:03,000\n{\\an8}Oh! Okay. Yeah.\nI just never thought about it that way.\n`, 'utf-8')
+  it('parses inline ass formatting tags into placeholders', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-ass-inline-'))
+    const file = join(dir, 'sample.ass')
+    writeFileSync(file, `[Script Info]\nScriptType: V4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\i1}Hello{\\i0} world`, 'utf-8')
 
     const entries = await SubtitleService.parseSubtitle(file)
-    expect(entries[0]?.prefixTag).toBe('{\\an8}')
-    expect(entries[0]?.text).toBe('Oh! Okay. Yeah.\nI just never thought about it that way.')
+    expect(entries[0]?.text).toContain('__SUBX_FMT_1__')
+    expect(entries[0]?.formattingTokens?.length).toBeGreaterThan(0)
+    expect(entries[0]?.formattingTokens?.some(token => token.value.includes('\\i0'))).toBe(true)
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('parses html formatting tags from srt into placeholders', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-srt-html-'))
+    const file = join(dir, 'sample.srt')
+    writeFileSync(file, `1\n00:00:01,000 --> 00:00:03,000\n<i>Hello</i> world\n`, 'utf-8')
+
+    const entries = await SubtitleService.parseSubtitle(file)
+    expect(entries[0]?.text).toContain('__SUBX_FMT_1__')
+    expect(entries[0]?.text).toContain('__SUBX_FMT_2__')
+    expect(entries[0]?.formattingTokens?.map(token => token.value)).toEqual(['<i>', '</i>'])
 
     rmSync(dir, { recursive: true, force: true })
   })
@@ -69,6 +83,32 @@ describe('SubtitleService tag preservation', () => {
     expect(content).toContain('{\\an8}哦 行吧 对\n我从没这么想过')
     expect(content).not.toContain('\\哦')
     expect(content).not.toContain('{\\an8}{\\an8}')
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('restores inline ass formatting tags during ass rewrite', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-ass-restore-'))
+    const source = join(dir, 'source.ass')
+    const out = join(dir, 'result.srt')
+    writeFileSync(source, `[Script Info]\nScriptType: V4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\i1}Hello{\\i0} world`, 'utf-8')
+
+    const entries: SubtitleEntry[] = [{
+      id: '1',
+      startTime: '00:00:01,000',
+      endTime: '00:00:03,000',
+      text: '__SUBX_FMT_1__你好__SUBX_FMT_2__ 世界',
+      translatedText: '__SUBX_FMT_1__你好__SUBX_FMT_2__ 世界',
+      formattingTokens: [
+        { placeholder: '__SUBX_FMT_1__', value: '{\\i1}' },
+        { placeholder: '__SUBX_FMT_2__', value: '{\\i0}' }
+      ]
+    }]
+
+    const outputPath = await SubtitleService.writeSubtitle(entries, out, 'translated', 'ass', 'bilingual_simple', 'translated_first', source)
+    const content = readFileSync(outputPath, 'utf-8')
+
+    expect(content).toContain('{\\i1}你好{\\i0} 世界')
 
     rmSync(dir, { recursive: true, force: true })
   })

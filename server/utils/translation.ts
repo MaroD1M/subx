@@ -27,6 +27,7 @@ ${styleBlock}
 - 条目顺序必须与输入完全一致，不能增减任何条目
 - 不要输出任何其他内容（不要 markdown、不要解释、不要编号前缀）
 - 不要输出任何字幕格式控制标签，例如 {\an8}、\N、<i>、</i>、<font> 等
+- 如果原文中出现形如 __SUBX_FMT_1__ 的占位符，必须在译文中原样保留，不可翻译、不可删除、不可改序
 - 即使某条原文很短或无意义，也必须输出对应序号和翻译
 
 影视字幕翻译规范（极其重要！）：
@@ -127,7 +128,7 @@ export const TranslationService = {
         let lastParsedIndex = 0
 
         try {
-            const systemMessage = `你是高级字幕翻译专家。按指定格式逐条输出翻译，不要输出任何额外内容。不要输出任何字幕控制标签（例如 {\an8}、\N、HTML 标签）。每条输入都必须有对应的翻译输出，序号必须与输入完全一致。${stylePrompt ? ' ' + stylePrompt : ''}`
+            const systemMessage = `你是高级字幕翻译专家。按指定格式逐条输出翻译，不要输出任何额外内容。不要输出任何字幕控制标签（例如 {\an8}、\N、HTML 标签）。如果输入里出现 __SUBX_FMT_1__ 这类占位符，必须原样保留。每条输入都必须有对应的翻译输出，序号必须与输入完全一致。${stylePrompt ? ' ' + stylePrompt : ''}`
             const messages: ChatCompletionMessageParam[] = [
                 { role: 'system', content: systemMessage },
                 { role: 'user', content: prompt }
