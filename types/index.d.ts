@@ -5,6 +5,7 @@ export interface SubtitleEntry {
   endTime: string        // "00:00:03,500"
   text: string           // 原文
   translatedText?: string // 译文
+  prefixTag?: string     // 前导定位/样式标签，如 {\an8}
 }
 
 /** 翻译分块 */

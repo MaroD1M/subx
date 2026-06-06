@@ -8,6 +8,7 @@ import { useDb } from './db'
 import { resolveMediaPath } from './mediaRoots'
 
 const srtParser = new SrtParser()
+const assPrefixTagCache = new Map<string, Array<Record<string, unknown>>>()
 
 type OutputMode = 'translated' | 'bilingual' | 'original'
 type SubtitleFormat = 'srt' | 'ass' | 'both'
@@ -25,6 +26,29 @@ export const SubtitleService = {
     return false
   },
 
+  extractLeadingCueTag(text: unknown): { prefixTag: string, body: string } {
+    const normalized = this.normalizeSubtitleText(text)
+    const match = normalized.match(/^((?:\{\\[^}]+\}\s*)+)/)
+    if (!match) {
+      return { prefixTag: '', body: normalized }
+    }
+
+    return {
+      prefixTag: match[1].trim(),
+      body: normalized.slice(match[0].length).trim()
+    }
+  },
+
+  stripInlineAssTags(text: string): string {
+    return text.replace(/\{[^}]+\}/g, '')
+  },
+
+  normalizeModelOutputText(text: unknown): string {
+    const normalized = this.normalizeSubtitleText(text)
+      .replace(/\\[nN]/g, '\n')
+    return this.extractLeadingCueTag(normalized).body.trim()
+  },
+
   async parseSubtitle(filePath: string): Promise<SubtitleEntry[]> {
     const content = readFileSync(filePath, 'utf-8')
     const extension = filePath.split('.').pop()?.toLowerCase()
@@ -34,27 +58,32 @@ export const SubtitleService = {
       return parsed.events.dialogue.map((event, index) => {
         const rawText = typeof event.Text === 'string'
           ? event.Text
-          : (event.Text as any).combined || JSON.stringify(event.Text)
+          : ((event.Text as any).raw || (event.Text as any).combined || JSON.stringify(event.Text))
+
+        const normalizedRaw = String(rawText).replace(/\\[nN]/g, '\n')
+        const { prefixTag, body } = this.extractLeadingCueTag(normalizedRaw)
 
         return {
           id: (index + 1).toString(),
           startTime: this.assSecondsToSrtTime(event.Start),
           endTime: this.assSecondsToSrtTime(event.End),
-          text: rawText
-            .replace(/\\[nN]/g, '\n')
-            .replace(/\{[^}]+\}/g, '')
-            .trim()
+          text: this.stripInlineAssTags(body).trim(),
+          prefixTag: prefixTag || undefined
         }
       })
     }
 
     const srtEntries = srtParser.fromSrt(content)
-    return srtEntries.map(entry => ({
-      id: entry.id,
-      startTime: entry.startTime,
-      endTime: entry.endTime,
-      text: entry.text
-    }))
+    return srtEntries.map(entry => {
+      const { prefixTag, body } = this.extractLeadingCueTag(entry.text)
+      return {
+        id: entry.id,
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        text: body,
+        prefixTag: prefixTag || undefined
+      }
+    })
   },
 
   assSecondsToSrtTime(assSeconds: number): string {
@@ -83,7 +112,7 @@ export const SubtitleService = {
 
   getDisplayText(entry: SubtitleEntry, outputMode: OutputMode, bilingualLayout: BilingualLayout): string {
     const originalText = String(entry.text ?? '')
-    const translatedText = String(entry.translatedText ?? entry.text ?? '')
+    const translatedText = this.normalizeModelOutputText(entry.translatedText ?? entry.text ?? '')
 
     if (outputMode === 'original') {
       return originalText
@@ -103,7 +132,8 @@ export const SubtitleService = {
       id: String(entry.id),
       startMs: this.srtTimeToMs(String(entry.startTime)),
       endMs: this.srtTimeToMs(String(entry.endTime)),
-      text: this.sanitizeSrtText(this.getDisplayText(entry, outputMode, bilingualLayout))
+      text: this.sanitizeSrtText(this.getDisplayText(entry, outputMode, bilingualLayout)),
+      prefixTag: entry.prefixTag || ''
     }))
   },
 
@@ -122,61 +152,47 @@ export const SubtitleService = {
       .replace(/<\s*\/\s*font\s*>/gi, '')
   },
 
-  buildAssTextPayload(text: unknown) {
-    const normalized = this.normalizeSubtitleText(text)
+  buildSrtText(text: unknown, prefixTag?: string): string {
+    const normalized = this.sanitizeSrtText(text)
+    return prefixTag ? `${prefixTag}${normalized}` : normalized
+  },
+
+  getAssPrefixTags(prefixTag?: string): Array<Record<string, unknown>> {
+    if (!prefixTag) return []
+    if (assPrefixTagCache.has(prefixTag)) {
+      return assPrefixTagCache.get(prefixTag)!
+    }
+
+    const sample = `[Script Info]\nScriptType: V4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,${prefixTag}X`
+    const parsed = parseAss(sample)
+    const tags = ((parsed.events.dialogue[0] as any)?.Text?.parsed?.[0]?.tags || []) as Array<Record<string, unknown>>
+    assPrefixTagCache.set(prefixTag, tags)
+    return tags
+  },
+
+  buildAssTextPayload(text: unknown, prefixTag = '') {
+    const normalized = this.normalizeModelOutputText(text)
       .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/<\/?\s*(i|b|u)\s*>/gi, '')
       .replace(/<\s*font[^>]*>/gi, '')
       .replace(/<\s*\/\s*font\s*>/gi, '')
 
-    const parsed: Array<{ tags: Array<Record<string, number>>, text: string, drawing: never[] }> = []
-    const styleState = { i: 0, b: 0, u: 0 }
-    const tokenPattern = /<\s*(\/)?\s*(i|b|u)\s*>/gi
-    let cursor = 0
-    let match: RegExpExecArray | null = null
-
-    const getActiveTags = () => Object.entries(styleState)
-      .filter(([, value]) => value)
-      .map(([key, value]) => ({ [key]: value })) as Array<Record<string, number>>
-
-    const pushFragment = (fragmentText: string, forceTags?: Array<Record<string, number>>) => {
-      if (!fragmentText) return
-      parsed.push({
-        tags: forceTags ?? getActiveTags(),
-        text: fragmentText.replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}').replace(/\n/g, '\\N'),
-        drawing: []
-      })
-    }
-
-    while ((match = tokenPattern.exec(normalized)) !== null) {
-      pushFragment(normalized.slice(cursor, match.index))
-      const isClosing = !!match[1]
-      const tagName = match[2].toLowerCase() as 'i' | 'b' | 'u'
-      styleState[tagName] = isClosing ? 0 : 1
-
-      if (isClosing) {
-        parsed.push({
-          tags: [{ [tagName]: 0 }],
-          text: '',
-          drawing: []
-        })
-      }
-
-      cursor = match.index + match[0].length
-    }
-
-    pushFragment(normalized.slice(cursor))
-
-    if (parsed.length === 0) {
-      parsed.push({ tags: [], text: '', drawing: [] })
-    }
+    const escapedText = normalized
+      .replace(/\\/g, '\\\\')
+      .replace(/\{/g, '\\{')
+      .replace(/\}/g, '\\}')
+      .replace(/\n/g, '\\N')
 
     return {
-      raw: normalized,
-      combined: normalized.replace(/<[^>]+>/g, ''),
-      parsed
+      raw: `${prefixTag}${escapedText}`,
+      combined: escapedText,
+      parsed: [{
+        tags: this.getAssPrefixTags(prefixTag),
+        text: escapedText,
+        drawing: []
+      }]
     }
   },
-
 
   buildAssStyle(subtitleStylePreset = 'bilingual_simple') {
     const isCinema = subtitleStylePreset.includes('cinema')
@@ -240,7 +256,7 @@ export const SubtitleService = {
           MarginR: 0,
           MarginV: 0,
           Effect: null,
-          Text: this.buildAssTextPayload(entry.text)
+          Text: this.buildAssTextPayload(entry.text, entry.prefixTag)
         }))
       }
     }
@@ -257,9 +273,14 @@ export const SubtitleService = {
       const nextEntry = byId.get(String(index + 1))
       if (!nextEntry) return dialogue
 
+      const originalRaw = typeof (dialogue as any).Text === 'string'
+        ? (dialogue as any).Text
+        : ((dialogue as any).Text?.raw || '')
+      const originalPrefixTag = this.extractLeadingCueTag(originalRaw).prefixTag
+
       return {
         ...dialogue,
-        Text: this.buildAssTextPayload(nextEntry.text)
+        Text: this.buildAssTextPayload(nextEntry.text, nextEntry.prefixTag || originalPrefixTag)
       }
     })
 
@@ -280,15 +301,16 @@ export const SubtitleService = {
       mkdirSync(outputDir, { recursive: true })
     }
 
-    const normalizedEntries = entries.map(entry => ({
+    const normalizedEntries = this.normalizeEntries(entries, outputMode, bilingualLayout)
+    const srtEntries = normalizedEntries.map(entry => ({
       id: entry.id,
-      startTime: entry.startTime,
-      endTime: entry.endTime,
-      text: this.sanitizeSrtText(this.getDisplayText(entry, outputMode, bilingualLayout))
+      startTime: this.msToSrtTime(entry.startMs),
+      endTime: this.msToSrtTime(entry.endMs),
+      text: this.buildSrtText(entry.text, entry.prefixTag)
     }))
 
     const basePath = outputPath.replace(/\.[^.]+$/, '')
-    const srtContent = srtParser.toSrt(normalizedEntries as any)
+    const srtContent = srtParser.toSrt(srtEntries as any)
 
     if (subtitleFormat === 'srt') {
       const srtPath = `${basePath}.srt`
