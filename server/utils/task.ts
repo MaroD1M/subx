@@ -404,6 +404,21 @@ export const TaskService = {
             await this.updateStatus(taskId, 'exporting', 90, { log: '正在合成并保存最终字幕文件...' })
             const translatedEntries = Array.from(translatedMap.values())
             translatedEntries.sort((a, b) => Number(a.id) - Number(b.id))
+
+            if (task.outputMode !== 'original') {
+                const issues = SubtitleService.validateTranslatedEntries(translatedEntries, task.targetLanguage)
+                if (issues.length > 0) {
+                    const preview = issues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
+                    writeTaskLog(taskId, 'exporting', 'error', `[拦截] 检测到 ${issues.length} 条字幕未获得有效翻译：${preview}`)
+
+                    if (config.failOnUntranslated !== false) {
+                        throw new Error(`翻译不完整：检测到 ${issues.length} 条字幕未获得有效译文，已停止导出`)
+                    }
+
+                    writeTaskLog(taskId, 'exporting', 'warn', `[宽松导出] 检测到 ${issues.length} 条未有效翻译字幕，但已按配置继续导出`)
+                }
+            }
+
             const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat, subtitleStylePreset, bilingualLayout, srtPath)
             await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${savedPath}` })
 

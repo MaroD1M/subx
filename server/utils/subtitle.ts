@@ -20,6 +20,7 @@ type FormattingTarget = 'srt' | 'ass'
 type FormattingToken = { placeholder: string, value: string }
 type TemplateSlot = { placeholder?: string, text: string }
 type AssSegment = { tags: string[], text: string, drawing?: unknown[] }
+type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy', original: string, translated: string }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
   return resolveMediaPath(userPath, rootId)
@@ -343,6 +344,53 @@ export const SubtitleService = {
     }
 
     return translatedText
+  },
+
+  normalizeComparisonText(text: unknown): string {
+    return this.normalizeSubtitleText(text)
+      .replace(formattingPlaceholderPattern, '')
+      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/\{[^}]+\}/g, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/[\s\p{P}]+/gu, '')
+      .toLowerCase()
+  },
+
+  looksLatinHeavy(text: unknown): boolean {
+    const normalized = this.normalizeSubtitleText(text)
+    if (!normalized) return false
+    const letters = Array.from(normalized).filter(char => /[a-zA-Z]/.test(char)).length
+    const visible = Array.from(normalized).filter(char => /\S/.test(char)).length
+    return visible > 0 && letters / visible >= 0.7
+  },
+
+  validateTranslatedEntries(entries: SubtitleEntry[], targetLanguage: string): TranslationValidationIssue[] {
+    const shouldCheckLatinHeavy = /^zh|^ja|^ko/i.test(targetLanguage)
+    const issues: TranslationValidationIssue[] = []
+
+    for (const entry of entries) {
+      if (this.isNonVerbal(entry.text)) continue
+      const original = String(entry.text || '')
+      const translated = String(entry.translatedText || '')
+      const normalizedOriginal = this.normalizeComparisonText(original)
+      const normalizedTranslated = this.normalizeComparisonText(translated)
+
+      if (!normalizedTranslated) {
+        issues.push({ id: String(entry.id), reason: 'missing', original, translated })
+        continue
+      }
+
+      if (normalizedOriginal && normalizedOriginal === normalizedTranslated) {
+        issues.push({ id: String(entry.id), reason: 'same_as_source', original, translated })
+        continue
+      }
+
+      if (shouldCheckLatinHeavy && this.looksLatinHeavy(translated) && this.looksLatinHeavy(original)) {
+        issues.push({ id: String(entry.id), reason: 'latin_heavy', original, translated })
+      }
+    }
+
+    return issues
   },
 
   normalizeEntries(entries: SubtitleEntry[], outputMode: OutputMode, bilingualLayout: BilingualLayout) {

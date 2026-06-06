@@ -102,6 +102,16 @@
             <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
           </div>
 
+          <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5">
+            <div class="flex items-center justify-between gap-3 cursor-pointer" @click="config.failOnUntranslated = !config.failOnUntranslated">
+              <div class="space-y-0.5">
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">翻译失败时终止导出</label>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400">推荐开启。若检测到空译文、原文照抄或疑似未翻译，将直接报错并阻止生成错误双语字幕。</p>
+              </div>
+              <USwitch v-model="config.failOnUntranslated" @click.stop />
+            </div>
+          </div>
+
           <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5" :class="config.translationMode !== 'stream' ? 'opacity-60' : ''">
             <div class="flex items-center justify-between gap-3 cursor-pointer" @click="toggleStreamUsage">
               <div class="space-y-0.5">
@@ -166,6 +176,7 @@ if (config.value) {
   if (config.value.maxRetries) config.value.maxRetries = Number(config.value.maxRetries)
   if (config.value.logRetentionDays) config.value.logRetentionDays = Number(config.value.logRetentionDays)
   if (!config.value.translationMode) config.value.translationMode = 'non_stream'
+  if (config.value.failOnUntranslated === undefined) config.value.failOnUntranslated = true
   if (config.value.streamUsage === undefined) config.value.streamUsage = false
 }
 
@@ -195,6 +206,7 @@ function buildConfigSnapshot(value: any) {
     maxRetries: Number(value?.maxRetries || 0),
     logRetentionDays: Number(value?.logRetentionDays || 0),
     translationMode: String(value?.translationMode || 'non_stream'),
+    failOnUntranslated: value?.failOnUntranslated !== false,
     streamUsage: !!value?.streamUsage,
     glossary: value?.glossary || {}
   })
