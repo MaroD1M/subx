@@ -125,6 +125,10 @@ export function useDb() {
   } catch { /* column already exists */ }
 
   try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN translation_mode TEXT NOT NULL DEFAULT 'non_stream'`)
+  } catch { /* column already exists */ }
+
+  try {
     _db.exec(`ALTER TABLE task_responses ADD COLUMN raw_request TEXT`)
   } catch { /* column already exists */ }
 

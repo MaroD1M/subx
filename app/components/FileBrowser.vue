@@ -621,8 +621,8 @@ async function startTask(silent = false) {
     } else {
       navigateTo(`/task/${res.taskId}`)
     }
-  } catch {
-    toast.add({ title: toastText.error, description: '无法开始翻译任务', color: 'danger' })
+  } catch (e: any) {
+    toast.add({ title: '创建失败', description: e?.data?.message || e?.message || '无法开始翻译任务', color: 'danger' })
   } finally {
     launching.value = false
   }
