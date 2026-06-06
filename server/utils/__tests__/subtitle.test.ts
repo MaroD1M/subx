@@ -179,6 +179,87 @@ Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\an8}{\\k20}Hel{\\k30}{\\i1}
     expect(rebuilt).toBe('__SUBX_FMT_1__你好__SUBX_FMT_2__世界')
   })
 
+  it('preserves ass drawing lines as raw content during parse', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-ass-drawing-'))
+    const file = join(dir, 'sample.ass')
+    writeFileSync(file, `[Script Info]
+ScriptType: V4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\p1}m 0 0 l 10 0 10 10 0 10{\\p0}`, 'utf-8')
+
+    const entries = await SubtitleService.parseSubtitle(file)
+    expect(entries[0]?.text).toBe('{\\p1}m 0 0 l 10 0 10 10 0 10{\\p0}')
+    expect(entries[0]?.formattingTokens).toBeUndefined()
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('preserves ass transform and clipping style blocks during rewrite', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-ass-transform-'))
+    const source = join(dir, 'source.ass')
+    const out = join(dir, 'result.srt')
+    writeFileSync(source, `[Script Info]
+ScriptType: V4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\an8}{\clip(0,0,100,100)}{\t(0,200,\fscx120)}Hello world`, 'utf-8')
+
+    const entries: SubtitleEntry[] = [{
+      id: '1',
+      startTime: '00:00:01,000',
+      endTime: '00:00:03,000',
+      text: '__SUBX_FMT_1____SUBX_FMT_2__你好 世界',
+      translatedText: '__SUBX_FMT_1____SUBX_FMT_2__你好 世界',
+      prefixTag: '{\\an8}',
+      formattingTokens: [
+        { placeholder: '__SUBX_FMT_1__', value: '{\\clip(0,0,100,100)}' },
+        { placeholder: '__SUBX_FMT_2__', value: '{\\t(0,200,\\fscx120)}' }
+      ]
+    }]
+
+    const outputPath = await SubtitleService.writeSubtitle(entries, out, 'translated', 'ass', 'bilingual_simple', 'translated_first', source)
+    const content = readFileSync(outputPath, 'utf-8')
+
+    expect(content).toContain(String.raw`{\an8}{\clip(0,0,100,100)}`)
+    expect(content).toContain(String.raw`{\t(0,200,1,\fscx120)}你好 世界`)
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('keeps bilingual placeholder layout stable across line breaks', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-srt-bilingual-fmt-'))
+    const out = join(dir, 'demo.output.srt')
+    const entries: SubtitleEntry[] = [{
+      id: '1',
+      startTime: '00:00:01,000',
+      endTime: '00:00:03,000',
+      text: '__SUBX_FMT_1__Hello__SUBX_FMT_2__\nworld',
+      translatedText: '你好\n__SUBX_FMT_1__世界__SUBX_FMT_2__',
+      formattingTokens: [
+        { placeholder: '__SUBX_FMT_1__', value: '<i>' },
+        { placeholder: '__SUBX_FMT_2__', value: '</i>' }
+      ]
+    }]
+
+    const outputPath = await SubtitleService.writeSubtitle(entries, out, 'bilingual', 'srt', 'bilingual_simple', 'translated_first')
+    const content = readFileSync(outputPath, 'utf-8').replace(/\r\n/g, '\n')
+
+    expect(content).toContain('你好\n世界\nHello\nworld')
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   it('rewrites ass while preserving leading position tag and line breaks', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'subx-ass-write-'))
     const source = join(dir, 'source.ass')

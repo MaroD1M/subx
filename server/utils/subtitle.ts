@@ -19,6 +19,7 @@ type BilingualLayout = 'translated_first' | 'original_first'
 type FormattingTarget = 'srt' | 'ass'
 type FormattingToken = { placeholder: string, value: string }
 type TemplateSlot = { placeholder?: string, text: string }
+type AssSegment = { tags: string[], text: string, drawing?: unknown[] }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
   return resolveMediaPath(userPath, rootId)
@@ -62,6 +63,19 @@ export const SubtitleService = {
     })
 
     return { text: protectedText.trim(), formattingTokens }
+  },
+
+  hasAssDrawing(rawText: string): boolean {
+    const payload = this.parseAssTextPayload(rawText)
+    const parsed = Array.isArray((payload as any)?.parsed) ? (payload as any).parsed : []
+    return parsed.some((segment: any) => {
+      const tags = Array.isArray(segment?.tags) ? segment.tags : []
+      return tags.some((tag: any) => Number(tag?.p) > 0)
+    })
+  },
+
+  shouldPreserveAssRawText(rawText: string): boolean {
+    return this.hasAssDrawing(rawText)
   },
 
   convertFormattingTokenToAss(value: string): string {
@@ -242,6 +256,16 @@ export const SubtitleService = {
           : ((event.Text as any).raw || (event.Text as any).combined || JSON.stringify(event.Text))
 
         const normalizedRaw = String(rawText).replace(/\\[nN]/g, '\n')
+
+        if (this.shouldPreserveAssRawText(normalizedRaw)) {
+          return {
+            id: (index + 1).toString(),
+            startTime: this.assSecondsToSrtTime(event.Start),
+            endTime: this.assSecondsToSrtTime(event.End),
+            text: normalizedRaw
+          }
+        }
+
         const { prefixTag, body } = this.extractLeadingCueTag(normalizedRaw)
         const protectedBody = this.protectFormattingTokens(body)
 
@@ -297,12 +321,16 @@ export const SubtitleService = {
 
   getDisplayText(entry: SubtitleEntry, outputMode: OutputMode, bilingualLayout: BilingualLayout): string {
     const originalText = String(entry.text ?? '')
+    const preservedAssRawText = entry.prefixTag ? `${entry.prefixTag}${originalText}` : originalText
+    const shouldPreserveRawText = this.shouldPreserveAssRawText(preservedAssRawText)
     const stabilizedTranslatedText = this.stabilizeFormattingPlaceholders(
       entry.translatedText ?? entry.text ?? '',
       originalText,
       entry.formattingTokens || []
     )
-    const translatedText = this.normalizeModelOutputText(stabilizedTranslatedText)
+    const translatedText = shouldPreserveRawText
+      ? this.normalizeSubtitleText(stabilizedTranslatedText)
+      : this.normalizeModelOutputText(stabilizedTranslatedText)
 
     if (outputMode === 'original') {
       return originalText
