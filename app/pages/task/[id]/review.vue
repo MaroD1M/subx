@@ -42,7 +42,8 @@
                 <span v-if="dirtyCount > 0" class="text-primary-500">待保存 {{ dirtyCount }} 条</span>
               </div>
               <div class="flex items-center gap-2 flex-wrap">
-                <USelect v-model="statusFilter" :items="filterItems" class="w-36" />
+                <USelect v-model="statusFilter" :items="filterItems" class="w-28" />
+                <USelect v-model="reasonFilter" :items="reasonFilterItems" class="w-40" />
                 <UButton label="全选可见" size="xs" color="neutral" variant="ghost" @click="selectVisible" />
                 <UButton label="待核对" size="xs" color="warning" variant="ghost" @click="selectNeedsReview" />
                 <UButton label="清空选择" size="xs" color="neutral" variant="ghost" @click="clearSelection" />
@@ -144,6 +145,7 @@ const previewLoading = ref(false)
 const previewContent = ref('')
 const previewFormat = ref<'srt' | 'ass'>('srt')
 const statusFilter = ref('all')
+const reasonFilter = ref('all')
 const summary = reactive({ total: 0, needsReview: 0, edited: 0 })
 const entries = ref<any[]>([])
 const entrySnapshots = ref<Record<string, { finalText: string, reviewStatus: string, selected: boolean, edited: boolean }>>({})
@@ -169,17 +171,35 @@ const reasonLabels: Record<string, string> = {
   bilingual_duplicate: '双语内容重复'
 }
 
+const reasonFilterItems = computed(() => {
+  const reasons = new Set<string>()
+  for (const entry of entries.value) {
+    for (const reason of entry.reviewReasons || []) {
+      reasons.add(String(reason))
+    }
+  }
+  return [
+    { label: '全部原因', value: 'all' },
+    ...Array.from(reasons).sort().map(reason => ({ label: reasonLabel(reason), value: reason }))
+  ]
+})
+
 const filteredEntries = computed(() => {
+  let list = entries.value
+
   if (statusFilter.value === 'needs_review') {
-    return entries.value.filter(entry => reviewStatuses.includes(entry.reviewStatus))
+    list = list.filter(entry => reviewStatuses.includes(entry.reviewStatus))
+  } else if (statusFilter.value === 'edited') {
+    list = list.filter(entry => entry.edited)
+  } else if (statusFilter.value === 'selected') {
+    list = list.filter(entry => entry.selected)
   }
-  if (statusFilter.value === 'edited') {
-    return entries.value.filter(entry => entry.edited)
+
+  if (reasonFilter.value !== 'all') {
+    list = list.filter(entry => (entry.reviewReasons || []).includes(reasonFilter.value))
   }
-  if (statusFilter.value === 'selected') {
-    return entries.value.filter(entry => entry.selected)
-  }
-  return entries.value
+
+  return list
 })
 
 const selectedEntries = computed(() => entries.value.filter(entry => entry.selected))
@@ -220,6 +240,17 @@ function isEntryDirty(entry: any) {
     || snapshot.reviewStatus !== String(entry.reviewStatus || '')
     || snapshot.selected !== !!entry.selected
     || snapshot.edited !== !!entry.edited
+}
+
+function confirmLeaveIfDirty() {
+  if (dirtyCount.value <= 0) return true
+  return window.confirm('当前有未保存修改，确定要离开吗？')
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (dirtyCount.value <= 0) return
+  event.preventDefault()
+  event.returnValue = ''
 }
 
 function markEdited(entry: any) {
@@ -378,6 +409,7 @@ async function exportReviewed() {
 }
 
 async function discardReview() {
+  if (!confirmLeaveIfDirty()) return
   try {
     await $fetch(`/api/tasks/${taskId}/review-discard`, { method: 'POST' })
     toast.add({ title: '已放弃本次翻译成果', color: 'warning' })
@@ -387,12 +419,27 @@ async function discardReview() {
   }
 }
 
+watch(reasonFilterItems, (items) => {
+  if (!items.some(item => item.value === reasonFilter.value)) {
+    reasonFilter.value = 'all'
+  }
+})
+
 watch(previewFormat, () => {
   loadPreview()
 })
 
+onBeforeRouteLeave(() => {
+  return confirmLeaveIfDirty()
+})
+
 onMounted(async () => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
   await loadReview()
   await loadPreview()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 </script>
