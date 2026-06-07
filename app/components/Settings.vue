@@ -67,7 +67,17 @@
           <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
         </UFormField>
 
-        <UFormField label="导出容错策略">
+        <UFormField>
+          <template #label>
+            <div class="flex items-center gap-1.5">
+              <span>导出容错策略</span>
+              <UIcon
+                name="i-lucide-circle-help"
+                class="w-3.5 h-3.5 text-gray-400 cursor-help"
+                :title="exportToleranceHint"
+              />
+            </div>
+          </template>
           <USelect v-model="config.exportToleranceMode" :items="exportToleranceItems" class="w-full" />
         </UFormField>
       </div>
@@ -159,10 +169,13 @@ const translationModeItems = [
   { label: '流式（兼容性较弱）', value: 'stream' }
 ]
 const exportToleranceItems = [
-  { label: '严格：发现明显漏翻即停止导出', value: 'strict' },
-  { label: '平衡：少量低风险问题继续导出（推荐）', value: 'balanced' },
-  { label: '宽松：仅大面积或严重异常时停止导出', value: 'lenient' }
+  { label: '严格', value: 'strict' },
+  { label: '平衡（推荐）', value: 'balanced' },
+  { label: '宽松', value: 'lenient' }
 ]
+const exportToleranceHint = `严格：发现明显漏翻即停止导出
+平衡：少量低风险问题继续导出
+宽松：仅大面积或严重异常时停止导出`
 
 if (config.value) {
   if (config.value.chunkSize) config.value.chunkSize = Number(config.value.chunkSize)
