@@ -17,14 +17,14 @@ COPY package.json package-lock.json ./
 # 优化针对 QEMU 模拟环境的安装逻辑
 # 1. 设置超时以防网络抖动导致 QEMU 进程挂起
 # 2. 禁用 audit 和 fund 减少不必要的进程分发
-# 3. 使用 npm install（非 ci）兼容可选依赖平台分发，避免 npm ci 在 buildx 环境偶发失败
+# 3. 使用 npm ci + lockfile 保证解析确定性，减少 CI / buildx 环境差异
 RUN npm config set registry https://registry.npmjs.org/ && \
     npm config set fetch-retries 5 && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000 && \
     npm config set audit false && \
     npm config set fund false && \
-    npm install --ignore-scripts
+    npm ci --ignore-scripts
 
 COPY . .
 RUN npm run build
