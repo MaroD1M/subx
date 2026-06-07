@@ -31,6 +31,7 @@ export const ConfigService = {
             concurrency: 3,
             maxRetries: 3,
             translationMode: 'non_stream',
+            exportToleranceMode: 'balanced',
             failOnUntranslated: true,
             streamUsage: false,
             logRetentionDays: 7,
@@ -50,6 +51,8 @@ export const ConfigService = {
                 config.streamUsage = row.value === 'true' || row.value === '1'
             } else if (row.key === 'translationMode') {
                 config.translationMode = row.value === 'stream' ? 'stream' : 'non_stream'
+            } else if (row.key === 'exportToleranceMode') {
+                config.exportToleranceMode = ['strict', 'balanced', 'lenient'].includes(row.value) ? row.value : 'balanced'
             } else if (row.key === 'failOnUntranslated') {
                 config.failOnUntranslated = row.value === 'true' || row.value === '1'
             } else {

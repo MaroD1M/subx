@@ -67,13 +67,9 @@
           <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
         </UFormField>
 
-        <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3 flex items-center justify-between gap-3">
-          <div class="space-y-0.5">
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">未翻译即失败</p>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400">发现未翻译片段时直接阻止导出，优先保证结果可靠。</p>
-          </div>
-          <USwitch v-model="config.failOnUntranslated" @click.stop />
-        </div>
+        <UFormField label="导出容错策略">
+          <USelect v-model="config.exportToleranceMode" :items="exportToleranceItems" class="w-full" />
+        </UFormField>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
@@ -162,6 +158,11 @@ const translationModeItems = [
   { label: '非流式（推荐）', value: 'non_stream' },
   { label: '流式（兼容性较弱）', value: 'stream' }
 ]
+const exportToleranceItems = [
+  { label: '严格：发现明显漏翻即停止导出', value: 'strict' },
+  { label: '平衡：少量低风险问题继续导出（推荐）', value: 'balanced' },
+  { label: '宽松：仅大面积或严重异常时停止导出', value: 'lenient' }
+]
 
 if (config.value) {
   if (config.value.chunkSize) config.value.chunkSize = Number(config.value.chunkSize)
@@ -169,6 +170,7 @@ if (config.value) {
   if (config.value.maxRetries) config.value.maxRetries = Number(config.value.maxRetries)
   if (config.value.logRetentionDays) config.value.logRetentionDays = Number(config.value.logRetentionDays)
   if (!config.value.translationMode) config.value.translationMode = 'non_stream'
+  if (!config.value.exportToleranceMode) config.value.exportToleranceMode = config.value.failOnUntranslated === false ? 'lenient' : 'balanced'
   if (config.value.failOnUntranslated === undefined) config.value.failOnUntranslated = true
   if (config.value.streamUsage === undefined) config.value.streamUsage = false
 }
@@ -199,6 +201,7 @@ function buildConfigSnapshot(value: any) {
     maxRetries: Number(value?.maxRetries || 0),
     logRetentionDays: Number(value?.logRetentionDays || 0),
     translationMode: String(value?.translationMode || 'non_stream'),
+    exportToleranceMode: String(value?.exportToleranceMode || (value?.failOnUntranslated === false ? 'lenient' : 'balanced')),
     failOnUntranslated: value?.failOnUntranslated !== false,
     streamUsage: !!value?.streamUsage,
     glossary: value?.glossary || {}

@@ -539,6 +539,37 @@ export const SubtitleService = {
     return prefixTag ? `${prefixTag}${normalized}` : normalized
   },
 
+  buildBilingualAssTextPayload(entry: SubtitleEntry, bilingualLayout: BilingualLayout, subtitleStylePreset = 'bilingual_simple', prefixTag = '', formattingTokens: FormattingToken[] = []) {
+    const originalText = this.normalizeSubtitleText(entry.text)
+    const translatedBase = this.stabilizeFormattingPlaceholders(
+      entry.translatedText ?? entry.text ?? '',
+      originalText,
+      formattingTokens
+    )
+    const translatedText = this.normalizeModelOutputText(translatedBase)
+    const restoredTranslated = this.restoreFormattingTokens(translatedText, formattingTokens, 'ass').replace(/\n/g, '\\N')
+    const restoredOriginal = this.restoreFormattingTokens(originalText, formattingTokens, 'ass').replace(/\n/g, '\\N')
+
+    const isCinema = subtitleStylePreset.includes('cinema')
+    const isStudy = subtitleStylePreset.includes('study')
+    const isCompact = subtitleStylePreset.includes('compact')
+    const isMono = subtitleStylePreset.includes('mono')
+
+    const translatedSize = isCinema ? 54 : isStudy ? 46 : isCompact ? 40 : 48
+    const originalSize = isCinema ? 24 : isStudy ? 34 : isCompact ? 26 : 28
+    const originalColor = isCinema ? '&H00B8B8B8&' : isStudy ? '&H00D8D8D8&' : '&H00C8C8C8&'
+    const translatedBorder = isCinema ? '2.4' : isCompact ? '1.6' : '2'
+    const originalBorder = isStudy ? '1.2' : '1'
+    const translatedShadow = isMono ? '0.5' : isCinema ? '0.9' : '0.8'
+    const originalShadow = isStudy ? '0.45' : '0.35'
+
+    const translatedStyled = `{\\fs${translatedSize}\\bord${translatedBorder}\\shad${translatedShadow}}${restoredTranslated}`
+    const originalStyled = `{\\fs${originalSize}\\c${originalColor}\\bord${originalBorder}\\shad${originalShadow}}${restoredOriginal}`
+    const lines = bilingualLayout === 'original_first'
+      ? [originalStyled, translatedStyled]
+      : [translatedStyled, originalStyled]
+    return this.parseAssTextPayload(`${prefixTag}${lines.join('\\N')}`)
+  },
   parseAssTextPayload(rawText: string) {
     const parsed = parseAss(`${ASS_TEXT_SAMPLE_HEADER}${rawText}`)
     const textPayload = (parsed.events.dialogue[0] as any)?.Text
@@ -622,7 +653,9 @@ export const SubtitleService = {
           MarginR: 0,
           MarginV: 0,
           Effect: null,
-          Text: this.buildAssTextPayload(entry.text, entry.prefixTag, entry.formattingTokens)
+          Text: outputMode === 'bilingual'
+            ? this.buildBilingualAssTextPayload(entries.find(source => String(source.id) === String(entry.id)) || entry as any, bilingualLayout, subtitleStylePreset, entry.prefixTag, entry.formattingTokens)
+            : this.buildAssTextPayload(entry.text, entry.prefixTag, entry.formattingTokens)
         }))
       }
     }
@@ -630,7 +663,7 @@ export const SubtitleService = {
     return stringifyAss(assDoc as any)
   },
 
-  rewriteExistingAss(originalContent: string, entries: SubtitleEntry[], outputMode: OutputMode, bilingualLayout: BilingualLayout): string {
+  rewriteExistingAss(originalContent: string, entries: SubtitleEntry[], outputMode: OutputMode, bilingualLayout: BilingualLayout, subtitleStylePreset = 'bilingual_simple'): string {
     const parsed = parseAss(originalContent)
     const normalizedEntries = this.normalizeEntries(entries, outputMode, bilingualLayout)
     const byId = new Map(normalizedEntries.map(entry => [entry.id, entry]))
@@ -646,7 +679,9 @@ export const SubtitleService = {
 
       return {
         ...dialogue,
-        Text: this.buildAssTextPayload(nextEntry.text, nextEntry.prefixTag || originalPrefixTag, nextEntry.formattingTokens)
+        Text: outputMode === 'bilingual'
+          ? this.buildBilingualAssTextPayload({ ...nextEntry, prefixTag: nextEntry.prefixTag || originalPrefixTag } as any, bilingualLayout, subtitleStylePreset, nextEntry.prefixTag || originalPrefixTag, nextEntry.formattingTokens)
+          : this.buildAssTextPayload(nextEntry.text, nextEntry.prefixTag || originalPrefixTag, nextEntry.formattingTokens)
       }
     })
 
@@ -687,7 +722,7 @@ export const SubtitleService = {
     const sourceExt = sourceSubtitlePath?.split('.').pop()?.toLowerCase()
     const hasOriginalAss = !!sourceSubtitlePath && (sourceExt === 'ass' || sourceExt === 'ssa') && existsSync(sourceSubtitlePath)
     const assContent = hasOriginalAss
-      ? this.rewriteExistingAss(readFileSync(sourceSubtitlePath, 'utf-8'), entries, outputMode, bilingualLayout)
+      ? this.rewriteExistingAss(readFileSync(sourceSubtitlePath, 'utf-8'), entries, outputMode, bilingualLayout, subtitleStylePreset)
       : this.buildAssContent(entries, subtitleStylePreset, outputMode, bilingualLayout)
 
     const assPath = `${basePath}.ass`

@@ -203,6 +203,25 @@ async function translateChunkWithRetry(
     })
 }
 
+function shouldBlockExport(issues: Array<{ severity?: 'soft' | 'hard' }>, totalEntries: number, toleranceMode: 'strict' | 'balanced' | 'lenient' = 'balanced') {
+    const hardIssues = issues.filter(issue => issue.severity !== 'soft')
+    const softIssues = issues.filter(issue => issue.severity === 'soft')
+    const issueRatio = issues.length / Math.max(totalEntries, 1)
+    const hardRatio = hardIssues.length / Math.max(totalEntries, 1)
+
+    if (toleranceMode === 'strict') {
+        return { block: issues.length > 0, hardIssues, softIssues }
+    }
+
+    if (toleranceMode === 'lenient') {
+        const block = hardIssues.length >= 3 || hardRatio > 0.02 || issueRatio > 0.05
+        return { block, hardIssues, softIssues }
+    }
+
+    const allowSoftFallback = hardIssues.length === 0 && (softIssues.length <= 1 || softIssues.length / Math.max(totalEntries, 1) <= 0.005)
+    return { block: !allowSoftFallback && issues.length > 0, hardIssues, softIssues }
+}
+
 export const TaskService = {
     async createTask(task: Partial<TranslationTask>): Promise<TranslationTask> {
         const db = useDb()
@@ -496,21 +515,15 @@ export const TaskService = {
 
                 const issues = SubtitleService.validateTranslatedEntries(translatedEntries, task.targetLanguage)
                 if (issues.length > 0) {
-                    const hardIssues = issues.filter(issue => issue.severity !== 'soft')
-                    const softIssues = issues.filter(issue => issue.severity === 'soft')
-                    const allowSoftFallback = hardIssues.length === 0 && (softIssues.length <= 1 || softIssues.length / Math.max(translatedEntries.length, 1) <= 0.005)
+                    const toleranceMode = (config.exportToleranceMode || (config.failOnUntranslated === false ? 'lenient' : 'balanced')) as 'strict' | 'balanced' | 'lenient'
+                    const decision = shouldBlockExport(issues, translatedEntries.length, toleranceMode)
                     const preview = issues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
 
-                    if (allowSoftFallback) {
-                        writeTaskLog(taskId, 'exporting', 'warn', `[宽松导出] 检测到 ${softIssues.length} 条低风险未有效翻译字幕，已继续导出：${preview}`)
+                    if (!decision.block) {
+                        writeTaskLog(taskId, 'exporting', 'warn', `[继续导出] 容错策略=${toleranceMode}，检测到 ${issues.length} 条未有效翻译字幕（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}），已继续导出：${preview}`)
                     } else {
-                        writeTaskLog(taskId, 'exporting', 'error', `[拦截] 检测到 ${issues.length} 条字幕未获得有效翻译（硬性 ${hardIssues.length} / 软性 ${softIssues.length}）：${preview}`)
-
-                        if (config.failOnUntranslated !== false) {
-                            throw new Error(`翻译不完整：检测到 ${issues.length} 条未有效翻译字幕（硬性 ${hardIssues.length} / 软性 ${softIssues.length}），已停止导出`)
-                        }
-
-                        writeTaskLog(taskId, 'exporting', 'warn', `[宽松导出] 检测到 ${issues.length} 条未有效翻译字幕，但已按配置继续导出`)
+                        writeTaskLog(taskId, 'exporting', 'error', `[拦截] 容错策略=${toleranceMode}，检测到 ${issues.length} 条字幕未获得有效翻译（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}）：${preview}`)
+                        throw new Error(`翻译不完整：检测到 ${issues.length} 条未有效翻译字幕（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}，策略 ${toleranceMode}），已停止导出`)
                     }
                 }
             }
