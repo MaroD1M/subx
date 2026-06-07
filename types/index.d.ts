@@ -5,6 +5,8 @@ export interface SubtitleEntry {
   endTime: string        // "00:00:03,500"
   text: string           // 原文（可能包含格式占位符）
   translatedText?: string // 译文
+  reviewStatus?: 'translated' | 'accepted_same' | 'needs_review' | 'fallback_original' | 'missing' | 'edited'
+  reviewReasons?: string[]
   prefixTag?: string     // 前导定位/样式标签，如 {\an8}
   formattingTokens?: Array<{ placeholder: string, value: string }> // 行内格式标记占位信息
 }
@@ -58,6 +60,7 @@ export type TaskStatus =
   | 'parsing'
   | 'translating'
   | 'exporting'
+  | 'review'
   | 'done'
   | 'error'
 
@@ -71,8 +74,6 @@ export interface AppConfig {
   concurrency: number          // 并发数
   maxRetries: number           // 最大重试次数
   translationMode?: 'non_stream' | 'stream' // 默认非流式，流式为兼容性较弱的可选项
-  exportToleranceMode?: 'strict' | 'balanced' | 'lenient' // 导出容错策略
-  failOnUntranslated?: boolean   // 翻译不完整时阻止导出
   glossary: Record<string, string>  // 术语表
   mediaRoots?: MediaRoot[]     // 媒体库配置
   streamUsage?: boolean        // 是否开启流式 Token 统计

@@ -53,7 +53,7 @@
 
         <template #progress-cell="{ row }">
           <div class="min-w-[62px] text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-            {{ isActiveStatus(row.original.status) ? `${row.original.progress}%` : '—' }}
+            {{ isActiveStatus(row.original.status) ? `${row.original.progress}%` : row.original.status === 'review' ? '待核对' : '—' }}
           </div>
         </template>
 
@@ -66,6 +66,7 @@
             <div class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/60 px-2 py-1.5 shadow-sm">
               <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" :to="`/task/${row.original.taskId}`" />
               <UButton v-if="row.original.status === 'error'" icon="i-lucide-rotate-ccw" variant="ghost" color="warning" size="xs" :loading="retryingTaskId === row.original.taskId" @click="retryTask(row.original.taskId)" />
+              <UButton v-if="row.original.status === 'review'" icon="i-lucide-list-checks" variant="ghost" color="primary" size="xs" :to="`/task/${row.original.taskId}/review`" />
               <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center justify-center rounded-lg p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
                 <UIcon name="i-lucide-download" class="w-4 h-4" />
               </a>

@@ -3,7 +3,7 @@
     <div class="flex flex-col sm:flex-row sm:items-start gap-4 mb-8">
       <UButton icon="i-lucide-arrow-left" variant="ghost" color="neutral" to="/history" />
       <div class="flex flex-col min-w-0 flex-1 gap-1.5">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ task.step === 'done' ? '翻译任务完成' : task.step === 'error' ? '翻译任务失败' : '翻译任务进行中' }}</h2>
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ task.step === 'done' ? '翻译任务完成' : task.step === 'error' ? '翻译任务失败' : task.step === 'review' ? '字幕待核对' : '翻译任务进行中' }}</h2>
         <p class="text-sm text-neutral-500 break-all">任务 ID: {{ $route.params.id }}</p>
         <p v-if="task.filePath" class="text-xs text-neutral-400 break-all">{{ task.rootName || '默认媒体库' }} · {{ task.filePath }}</p>
       </div>
@@ -135,6 +135,7 @@
         <div class="flex items-center justify-between pt-4 gap-3 flex-wrap">
           <div class="flex items-center gap-3 flex-wrap">
             <UButton v-if="task.step === 'done'" label="下载结果" icon="i-lucide-download" color="primary" @click="downloadSrt" />
+            <UButton v-if="task.step === 'review'" label="进入核对" icon="i-lucide-list-checks" color="warning" :to="`/task/${taskId}/review`" />
             <UButton v-if="task.step === 'done'" label="返回首页" icon="i-lucide-check-circle" color="secondary" to="/" />
             <UButton v-else-if="task.step === 'error'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
             <UButton v-else label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
@@ -423,7 +424,7 @@ const statusLabel = computed(() => {
 })
 
 const connectionBanner = computed(() => {
-  if (task.value.step === 'done' || task.value.step === 'error') {
+  if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review') {
     return {
       title: '历史记录模式',
       message: '当前展示的是已持久化的任务日志，无需保持实时连接。',
@@ -589,6 +590,7 @@ const stepIcon = computed(() => {
     case 'parsing': return 'i-lucide-binary'
     case 'translating': return 'i-lucide-brain'
     case 'exporting': return 'i-lucide-file-output'
+    case 'review': return 'i-lucide-list-checks'
     case 'done': return 'i-lucide-check-circle-2'
     case 'error': return 'i-lucide-x-circle'
     default: return 'i-lucide-loader-2'
@@ -643,7 +645,7 @@ onMounted(async () => {
     console.warn('[Task] Unable to fetch initial task state', e)
   }
 
-  if (task.value.step === 'done' || task.value.step === 'error') {
+  if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review') {
     connectionState.value = 'history-only'
     return
   }
@@ -659,6 +661,20 @@ onMounted(async () => {
     const es = new EventSource(`/api/sse/progress?taskId=${taskId}`)
     eventSource.value = es
 
+    const handleTerminalEvent = (raw: MessageEvent, terminalStep: 'done' | 'error') => {
+      reconnectAttempts = 0
+      reconnectStatusText.value = ''
+      connectionState.value = 'history-only'
+      const data = JSON.parse(raw.data)
+      task.value = { ...task.value, ...data, step: terminalStep, currentText: null }
+      isIntentionalClose = true
+      if (reconnectTimer.value) {
+        clearTimeout(reconnectTimer.value)
+        reconnectTimer.value = null
+      }
+      es.close()
+    }
+
     es.addEventListener('progress', (e) => {
       reconnectAttempts = 0
       reconnectStatusText.value = ''
@@ -666,7 +682,7 @@ onMounted(async () => {
       const data = JSON.parse(e.data)
       task.value = { ...task.value, ...data }
 
-      if (data.step === 'done' || data.step === 'error') {
+      if (data.step === 'done' || data.step === 'error' || data.step === 'review') {
         isIntentionalClose = true
         if (reconnectTimer.value) {
           clearTimeout(reconnectTimer.value)
@@ -684,6 +700,7 @@ onMounted(async () => {
             parsing: '解析文本',
             translating: 'AI 翻译',
             exporting: '导出文件',
+            review: '字幕核对',
             done: '完成',
             error: '出错'
           }
@@ -707,10 +724,13 @@ onMounted(async () => {
       }
     })
 
+    es.addEventListener('done', (e) => handleTerminalEvent(e as MessageEvent, 'done'))
+    es.addEventListener('error', (e) => handleTerminalEvent(e as MessageEvent, 'error'))
+
     es.onerror = () => {
       es.close()
       if (isIntentionalClose) return
-      if (task.value.step === 'done' || task.value.step === 'error') {
+      if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review') {
         connectionState.value = 'history-only'
         return
       }

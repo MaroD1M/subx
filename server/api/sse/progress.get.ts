@@ -30,6 +30,8 @@ export default defineEventHandler((event) => {
 
     event.node.req.on('close', () => {
         taskEvents.off('progress', onProgress)
+        taskEvents.off('done', onDone)
+        taskEvents.off('error', onError)
         clearInterval(kId)
         res.end()
     })

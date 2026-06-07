@@ -67,20 +67,7 @@
           <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
         </UFormField>
 
-        <UFormField>
-          <template #label>
-            <div class="flex items-center gap-1.5">
-              <span>导出容错策略</span>
-              <UIcon
-                name="i-lucide-circle-help"
-                class="w-3.5 h-3.5 text-gray-400 cursor-help"
-                :title="exportToleranceHint"
-              />
-            </div>
-          </template>
-          <USelect v-model="config.exportToleranceMode" :items="exportToleranceItems" class="w-full" />
-        </UFormField>
-      </div>
+              </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
         <UFormField label="分块大小 (Token)" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
@@ -168,23 +155,12 @@ const translationModeItems = [
   { label: '非流式（推荐）', value: 'non_stream' },
   { label: '流式（兼容性较弱）', value: 'stream' }
 ]
-const exportToleranceItems = [
-  { label: '严格', value: 'strict' },
-  { label: '平衡（推荐）', value: 'balanced' },
-  { label: '宽松', value: 'lenient' }
-]
-const exportToleranceHint = `严格：发现明显漏翻即停止导出
-平衡：少量低风险问题继续导出
-宽松：仅大面积或严重异常时停止导出`
-
 if (config.value) {
   if (config.value.chunkSize) config.value.chunkSize = Number(config.value.chunkSize)
   if (config.value.concurrency) config.value.concurrency = Number(config.value.concurrency)
   if (config.value.maxRetries) config.value.maxRetries = Number(config.value.maxRetries)
   if (config.value.logRetentionDays) config.value.logRetentionDays = Number(config.value.logRetentionDays)
   if (!config.value.translationMode) config.value.translationMode = 'non_stream'
-  if (!config.value.exportToleranceMode) config.value.exportToleranceMode = config.value.failOnUntranslated === false ? 'lenient' : 'balanced'
-  if (config.value.failOnUntranslated === undefined) config.value.failOnUntranslated = true
   if (config.value.streamUsage === undefined) config.value.streamUsage = false
 }
 
@@ -214,8 +190,6 @@ function buildConfigSnapshot(value: any) {
     maxRetries: Number(value?.maxRetries || 0),
     logRetentionDays: Number(value?.logRetentionDays || 0),
     translationMode: String(value?.translationMode || 'non_stream'),
-    exportToleranceMode: String(value?.exportToleranceMode || (value?.failOnUntranslated === false ? 'lenient' : 'balanced')),
-    failOnUntranslated: value?.failOnUntranslated !== false,
     streamUsage: !!value?.streamUsage,
     glossary: value?.glossary || {}
   })

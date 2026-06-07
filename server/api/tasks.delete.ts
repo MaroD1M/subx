@@ -3,7 +3,7 @@ import { useDb } from '../utils/db'
 export default defineEventHandler(async () => {
     const db = useDb()
     try {
-        const stmt = db.prepare(`DELETE FROM tasks WHERE status IN ('done', 'error')`)
+        const stmt = db.prepare(`DELETE FROM tasks WHERE status IN ('done', 'error', 'review')`)
         const info = stmt.run()
 
         // Clean up orphan task_responses chunks to free up DB space

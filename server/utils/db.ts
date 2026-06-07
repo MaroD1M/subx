@@ -90,6 +90,24 @@ export function useDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS task_review_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      subtitle_id TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      original_text TEXT NOT NULL,
+      translated_text TEXT,
+      final_text TEXT,
+      review_status TEXT NOT NULL DEFAULT 'translated',
+      review_reasons TEXT NOT NULL DEFAULT '[]',
+      selected INTEGER NOT NULL DEFAULT 0,
+      edited INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(task_id, subtitle_id)
+    );
+
     CREATE TABLE IF NOT EXISTS auth (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       passkey_hash TEXT NOT NULL,
@@ -153,6 +171,8 @@ export function useDb() {
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_task_responses_task_id ON task_responses(task_id);
+    CREATE INDEX IF NOT EXISTS idx_task_review_entries_task_id ON task_review_entries(task_id);
+    CREATE INDEX IF NOT EXISTS idx_task_review_entries_status ON task_review_entries(task_id, review_status);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_translation_cache_hash ON translation_cache(hash);
     CREATE INDEX IF NOT EXISTS idx_translation_cache_model_lang ON translation_cache(model, target_lang);

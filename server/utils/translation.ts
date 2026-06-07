@@ -31,7 +31,8 @@ ${styleBlock}
 - 不要输出任何其他内容（不要 markdown、不要解释、不要编号前缀）
 - 不要输出任何字幕格式控制标签，例如 {\an8}、\N、<i>、</i>、<font> 等
 - 如果原文中出现形如 __SUBX_FMT_1__ 的占位符，必须在译文中原样保留，不可翻译、不可删除、不可改序
-- 即使某条原文很短或无意义，也必须输出对应序号和翻译
+- 即使某条原文很短、像歌词、像专有名词、像年份/括号说明，也必须输出对应序号和结果
+- 如果目标语言与原文语言接近（如繁体转简体、同语种字形转换），允许个别条目与原文相同，但仍必须逐条输出，不可省略
 
 影视字幕翻译规范（极其重要！）：
 1.【单行长度限制】单行字幕尽量简短，中文字符建议不超过 15-18 个。如果原文长句，请根据语义和呼吸停顿点进行换行（可使用真实换行或在译文适当位置插入 \\n）。
@@ -176,7 +177,7 @@ export const TranslationService = {
         let lastParsedIndex = 0
 
         try {
-            const systemMessage = `你是高级字幕翻译专家。按指定格式逐条输出翻译，不要输出任何额外内容。不要输出任何字幕控制标签（例如 {\an8}、\N、HTML 标签）。如果输入里出现 __SUBX_FMT_1__ 这类占位符，必须原样保留。每条输入都必须有对应的翻译输出，序号必须与输入完全一致。${stylePrompt ? ' ' + stylePrompt : ''}`
+            const systemMessage = `你是高级字幕翻译专家。按指定格式逐条输出翻译，不要输出任何额外内容。不要输出任何字幕控制标签（例如 {\an8}、\N、HTML 标签）。如果输入里出现 __SUBX_FMT_1__ 这类占位符，必须原样保留。每条输入都必须有对应的翻译输出，序号必须与输入完全一致。若目标是中文变体转换或原文本身无需变化，也必须保留该条并按序号输出，不可省略。${stylePrompt ? ' ' + stylePrompt : ''}`
             const messages: ChatCompletionMessageParam[] = [
                 { role: 'system', content: systemMessage },
                 { role: 'user', content: prompt }
@@ -371,7 +372,11 @@ End Time: ${new Date().toISOString()}
 
         const verbalEntries = chunk.filter(e => !SubtitleService.isNonVerbal(e.text))
         const translatedVerbalCount = result.filter(e =>
-            !SubtitleService.isNonVerbal(e.text) && e.translatedText && e.translatedText !== e.text
+            !SubtitleService.isNonVerbal(e.text)
+            && e.translatedText
+            && SubtitleService.normalizeComparisonText(e.translatedText)
+            && (SubtitleService.normalizeComparisonText(e.translatedText) !== SubtitleService.normalizeComparisonText(e.text)
+              || SubtitleService.isAcceptableSameText(e.text, e.translatedText, targetLanguage))
         ).length
 
         if (verbalEntries.length > 0 && translatedVerbalCount === 0) {

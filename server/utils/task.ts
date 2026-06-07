@@ -65,6 +65,17 @@ class TaskQueue {
 
 export const globalTaskQueue = new TaskQueue()
 
+function isAcceptableTranslatedEntry(entry: SubtitleEntry, targetLanguage: string) {
+    if (!entry?.translatedText) return false
+    const original = String(entry.text || '')
+    const translated = String(entry.translatedText || '')
+    const normalizedOriginal = SubtitleService.normalizeComparisonText(original)
+    const normalizedTranslated = SubtitleService.normalizeComparisonText(translated)
+    if (!normalizedTranslated) return false
+    if (normalizedOriginal !== normalizedTranslated) return true
+    return SubtitleService.isAcceptableSameText(original, translated, targetLanguage)
+}
+
 async function translateChunkWithRetry(
     openai: OpenAI,
     chunk: SubtitleEntry[],
@@ -102,7 +113,7 @@ async function translateChunkWithRetry(
             for (const entry of results) {
                 const id = String(entry.id)
                 returnedIds.add(id)
-                if (entry.translatedText && entry.translatedText !== entry.text) {
+                if (isAcceptableTranslatedEntry(entry, targetLanguage)) {
                     finalResults.set(id, entry)
                 }
             }
@@ -134,7 +145,7 @@ async function translateChunkWithRetry(
             if (Array.isArray(e?.partialResults) && e.partialResults.length > 0) {
                 for (const entry of e.partialResults) {
                     const id = String(entry.id)
-                    if (entry.translatedText && entry.translatedText !== entry.text) {
+                    if (isAcceptableTranslatedEntry(entry, targetLanguage)) {
                         finalResults.set(id, entry)
                     }
                 }
@@ -178,11 +189,11 @@ async function translateChunkWithRetry(
                     false
                 )
                 const singleTranslated = singleResults[0]
-                if (singleTranslated?.translatedText && singleTranslated.translatedText !== singleTranslated.text) {
+                if (singleTranslated?.translatedText && isAcceptableTranslatedEntry({ ...entry, translatedText: singleTranslated.translatedText }, targetLanguage)) {
                     finalResults.set(String(entry.id), { ...entry, translatedText: singleTranslated.translatedText })
                     writeTaskLog(taskId, 'translating', 'info', `[补译成功] 块 #${chunkIndex + 1} 条目 #${entry.id} 已单条补译成功`)
                 } else {
-                    writeTaskLog(taskId, 'translating', 'warn', `[补译未命中] 块 #${chunkIndex + 1} 条目 #${entry.id} 返回为空或与原文一致`)
+                    writeTaskLog(taskId, 'translating', 'warn', `[补译未命中] 块 #${chunkIndex + 1} 条目 #${entry.id} 返回为空、拒答，或结果仍需人工复核`)
                 }
             } catch (singleError: any) {
                 writeTaskLog(taskId, 'translating', 'warn', `[补译失败] 块 #${chunkIndex + 1} 条目 #${entry.id} 单条补译失败：${singleError?.message || 'unknown'}`)
@@ -203,23 +214,88 @@ async function translateChunkWithRetry(
     })
 }
 
-function shouldBlockExport(issues: Array<{ severity?: 'soft' | 'hard' }>, totalEntries: number, toleranceMode: 'strict' | 'balanced' | 'lenient' = 'balanced') {
+
+function mapReviewStatus(entry: SubtitleEntry, issuesById: Map<string, Array<{ reason: string, severity?: 'soft' | 'hard' }>>) {
+    const issueList = issuesById.get(String(entry.id)) || []
+    const reviewReasons = issueList.map(issue => issue.reason)
+    const translated = String(entry.translatedText || '')
+    const original = String(entry.text || '')
+    const normalizedTranslated = SubtitleService.normalizeComparisonText(translated)
+    const normalizedOriginal = SubtitleService.normalizeComparisonText(original)
+
+    if (!normalizedTranslated) {
+        return { reviewStatus: 'missing', reviewReasons }
+    }
+    if (issueList.some(issue => issue.reason === 'same_as_source')) {
+        return { reviewStatus: 'fallback_original', reviewReasons }
+    }
+    if (normalizedOriginal && normalizedOriginal === normalizedTranslated) {
+        return { reviewStatus: 'accepted_same', reviewReasons }
+    }
+    if (issueList.length > 0) {
+        return { reviewStatus: 'needs_review', reviewReasons }
+    }
+    return { reviewStatus: 'translated', reviewReasons }
+}
+
+function persistReviewEntries(taskId: string, entries: SubtitleEntry[], issues: Array<{ id: string, reason: string, severity?: 'soft' | 'hard' }>) {
+    const db = useDb()
+    const issueMap = new Map<string, Array<{ reason: string, severity?: 'soft' | 'hard' }>>()
+    for (const issue of issues) {
+        const list = issueMap.get(String(issue.id)) || []
+        list.push(issue)
+        issueMap.set(String(issue.id), list)
+    }
+
+    const stmt = db.prepare(`
+      INSERT INTO task_review_entries (
+        task_id, subtitle_id, start_time, end_time, original_text, translated_text, final_text, review_status, review_reasons, selected, edited, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, datetime('now'), datetime('now'))
+      ON CONFLICT(task_id, subtitle_id) DO UPDATE SET
+        start_time=excluded.start_time,
+        end_time=excluded.end_time,
+        original_text=excluded.original_text,
+        translated_text=excluded.translated_text,
+        final_text=excluded.final_text,
+        review_status=excluded.review_status,
+        review_reasons=excluded.review_reasons,
+        updated_at=datetime('now')
+    `)
+
+    for (const entry of entries) {
+        const review = mapReviewStatus(entry, issueMap)
+        stmt.run(
+            taskId,
+            String(entry.id),
+            String(entry.startTime || ''),
+            String(entry.endTime || ''),
+            String(entry.text || ''),
+            String(entry.translatedText || ''),
+            String(entry.translatedText || entry.text || ''),
+            review.reviewStatus,
+            JSON.stringify(review.reviewReasons || [])
+        )
+    }
+}
+
+function shouldBlockExport(issues: Array<{ severity?: 'soft' | 'hard', reason?: string }>, totalEntries: number, toleranceMode: 'strict' | 'balanced' | 'lenient' = 'balanced') {
     const hardIssues = issues.filter(issue => issue.severity !== 'soft')
     const softIssues = issues.filter(issue => issue.severity === 'soft')
     const issueRatio = issues.length / Math.max(totalEntries, 1)
     const hardRatio = hardIssues.length / Math.max(totalEntries, 1)
+    const criticalIssues = issues.filter(issue => issue.reason === 'missing')
 
     if (toleranceMode === 'strict') {
-        return { block: issues.length > 0, hardIssues, softIssues }
+        return { block: issues.length > 0, hardIssues, softIssues, criticalIssues }
     }
 
     if (toleranceMode === 'lenient') {
-        const block = hardIssues.length >= 3 || hardRatio > 0.02 || issueRatio > 0.05
-        return { block, hardIssues, softIssues }
+        const block = criticalIssues.length >= 3 || hardIssues.length >= 8 || hardRatio > 0.08 || issueRatio > 0.15
+        return { block, hardIssues, softIssues, criticalIssues }
     }
 
-    const allowSoftFallback = hardIssues.length === 0 && (softIssues.length <= 1 || softIssues.length / Math.max(totalEntries, 1) <= 0.005)
-    return { block: !allowSoftFallback && issues.length > 0, hardIssues, softIssues }
+    const block = criticalIssues.length >= 2 || hardIssues.length >= 5 || hardRatio > 0.04 || issueRatio > 0.10
+    return { block, hardIssues, softIssues, criticalIssues }
 }
 
 export const TaskService = {
@@ -272,10 +348,16 @@ export const TaskService = {
             const category = data.category || resolveLogCategory(status, level, data.log)
             writeTaskLog(taskId, status, level, data.log, category)
             taskEvents.emit('progress', { taskId, step: status, progress, ...data, level, category })
+            if (status === 'done' || status === 'error') {
+                taskEvents.emit(status, { taskId, step: status, progress, ...data, level, category, final: true })
+            }
             return
         }
 
         taskEvents.emit('progress', { taskId, step: status, progress, ...data })
+        if (status === 'done' || status === 'error') {
+            taskEvents.emit(status, { taskId, step: status, progress, ...data, final: true })
+        }
     },
 
     async process(taskId: string, openaiConfig: { apiKey: string, baseUrl?: string }) {
@@ -457,7 +539,7 @@ export const TaskService = {
                             }
                             aiResultByOriginalId.set(originalId, restoredEntry)
 
-                            if (entry.translatedText && entry.translatedText !== entry.text && !SubtitleService.isNonVerbal(originalEntry!.text)) {
+                            if (entry.translatedText && isAcceptableTranslatedEntry({ ...originalEntry!, translatedText: entry.translatedText }, task.targetLanguage) && !SubtitleService.isNonVerbal(originalEntry!.text)) {
                                 const cacheHash = SubtitleService.computeCacheHash(originalEntry!.text, task.model, task.targetLanguage)
                                 SubtitleService.setCachedTranslation(cacheHash, originalEntry!.text, entry.translatedText, task.model, task.targetLanguage)
                             }
@@ -515,16 +597,25 @@ export const TaskService = {
 
                 const issues = SubtitleService.validateTranslatedEntries(translatedEntries, task.targetLanguage)
                 if (issues.length > 0) {
-                    const toleranceMode = (config.exportToleranceMode || (config.failOnUntranslated === false ? 'lenient' : 'balanced')) as 'strict' | 'balanced' | 'lenient'
-                    const decision = shouldBlockExport(issues, translatedEntries.length, toleranceMode)
+                    const decision = shouldBlockExport(issues, translatedEntries.length, 'balanced')
                     const preview = issues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
 
                     if (!decision.block) {
-                        writeTaskLog(taskId, 'exporting', 'warn', `[继续导出] 容错策略=${toleranceMode}，检测到 ${issues.length} 条未有效翻译字幕（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}），已继续导出：${preview}`)
+                        writeTaskLog(taskId, 'exporting', 'warn', `[继续导出] 检测到 ${issues.length} 条需注意字幕（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}），已继续导出：${preview}`)
                     } else {
-                        writeTaskLog(taskId, 'exporting', 'error', `[拦截] 容错策略=${toleranceMode}，检测到 ${issues.length} 条字幕未获得有效翻译（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}）：${preview}`)
-                        throw new Error(`翻译不完整：检测到 ${issues.length} 条未有效翻译字幕（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}，策略 ${toleranceMode}），已停止导出`)
+                        persistReviewEntries(taskId, translatedEntries, issues)
+                        db.prepare("UPDATE tasks SET status = 'review', progress = 96, error = ?, updated_at = datetime('now') WHERE task_id = ?")
+                            .run(`待字幕核对：${issues.length} 条需要人工确认`, taskId)
+                        await this.updateStatus(taskId, 'review' as any, 96, {
+                            totalChunks,
+                            completedChunks: totalChunks,
+                            log: `[核对] 检测到 ${issues.length} 条字幕需要人工核对（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}）：${preview}`,
+                            category: 'translation'
+                        })
+                        return
                     }
+                } else {
+                    persistReviewEntries(taskId, translatedEntries, [])
                 }
             }
 

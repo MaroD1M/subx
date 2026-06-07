@@ -20,7 +20,7 @@ type FormattingTarget = 'srt' | 'ass'
 type FormattingToken = { placeholder: string, value: string }
 type TemplateSlot = { placeholder?: string, text: string }
 type AssSegment = { tags: string[], text: string, drawing?: unknown[] }
-type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate', original: string, translated: string, severity?: 'soft' | 'hard' }
+type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate' | 'same_as_source_allowed', original: string, translated: string, severity?: 'soft' | 'hard' }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
   return resolveMediaPath(userPath, rootId)
@@ -40,6 +40,62 @@ export const SubtitleService = {
     if (/^(ha|ah|oh|uh|um|hmm|mm|ok|okay|yeah|yes|no|hey|yo)+$/i.test(normalized)) return true
     if (/^[啊哦嗯呃欸唉哎哈嘿喂诶噢好呀嘛呢啦哦哇]+$/u.test(normalized)) return true
     if (normalized.length <= 2) return true
+    if (this.isLikelyMetadataOrProperNoun(text)) return true
+    if (this.isLikelySongLyric(text)) return true
+    return false
+  },
+
+  isChineseTarget(targetLanguage: string): boolean {
+    return /^zh(?:[-_]|$)/i.test(String(targetLanguage || ''))
+  },
+
+  isChineseVariantConversion(targetLanguage: string, original: string, translated: string): boolean {
+    if (!this.isChineseTarget(targetLanguage)) return false
+    return this.containsCjk(original) && this.containsCjk(translated)
+  },
+
+  containsCjk(text: unknown): boolean {
+    return /[㐀-鿿豈-﫿]/u.test(this.normalizeSubtitleText(text))
+  },
+
+  isBracketOnlyText(text: string): boolean {
+    const normalized = this.normalizeSubtitleText(text)
+    return /^[（(【\[].+[）)】\]]$/u.test(normalized)
+  },
+
+  isNumericLikeText(text: string): boolean {
+    const normalized = this.normalizeComparisonText(text)
+    return !!normalized && /^[\d零一二三四五六七八九十百千万年月日号集季篇章上下前后]+$/u.test(normalized)
+  },
+
+  isLikelyMetadataOrProperNoun(text: string): boolean {
+    const normalized = this.normalizeSubtitleText(text)
+    if (!normalized) return true
+    if (this.isBracketOnlyText(normalized)) return true
+    if (this.isNumericLikeText(normalized)) return true
+    if (/^[A-Z0-9 .,:;!?&'\-]+$/i.test(normalized) && normalized.length <= 24) return true
+    if (/^[\p{Script=Han}A-Za-z0-9·•・\-—：:（）()《》〈〉「」『』【】\s]+$/u.test(normalized) && normalized.length <= 8) return true
+    return false
+  },
+
+  isLikelySongLyric(text: string): boolean {
+    const normalized = this.normalizeSubtitleText(text)
+    if (!normalized) return false
+    if (/[♪♫♬♩]/u.test(normalized)) return true
+    if (/(?:（唱|\(sing|\[music\]|\[singing\])/iu.test(normalized)) return true
+    const lines = normalized.split('\n').map(line => line.trim()).filter(Boolean)
+    if (lines.length >= 2 && lines.every(line => line.length <= 12)) return true
+    return false
+  },
+
+  isAcceptableSameText(original: string, translated: string, targetLanguage: string): boolean {
+    const normalizedOriginal = this.normalizeComparisonText(original)
+    const normalizedTranslated = this.normalizeComparisonText(translated)
+    if (!normalizedOriginal || normalizedOriginal !== normalizedTranslated) return false
+    if (this.isLowValueText(original)) return true
+    if (this.isLikelyMetadataOrProperNoun(original)) return true
+    if (this.isLikelySongLyric(original)) return true
+    if (this.isChineseVariantConversion(targetLanguage, original, translated)) return true
     return false
   },
 
@@ -430,6 +486,10 @@ export const SubtitleService = {
     }
 
     if (normalizedOriginal && normalizedOriginal === normalizedOutput) {
+      if (this.isAcceptableSameText(original, normalizedTranslated, targetLanguage)) {
+        reasons.push('same_as_source_allowed')
+        return { text: normalizedTranslated || original, fallbackUsed: false, reasons }
+      }
       reasons.push('same_as_source')
       return { text: original, fallbackUsed: true, reasons }
     }
@@ -444,7 +504,7 @@ export const SubtitleService = {
       }
     }
 
-    if (shouldCheckLatinHeavy && this.looksLatinHeavy(normalizedTranslated) && this.looksLatinHeavy(original)) {
+    if (shouldCheckLatinHeavy && this.looksLatinHeavy(normalizedTranslated) && this.looksLatinHeavy(original) && !this.isLikelySongLyric(original)) {
       reasons.push('latin_heavy')
       return { text: original, fallbackUsed: true, reasons }
     }
@@ -495,11 +555,14 @@ export const SubtitleService = {
       }
 
       if (normalizedOriginal && normalizedOriginal === normalizedTranslated) {
+        if (this.isAcceptableSameText(original, translated, targetLanguage)) {
+          continue
+        }
         issues.push({ id: String(entry.id), reason: 'same_as_source', original, translated, severity: this.isLowValueText(original) ? 'soft' : 'hard' })
         continue
       }
 
-      if (shouldCheckLatinHeavy && this.looksLatinHeavy(translated) && this.looksLatinHeavy(original)) {
+      if (shouldCheckLatinHeavy && this.looksLatinHeavy(translated) && this.looksLatinHeavy(original) && !this.isLikelySongLyric(original)) {
         issues.push({ id: String(entry.id), reason: 'latin_heavy', original, translated, severity: this.isLowValueText(original) ? 'soft' : 'hard' })
       }
     }
