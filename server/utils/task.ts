@@ -130,6 +130,27 @@ async function translateChunkWithRetry(
             console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
             const detail = String(e?.message || 'unknown')
             const reason = detail.includes('[条目缺失]') ? '返回缺条' : detail.includes('[解析为空]') ? '空响应/格式异常' : detail.includes('[疑似拒答]') ? '疑似拒答/过滤' : detail.includes('[无有效译文]') ? '无有效译文' : '请求失败'
+
+            if (Array.isArray(e?.partialResults) && e.partialResults.length > 0) {
+                for (const entry of e.partialResults) {
+                    const id = String(entry.id)
+                    if (entry.translatedText && entry.translatedText !== entry.text) {
+                        finalResults.set(id, entry)
+                    }
+                }
+
+                const missingIdSet = new Set((Array.isArray(e?.missingIds) ? e.missingIds : []).map((id: any) => String(id)))
+                unresolvedEntries = unresolvedEntries.filter(entry => missingIdSet.has(String(entry.id)))
+
+                writeTaskLog(
+                    taskId,
+                    'translating',
+                    'warn',
+                    `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}；已保留 ${e.partialResults.length} 条有效结果，待补 ${unresolvedEntries.length} 条`
+                )
+                continue
+            }
+
             writeTaskLog(taskId, 'translating', 'warn', `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}`)
         }
     }

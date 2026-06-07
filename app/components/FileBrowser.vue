@@ -386,6 +386,7 @@ async function loadRootNodes() {
   filesError.value = null
   try {
     files.value = await $fetch('/api/files', { query: { rootId: activeRootId.value } })
+    await restoreExpandedDirectories(activeRootId.value)
   } catch (e: any) {
     filesError.value = e
     files.value = []
@@ -404,6 +405,17 @@ function updateNodeTree(nodes: FileNode[], targetPath: string, updater: (node: F
   })
 }
 
+function findNodeByPath(nodes: FileNode[], targetPath: string): FileNode | null {
+  for (const node of nodes) {
+    if (node.path === targetPath) return node
+    if (node.children?.length) {
+      const matched = findNodeByPath(node.children, targetPath)
+      if (matched) return matched
+    }
+  }
+  return null
+}
+
 async function loadDirectoryChildren(node: FileNode) {
   if (!node.isDir || node.loaded) return
   const rootId = node.rootId || activeRootId.value
@@ -412,6 +424,23 @@ async function loadDirectoryChildren(node: FileNode) {
     files.value = updateNodeTree(files.value, node.path, current => ({ ...current, children, loaded: true, hasChildren: children.length > 0 }))
   } catch (e: any) {
     toast.add({ title: toastText.error, description: e?.data?.message || '无法加载目录内容', color: 'danger' })
+  }
+}
+
+async function restoreExpandedDirectories(rootId = activeRootId.value) {
+  if (!rootId || !files.value.length) return
+  const prefix = rootId + ':'
+  const expandedPaths = (expandedTreeState.value[rootId] || [])
+    .filter(key => key.startsWith(prefix))
+    .map(key => key.slice(prefix.length))
+    .filter(Boolean)
+    .sort((a, b) => a.split('/').length - b.split('/').length)
+
+  for (const dirPath of expandedPaths) {
+    const currentNode = findNodeByPath(files.value, dirPath)
+    if (!currentNode?.isDir) continue
+    if (currentNode.loaded || currentNode.hasChildren === false) continue
+    await loadDirectoryChildren(currentNode)
   }
 }
 
@@ -748,6 +777,10 @@ onMounted(async () => {
       } catch {
         // ignore invalid cache
       }
+    }
+
+    if (activeRootId.value && files.value.length) {
+      await restoreExpandedDirectories(activeRootId.value)
     }
   }
   window.addEventListener('mousemove', handleResize)

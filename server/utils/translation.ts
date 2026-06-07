@@ -346,9 +346,19 @@ End Time: ${new Date().toISOString()}
             throw new Error(`[解析为空] AI 返回内容为空或格式错误 (Length: ${fullContent.length})`)
         } else if (translatedMap.size !== chunk.length) {
             const missingIds = expectedIds.filter(id => !translatedMap.has(id))
+            const partialResults = chunk
+                .filter(entry => translatedMap.has(String(entry.id)))
+                .map(entry => ({
+                    ...entry,
+                    translatedText: translatedMap.get(String(entry.id)) as string
+                }))
             const msg = `[条目缺失] 已解析 ${translatedMap.size}/${chunk.length}，缺失 ID: ${missingIds.slice(0, 10).join(', ')}${missingIds.length > 10 ? '...' : ''}`
             console.warn(`[Parser] ${msg}`)
-            throw new Error(msg)
+            const error: any = new Error(msg)
+            error.code = 'PARTIAL_TRANSLATION'
+            error.partialResults = partialResults
+            error.missingIds = missingIds
+            throw error
         }
 
         const result = chunk.map((entry) => {
