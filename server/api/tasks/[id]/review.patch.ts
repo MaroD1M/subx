@@ -9,8 +9,9 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const db = useDb()
   const entries = Array.isArray(body?.entries) ? body.entries : []
+
   if (!entries.length) {
-    throw createError({ statusCode: 400, message: 'Entries are required' })
+    return { success: true, updated: 0 }
   }
 
   const stmt = db.prepare(`
@@ -27,5 +28,5 @@ export default defineEventHandler(async (event) => {
     stmt.run(finalText, reviewStatus, selected, edited, id, String(entry.subtitleId))
   }
 
-  return { success: true }
+  return { success: true, updated: entries.length }
 })

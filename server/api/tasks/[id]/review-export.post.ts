@@ -29,11 +29,13 @@ export default defineEventHandler(async (event) => {
   const inputPath = await resolveMediaPath(task.file_path, task.root_id)
   const baseName = task.file_path.replace(/\.[^.]+$/, '')
   const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
-  const outputExt = 'srt'
+  const subtitleFormat = String(task.subtitle_format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt'
   const outputSuffix = task.output_mode === 'original' ? 'original' : task.target_lang
   const outputBaseName = basename(cleanName)
-  const outputPath = join(dirname(inputPath), `${outputBaseName}.${outputSuffix}.${outputExt}`)
-  const sourceSubtitlePath = task.source_type === 'external' ? await resolveMediaPath(task.file_path, task.root_id) : join(process.cwd(), 'temp', `${id}.srt`)
+  const outputPath = join(dirname(inputPath), `${outputBaseName}.${outputSuffix}.${subtitleFormat}`)
+  const sourceSubtitlePath = task.source_type === 'external'
+    ? await resolveMediaPath(task.file_path, task.root_id)
+    : join(process.cwd(), 'temp', `${id}.srt`)
 
   const entries = rows.map(row => ({
     id: String(row.subtitle_id),
@@ -47,7 +49,7 @@ export default defineEventHandler(async (event) => {
     entries as any,
     outputPath,
     task.output_mode || 'translated',
-    task.subtitle_format || 'srt',
+    subtitleFormat,
     task.subtitle_style_preset || 'bilingual_simple',
     task.bilingual_layout || 'translated_first',
     sourceSubtitlePath
