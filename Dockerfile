@@ -23,7 +23,7 @@ RUN npm config set fetch-retries 5 && \
     npm config set fetch-retry-maxtimeout 120000 && \
     npm config set audit false && \
     npm config set fund false && \
-    npm install --ignore-scripts --include=optional
+    npm install --ignore-scripts
 
 COPY . .
 RUN npm run build
