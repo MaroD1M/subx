@@ -13,7 +13,7 @@
     </div>
 
     <div class="history-table glass-panel rounded-3xl overflow-hidden p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
-      <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-top', th: 'whitespace-nowrap', tr: 'group' }">
+      <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group' }">
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
             <div class="flex items-start gap-2">
@@ -62,8 +62,8 @@
         </template>
 
         <template #actions-cell="{ row }">
-          <div class="w-full flex items-center justify-center py-1">
-            <div class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/60 px-2 py-1.5 shadow-sm">
+          <div class="w-full min-w-[170px] flex items-center justify-center py-1">
+            <div class="inline-flex min-w-[154px] items-center justify-center gap-1 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/90 dark:bg-gray-900/70 px-2 py-1.5 shadow-sm">
               <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" :to="`/task/${row.original.taskId}`" />
               <UButton
                 v-if="['error', 'review', 'done'].includes(row.original.status)"
@@ -79,6 +79,7 @@
               <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center justify-center rounded-lg p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
                 <UIcon name="i-lucide-download" class="w-4 h-4" />
               </a>
+              <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" :loading="deletingTaskId === row.original.taskId" @click="deleteTask(row.original.taskId)" />
             </div>
           </div>
         </template>
@@ -111,6 +112,7 @@
 const isClearModalOpen = ref(false)
 const isClearing = ref(false)
 const retryingTaskId = ref('')
+const deletingTaskId = ref('')
 const expandedTaskIds = ref(new Set())
 const toast = useToast()
 
@@ -145,6 +147,21 @@ async function retryTask(taskId) {
     toast.add({ title: '重试失败', description: e?.data?.message || '无法重试该任务', color: 'error' })
   } finally {
     retryingTaskId.value = ''
+  }
+}
+
+async function deleteTask(taskId) {
+  if (!window.confirm('确认删除这条历史记录吗？此操作不可撤销。')) return
+
+  deletingTaskId.value = taskId
+  try {
+    await $fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
+    toast.add({ title: '删除成功', description: '该条历史记录已删除', color: 'success' })
+    await refresh()
+  } catch (e) {
+    toast.add({ title: '删除失败', description: e?.data?.message || '无法删除该任务', color: 'error' })
+  } finally {
+    deletingTaskId.value = ''
   }
 }
 

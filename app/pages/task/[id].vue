@@ -219,6 +219,32 @@
                     <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
                     <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
                   </div>
+                  <div class="space-y-3">
+                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                      <UIcon name="i-lucide-messages-square" class="w-4 h-4" /> AI 返回预览（默认截断，便于快速排查）
+                    </div>
+                    <div class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                      <details v-for="r in responsesRecords" :key="`preview-${r.id}`" class="rounded-xl border border-gray-800/70 bg-black/20 px-3 py-3">
+                        <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
+                          <div class="min-w-0">
+                            <p class="text-xs font-semibold text-gray-200">块 #{{ (r.chunk_index || 0) + 1 }} · {{ r.model || 'unknown' }}</p>
+                            <p class="mt-1 text-[11px] text-gray-400 line-clamp-2 break-words">{{ r.raw_response_preview || '暂无返回内容' }}</p>
+                          </div>
+                          <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-500 shrink-0" />
+                        </summary>
+                        <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                          <div class="space-y-1 min-w-0">
+                            <p class="text-[10px] uppercase tracking-widest text-gray-500">请求预览</p>
+                            <pre class="text-[11px] leading-5 whitespace-pre-wrap break-words text-gray-400 max-h-48 overflow-y-auto custom-scrollbar">{{ r.raw_request || '暂无请求内容' }}</pre>
+                          </div>
+                          <div class="space-y-1 min-w-0">
+                            <p class="text-[10px] uppercase tracking-widest text-gray-500">返回全文</p>
+                            <pre class="text-[11px] leading-5 whitespace-pre-wrap break-words text-gray-200 max-h-48 overflow-y-auto custom-scrollbar">{{ r.raw_response || '暂无返回内容' }}</pre>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
                   <div class="max-h-48 overflow-y-auto custom-scrollbar">
                     <table class="w-full text-left">
                       <thead>
@@ -267,7 +293,7 @@ const task = ref({
 
 const showResponses = ref(false)
 const responsesLoading = ref(false)
-const responsesRecords = ref([])
+const responsesRecords = ref<any[]>([])
 const responsesSummary = ref(null)
 const showDiagnosticsSection = computed(() => !!connectionBanner.value || task.value.step === 'done')
 const cancelling = ref(false)

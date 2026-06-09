@@ -8,6 +8,7 @@ import { join } from 'path'
 
 const STREAM_REQUEST_TIMEOUT_MS = 5 * 60 * 1000
 const STREAM_IDLE_TIMEOUT_MS = 45 * 1000
+const RAW_RESPONSE_MAX_CHARS = 12000
 
 interface StreamCallbacks {
     onEntryTranslated?: (entry: { id: string; translatedText: string }) => void
@@ -360,11 +361,14 @@ End Time: ${new Date().toISOString()}
             if (taskId) {
                 try {
                     const db = useDb()
-                    // 注意：这里不再存储 raw_request 和 raw_response，只保留 token 统计
-                    db.prepare('INSERT INTO task_responses (task_id, chunk_index, model, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?)').run(
+                    const rawRequest = JSON.stringify({ systemMessage, prompt }).slice(0, RAW_RESPONSE_MAX_CHARS)
+                    const rawResponse = String(fullContent || '').slice(0, RAW_RESPONSE_MAX_CHARS)
+                    db.prepare('INSERT INTO task_responses (task_id, chunk_index, model, raw_request, raw_response, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
                         taskId,
                         chunkIndex ?? 0,
                         model,
+                        rawRequest,
+                        rawResponse,
                         usage.prompt_tokens,
                         usage.completion_tokens,
                         usage.total_tokens
