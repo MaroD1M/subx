@@ -135,6 +135,10 @@
 </template>
 
 <script setup lang="ts">
+useHead({
+  title: '字幕核对 - SubX'
+})
+
 const route = useRoute()
 const taskId = String(route.params.id)
 const focusedSubtitleId = ref('')

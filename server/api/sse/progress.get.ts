@@ -33,9 +33,16 @@ export default defineEventHandler((event) => {
         }
     }
 
+    const onCancelled = (data: any) => {
+        if (data.taskId === taskId) {
+            res.write(`event: cancelled\ndata: ${JSON.stringify(data)}\n\n`)
+        }
+    }
+
     taskEvents.on('progress', onProgress)
     taskEvents.on('done', onDone)
     taskEvents.on('error', onError)
+    taskEvents.on('cancelled', onCancelled)
 
     // Keep alive
     const kId = setInterval(() => {
@@ -46,6 +53,7 @@ export default defineEventHandler((event) => {
         taskEvents.off('progress', onProgress)
         taskEvents.off('done', onDone)
         taskEvents.off('error', onError)
+        taskEvents.off('cancelled', onCancelled)
         clearInterval(kId)
         res.end()
     })

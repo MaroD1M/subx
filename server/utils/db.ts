@@ -74,6 +74,7 @@ export function useDb() {
       model TEXT,
       raw_request TEXT,
       raw_response TEXT,
+      response_meta TEXT,
       prompt_tokens INTEGER DEFAULT 0,
       completion_tokens INTEGER DEFAULT 0,
       total_tokens INTEGER DEFAULT 0,
@@ -148,6 +149,10 @@ export function useDb() {
 
   try {
     _db.exec(`ALTER TABLE task_responses ADD COLUMN raw_request TEXT`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE task_responses ADD COLUMN response_meta TEXT`)
   } catch { /* column already exists */ }
 
   try {

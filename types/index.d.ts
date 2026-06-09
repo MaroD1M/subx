@@ -63,6 +63,7 @@ export type TaskStatus =
   | 'review'
   | 'done'
   | 'error'
+  | 'cancelled'
 
 /** 应用配置 */
 export interface AppConfig {

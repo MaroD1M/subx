@@ -3,7 +3,7 @@
     <div class="flex flex-col sm:flex-row sm:items-start gap-4 mb-8">
       <UButton icon="i-lucide-arrow-left" variant="ghost" color="neutral" to="/history" />
       <div class="flex flex-col min-w-0 flex-1 gap-1.5">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ task.step === 'done' ? '翻译任务完成' : task.step === 'error' ? '翻译任务失败' : task.step === 'review' ? '字幕待核对' : '翻译任务进行中' }}</h2>
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ task.step === 'done' ? '翻译任务完成' : task.step === 'cancelled' ? '翻译任务已取消' : task.step === 'error' ? '翻译任务失败' : task.step === 'review' ? '字幕待核对' : '翻译任务进行中' }}</h2>
         <p class="text-sm text-neutral-500 break-all">任务 ID: {{ $route.params.id }}</p>
         <p v-if="task.filePath" class="text-xs text-neutral-400 break-all">{{ task.rootName || '默认媒体库' }} · {{ task.filePath }}</p>
       </div>
@@ -26,13 +26,13 @@
               <span class="text-3xl font-black text-gray-900 dark:text-white tracking-tighter">{{ task.step === 'done' ? 100 : task.progress }}%</span>
             </div>
           </div>
-          <UProgress :model-value="task.step === 'done' ? 100 : task.progress" size="xl" :color="task.step === 'error' ? 'error' : task.step === 'done' ? 'success' : 'primary'" class="h-3 rounded-full overflow-hidden" />
+          <UProgress :model-value="task.step === 'done' ? 100 : task.progress" size="xl" :color="task.step === 'error' || task.step === 'cancelled' ? 'error' : task.step === 'done' ? 'success' : 'primary'" class="h-3 rounded-full overflow-hidden" />
         </div>
 
-        <div v-if="task.step === 'error' && task.error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-2xl flex items-start gap-3">
+        <div v-if="(task.step === 'error' || task.step === 'cancelled') && task.error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-2xl flex items-start gap-3">
           <UIcon name="i-lucide-alert-circle" class="w-5 h-5 text-red-500 mt-0.5" />
           <div class="space-y-1">
-            <p class="text-sm font-bold text-red-800 dark:text-red-200">处理出错</p>
+            <p class="text-sm font-bold text-red-800 dark:text-red-200">{{ task.step === 'cancelled' ? '任务已取消' : '处理出错' }}</p>
             <p class="text-xs text-red-700 dark:text-red-300 leading-relaxed">{{ task.error }}</p>
           </div>
         </div>
@@ -137,7 +137,7 @@
             <UButton v-if="task.step === 'done'" label="下载结果" icon="i-lucide-download" color="primary" @click="downloadSrt" />
             <UButton v-if="task.step === 'review'" label="进入核对" icon="i-lucide-list-checks" color="warning" @click="openReviewPage" />
             <UButton v-if="task.step === 'done'" label="返回首页" icon="i-lucide-check-circle" color="secondary" to="/" />
-            <UButton v-else-if="task.step === 'error'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
+            <UButton v-else-if="task.step === 'error' || task.step === 'cancelled'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
             <UButton v-else label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
           </div>
         </div>
@@ -219,6 +219,63 @@
                     <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
                     <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
                   </div>
+                  <div v-if="responseDiagnosticsSummary" class="rounded-2xl border border-amber-200/70 bg-amber-50/70 dark:border-amber-800/60 dark:bg-amber-900/15 p-4 space-y-3">
+                    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div class="space-y-1">
+                        <p class="text-sm font-semibold text-amber-900 dark:text-amber-100">翻译返回诊断摘要</p>
+                        <p class="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">仅展示概况统计；完整请求与返回保留在下方折叠区，便于排查且不影响页面排版。</p>
+                        <p class="text-[11px] text-amber-800 dark:text-amber-200">{{ responseDiagnosticsSummary.overviewText }}</p>
+                      </div>
+                      <UBadge color="warning" variant="subtle">{{ responseDiagnosticsSummary.totalIssues }} 个异常块</UBadge>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">结构化返回</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.structuredChunks }}</p>
+                      </div>
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">纯文本返回</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.plainChunks }}</p>
+                      </div>
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">空响应/异常</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.emptyChunks }}</p>
+                      </div>
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">拒答/过滤</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.refusalChunks + responseDiagnosticsSummary.filteredChunks }}</p>
+                      </div>
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">缺条块数</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.missingIdChunks }}</p>
+                      </div>
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">解析丢失块数</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.chunksWithParseLoss }}</p>
+                      </div>
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">重试块数</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.retriedChunks }}</p>
+                      </div>
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">单条补译块数</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.singleRetriedChunks }}</p>
+                      </div>
+                      <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
+                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">回退原文块数</p>
+                        <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.fallbackChunks }}</p>
+                      </div>
+                    </div>
+                    <div v-if="responseDiagnosticsSummary.issues.length" class="flex flex-wrap gap-2">
+                      <UBadge v-for="issue in responseDiagnosticsSummary.issues" :key="issue.issue" color="warning" variant="soft">{{ issue.label }} × {{ issue.count }}</UBadge>
+                    </div>
+                    <div v-if="responseDiagnosticsSummary.riskTags?.length" class="space-y-2">
+                      <p class="text-[11px] text-amber-700 dark:text-amber-300">高风险标签分布</p>
+                      <div class="flex flex-wrap gap-2">
+                        <UBadge v-for="risk in responseDiagnosticsSummary.riskTags" :key="risk.tag" color="primary" variant="subtle">{{ risk.tag }} × {{ risk.count }}</UBadge>
+                      </div>
+                    </div>
+                  </div>
                   <div class="space-y-3">
                     <div class="flex items-center gap-2 text-xs text-gray-400">
                       <UIcon name="i-lucide-messages-square" class="w-4 h-4" /> AI 返回预览（默认截断，便于快速排查）
@@ -228,7 +285,17 @@
                         <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
                           <div class="min-w-0">
                             <p class="text-xs font-semibold text-gray-200">块 #{{ (r.chunk_index || 0) + 1 }} · {{ r.model || 'unknown' }}</p>
-                            <p class="mt-1 text-[11px] text-gray-400 line-clamp-2 break-words">{{ r.raw_response_preview || '暂无返回内容' }}</p>
+                            <div class="mt-1 flex flex-wrap gap-1.5">
+                              <UBadge size="xs" color="neutral" variant="subtle">{{ r.response_meta?.format || 'unknown' }}</UBadge>
+                              <UBadge size="xs" :color="r.response_issue === 'empty' || r.response_issue === 'refusal' || r.response_issue === 'filtered' ? 'warning' : 'primary'" variant="subtle">{{ r.response_issue_label }}</UBadge>
+                              <UBadge v-if="r.response_meta && Number(r.response_meta.expectedCount || 0) > 0" size="xs" color="neutral" variant="subtle">解析 {{ r.response_meta.parsedCount }}/{{ r.response_meta.expectedCount }}</UBadge>
+                              <UBadge v-if="r.response_meta?.missingIds?.length" size="xs" color="warning" variant="soft">缺失 ID: {{ r.response_meta.missingIds.slice(0, 4).join(', ') }}{{ r.response_meta.missingIds.length > 4 ? '…' : '' }}</UBadge>
+                              <UBadge v-if="r.response_meta?.chunkDiagnostics?.retryAttempts" size="xs" color="primary" variant="subtle">重试 {{ r.response_meta.chunkDiagnostics.retryAttempts }} 次</UBadge>
+                              <UBadge v-if="r.response_meta?.chunkDiagnostics?.singleRetryAttempts" size="xs" color="warning" variant="subtle">单条补译 {{ r.response_meta.chunkDiagnostics.singleRetryAttempts }} 条</UBadge>
+                              <UBadge v-if="r.response_meta?.chunkDiagnostics?.fallbackCount" size="xs" color="error" variant="soft">回退原文 {{ r.response_meta.chunkDiagnostics.fallbackCount }} 条</UBadge>
+                              <UBadge v-for="tag in (r.response_meta?.chunkRisk?.tags || []).slice(0, 4)" :key="`${r.id}-${tag}`" size="xs" color="primary" variant="subtle">{{ tag }}</UBadge>
+                            </div>
+                            <p class="mt-2 text-[11px] text-gray-400 line-clamp-2 break-words">{{ r.raw_response_preview || '暂无返回内容' }}</p>
                           </div>
                           <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-500 shrink-0" />
                         </summary>
@@ -274,6 +341,22 @@
 
 <script setup lang="ts">
 const route = useRoute()
+
+const pageTitle = computed(() => {
+  const status = String(task.value?.status || '')
+  const progress = Number(task.value?.progress || 0)
+
+  if (status === 'review') return '字幕待核对 - SubX'
+  if (status === 'done') return '翻译任务完成 - SubX'
+  if (status === 'error') return '翻译任务失败 - SubX'
+  if (status === 'cancelled') return '翻译任务已取消 - SubX'
+  if (status === 'processing' || status === 'queued') return `翻译任务进行中 (${progress}%) - SubX`
+  return '翻译任务详情 - SubX'
+})
+
+useHead(() => ({
+  title: pageTitle.value
+}))
 const taskId = route.params.id
 
 const task = ref({
@@ -294,7 +377,23 @@ const task = ref({
 const showResponses = ref(false)
 const responsesLoading = ref(false)
 const responsesRecords = ref<any[]>([])
-const responsesSummary = ref(null)
+const responsesSummary = ref<any>(null)
+const responseDiagnosticsSummary = computed(() => {
+  const diagnostics = responsesSummary.value?.diagnostics
+  if (!diagnostics) return null
+  const totalIssues = Number(diagnostics.emptyChunks || 0) + Number(diagnostics.refusalChunks || 0) + Number(diagnostics.filteredChunks || 0)
+  const overviewParts = [
+    `异常块 ${totalIssues} 个`,
+    `缺条块 ${Number(diagnostics.missingIdChunks || 0)} 个`,
+    `重试块 ${Number(diagnostics.retriedChunks || 0)} 个`,
+    `回退块 ${Number(diagnostics.fallbackChunks || 0)} 个`
+  ]
+  return {
+    ...diagnostics,
+    totalIssues,
+    overviewText: overviewParts.join(' · ')
+  }
+})
 const showDiagnosticsSection = computed(() => !!connectionBanner.value || task.value.step === 'done')
 const cancelling = ref(false)
 const toast = useToast()
@@ -365,7 +464,7 @@ async function cancelTask() {
   cancelling.value = true
   try {
     await $fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
-    task.value.step = 'error'
+    task.value.step = 'cancelled'
     task.value.error = '用户取消任务'
     task.value.currentText = null
     appendLog({ type: 'error', message: '任务已被手动取消', timestamp: formatClock(), category: 'error' })
@@ -503,7 +602,7 @@ const statusLabel = computed(() => {
 })
 
 const connectionBanner = computed(() => {
-  if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review') {
+  if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review' || task.value.step === 'cancelled') {
     return {
       title: '历史记录模式',
       message: '当前展示的是已持久化的任务日志，无需保持实时连接。',
@@ -671,6 +770,7 @@ const stepIcon = computed(() => {
     case 'exporting': return 'i-lucide-file-output'
     case 'review': return 'i-lucide-list-checks'
     case 'done': return 'i-lucide-check-circle-2'
+    case 'cancelled': return 'i-lucide-ban'
     case 'error': return 'i-lucide-x-circle'
     default: return 'i-lucide-loader-2'
   }
@@ -712,11 +812,11 @@ onMounted(async () => {
         message: log.message,
         timestamp: formatTime(log.createdAt)
       })))
-    } else if (initialTask?.status === 'error' && initialTask.error) {
+    } else if ((initialTask?.status === 'error' || initialTask?.status === 'cancelled') && initialTask.error) {
       resetLogs([{ type: 'error', message: `任务失败: ${initialTask.error}`, timestamp: formatClock(), category: 'error' }])
       task.value.currentText = null
       connectionState.value = 'history-only'
-    } else if (initialTask?.status === 'done') {
+    } else if (initialTask?.status === 'done' || initialTask?.status === 'cancelled') {
       task.value.currentText = null
       connectionState.value = 'history-only'
     }
@@ -724,7 +824,7 @@ onMounted(async () => {
     console.warn('[Task] Unable to fetch initial task state', e)
   }
 
-  if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review') {
+  if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review' || task.value.step === 'cancelled') {
     connectionState.value = 'history-only'
     return
   }
@@ -740,7 +840,7 @@ onMounted(async () => {
     const es = new EventSource(`/api/sse/progress?taskId=${taskId}`)
     eventSource.value = es
 
-    const handleTerminalEvent = (raw: MessageEvent, terminalStep: 'done' | 'error') => {
+    const handleTerminalEvent = (raw: MessageEvent, terminalStep: 'done' | 'error' | 'cancelled') => {
       reconnectAttempts = 0
       reconnectStatusText.value = ''
       connectionState.value = 'history-only'
@@ -761,7 +861,7 @@ onMounted(async () => {
       const data = JSON.parse(e.data)
       task.value = { ...task.value, ...data }
 
-      if (data.step === 'done' || data.step === 'error' || data.step === 'review') {
+      if (data.step === 'done' || data.step === 'error' || data.step === 'review' || data.step === 'cancelled') {
         isIntentionalClose = true
         if (reconnectTimer.value) {
           clearTimeout(reconnectTimer.value)
@@ -781,13 +881,14 @@ onMounted(async () => {
             exporting: '导出文件',
             review: '字幕核对',
             done: '完成',
+            cancelled: '已取消',
             error: '出错'
           }
           const currentStepName = stepNames[data.step] || data.step
           appendLog({
-            type: data.step === 'error' ? 'error' : 'info',
-            category: data.step === 'error' ? 'error' : 'system',
-            message: data.step === 'error' ? '状态变更: 任务失败' : `状态变更: ${currentStepName}`,
+            type: data.step === 'error' || data.step === 'cancelled' ? 'error' : 'info',
+            category: data.step === 'error' || data.step === 'cancelled' ? 'error' : 'system',
+            message: data.step === 'error' ? '状态变更: 任务失败' : data.step === 'cancelled' ? '状态变更: 任务已取消' : `状态变更: ${currentStepName}`,
             timestamp: formatClock()
           })
         }
@@ -795,7 +896,7 @@ onMounted(async () => {
 
       if (data.log) {
         appendLog({
-          type: data.step === 'error' || data.log.includes('!!!') ? 'error' : 'info',
+          type: data.step === 'error' || data.step === 'cancelled' || data.log.includes('!!!') ? 'error' : 'info',
           category: data.category || undefined,
           message: data.log,
           timestamp: formatClock()
@@ -805,11 +906,12 @@ onMounted(async () => {
 
     es.addEventListener('done', (e) => handleTerminalEvent(e as MessageEvent, 'done'))
     es.addEventListener('error', (e) => handleTerminalEvent(e as MessageEvent, 'error'))
+    es.addEventListener('cancelled', (e) => handleTerminalEvent(e as MessageEvent, 'cancelled'))
 
     es.onerror = () => {
       es.close()
       if (isIntentionalClose) return
-      if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review') {
+      if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review' || task.value.step === 'cancelled') {
         connectionState.value = 'history-only'
         return
       }

@@ -12,6 +12,66 @@
       </div>
     </div>
 
+    <details class="rounded-3xl border border-amber-200/70 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-900/15 p-4 sm:p-5" open>
+      <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+            <UIcon name="i-lucide-chart-no-axes-combined" class="w-4 h-4" />
+            <span class="text-sm font-semibold">诊断总览</span>
+          </div>
+          <p class="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">聚合最近任务的风险标签、响应异常、重试与回退情况，默认折叠为轻量摘要。</p>
+          <p v-if="overviewSummaryText" class="text-[11px] text-amber-900/80 dark:text-amber-200/90">{{ overviewSummaryText }}</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <UBadge color="warning" variant="subtle">最近 {{ diagnosticsOverview?.summary?.totalTasks || 0 }} 个任务</UBadge>
+          <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-amber-500 shrink-0" />
+        </div>
+      </summary>
+
+      <div class="mt-4 space-y-4">
+        <div v-if="overviewPending" class="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+          <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载诊断总览中...
+        </div>
+        <div v-else-if="diagnosticsOverview" class="space-y-4">
+          <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">完成</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.summary.doneTasks }}</p></div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">待核对</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.summary.reviewTasks }}</p></div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">失败</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.summary.errorTasks }}</p></div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">取消</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.summary.cancelledTasks }}</p></div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">缺条块</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.translation.missingIdChunks }}</p></div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">重试块</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.translation.retriedChunks }}</p></div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">单条补译</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.translation.singleRetriedChunks }}</p></div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">回退块</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.translation.fallbackChunks }}</p></div>
+          </div>
+
+          <div class="grid gap-4 xl:grid-cols-3">
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 p-4 space-y-2">
+              <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">高风险标签</p>
+              <div class="flex flex-wrap gap-2">
+                <UBadge v-for="risk in diagnosticsOverview.riskTags.slice(0, 8)" :key="risk.tag" color="primary" variant="subtle">{{ risk.tag }} × {{ risk.count }}</UBadge>
+                <span v-if="!diagnosticsOverview.riskTags.length" class="text-xs text-amber-700 dark:text-amber-300">暂无</span>
+              </div>
+            </div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 p-4 space-y-2">
+              <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">响应异常</p>
+              <div class="flex flex-wrap gap-2">
+                <UBadge v-for="issue in diagnosticsOverview.responseIssues.slice(0, 8)" :key="issue.issue" color="warning" variant="soft">{{ issue.issue }} × {{ issue.count }}</UBadge>
+                <span v-if="!diagnosticsOverview.responseIssues.length" class="text-xs text-amber-700 dark:text-amber-300">暂无</span>
+              </div>
+            </div>
+            <div class="rounded-2xl bg-white/70 dark:bg-black/10 p-4 space-y-2">
+              <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">核对原因</p>
+              <div class="flex flex-wrap gap-2">
+                <UBadge v-for="reason in diagnosticsOverview.reviewReasons.slice(0, 8)" :key="reason.reason" color="error" variant="subtle">{{ reason.reason }} × {{ reason.count }}</UBadge>
+                <span v-if="!diagnosticsOverview.reviewReasons.length" class="text-xs text-amber-700 dark:text-amber-300">暂无</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="text-xs text-amber-700 dark:text-amber-300">暂无诊断总览数据。</div>
+      </div>
+    </details>
+
     <div class="history-table glass-panel rounded-3xl overflow-hidden p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
       <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group' }">
         <template #filePath-cell="{ row }">
@@ -66,7 +126,7 @@
             <div class="inline-flex min-w-[154px] items-center justify-center gap-1 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/90 dark:bg-gray-900/70 px-2 py-1.5 shadow-sm">
               <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" :to="`/task/${row.original.taskId}`" />
               <UButton
-                v-if="['error', 'review', 'done'].includes(row.original.status)"
+                v-if="['error', 'cancelled', 'review', 'done'].includes(row.original.status)"
                 icon="i-lucide-refresh-cw"
                 variant="ghost"
                 color="warning"
@@ -109,6 +169,10 @@
 </template>
 
 <script setup>
+useHead({
+  title: '翻译历史 - SubX'
+})
+
 const isClearModalOpen = ref(false)
 const isClearing = ref(false)
 const retryingTaskId = ref('')
@@ -117,6 +181,17 @@ const expandedTaskIds = ref(new Set())
 const toast = useToast()
 
 const { data, pending, refresh } = await useFetch('/api/tasks')
+const { data: diagnosticsOverview, pending: overviewPending } = await useFetch('/api/tasks/diagnostics/overview')
+const overviewSummaryText = computed(() => {
+  const value = diagnosticsOverview.value
+  if (!value) return ''
+  return [
+    `异常响应 ${value.responseIssues.reduce((sum, item) => sum + Number(item.count || 0), 0)} 次`,
+    `缺条块 ${value.translation.missingIdChunks} 个`,
+    `重试块 ${value.translation.retriedChunks} 个`,
+    `回退块 ${value.translation.fallbackChunks} 个`
+  ].join(' · ')
+})
 const tasks = computed(() => data.value?.tasks || [])
 
 async function clearHistory() {
@@ -227,6 +302,7 @@ const columns = [
 function statusColor(status) {
   switch (status) {
     case 'done': return 'success'
+    case 'cancelled': return 'warning'
     case 'error': return 'error'
     case 'translating': return 'primary'
     default: return 'neutral'

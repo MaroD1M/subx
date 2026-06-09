@@ -26,8 +26,8 @@
 </template>
 
 <script setup>
-definePageMeta({
-  title: 'SubX - AI Subtitle Translator'
+useHead({
+  title: '首页 - SubX'
 })
 
 const { data: config } = await useFetch('/api/config')

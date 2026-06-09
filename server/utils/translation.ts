@@ -133,6 +133,21 @@ function parseJsonTranslations(fullContent: string, expectedIds: string[] = []):
     return result
 }
 
+
+function summarizeResponseMeta(fullContent: string, expectedIds: string[]) {
+    const anomaly = detectOutputAnomaly(fullContent)
+    const parsed = parseAiTranslations(fullContent, expectedIds)
+    const format = parseJsonTranslations(fullContent, expectedIds).size > 0 ? 'json' : (parsed.size > 0 ? 'text' : 'unknown')
+    const missingIds = expectedIds.filter(id => !parsed.has(id))
+    return {
+        format,
+        anomaly,
+        parsedCount: parsed.size,
+        expectedCount: expectedIds.length,
+        missingIds: missingIds.slice(0, 20)
+    }
+}
+
 export function parseAiTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
     const jsonParsed = parseJsonTranslations(fullContent, expectedIds)
     if (jsonParsed.size > 0) return jsonParsed
@@ -363,12 +378,14 @@ End Time: ${new Date().toISOString()}
                     const db = useDb()
                     const rawRequest = JSON.stringify({ systemMessage, prompt }).slice(0, RAW_RESPONSE_MAX_CHARS)
                     const rawResponse = String(fullContent || '').slice(0, RAW_RESPONSE_MAX_CHARS)
-                    db.prepare('INSERT INTO task_responses (task_id, chunk_index, model, raw_request, raw_response, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                    const responseMeta = JSON.stringify(summarizeResponseMeta(fullContent, chunk.map(entry => String(entry.id)))).slice(0, RAW_RESPONSE_MAX_CHARS)
+                    db.prepare('INSERT INTO task_responses (task_id, chunk_index, model, raw_request, raw_response, response_meta, prompt_tokens, completion_tokens, total_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
                         taskId,
                         chunkIndex ?? 0,
                         model,
                         rawRequest,
                         rawResponse,
+                        responseMeta,
                         usage.prompt_tokens,
                         usage.completion_tokens,
                         usage.total_tokens

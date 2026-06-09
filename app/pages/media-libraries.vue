@@ -150,7 +150,7 @@
 <script setup lang="ts">
 import type { MediaRoot } from '~~/types'
 
-definePageMeta({
+useHead({
   title: '媒体库管理 - SubX'
 })
 
