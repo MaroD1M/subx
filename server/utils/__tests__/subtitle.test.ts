@@ -180,6 +180,20 @@ Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\an8}{\\k20}Hel{\\k30}{\\i1}
     expect(rebuilt).toBe('__SUBX_FMT_1__你好__SUBX_FMT_2__世界')
   })
 
+  it('accepts bracket-only non-dialogue text when structure is preserved', () => {
+    expect(SubtitleService.isAcceptableSameText('[MUSIC PLAYING]', '[MUSIC PLAYING]', 'zh-CN')).toBe(true)
+    expect(SubtitleService.isAcceptableSameText('[MUSIC PLAYING]\n[SIGHS]', '[MUSIC PLAYING]\n[SIGHS]', 'zh-CN')).toBe(true)
+  })
+
+  it('flags adjacent-shifted translations before export', () => {
+    const issues = SubtitleService.validateTranslatedEntries([
+      { id: '1', startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'Mike. Somebody took a shot at the big man.', translatedText: '如果我兄弟出事' },
+      { id: '2', startTime: '00:00:02,000', endTime: '00:00:03,000', text: 'If anything happens to my brother,', translatedText: 'Mike. Somebody took a shot at the big man.' }
+    ], 'zh-CN')
+
+    expect(issues.some(issue => issue.reason === 'suspected_shift')).toBe(true)
+  })
+
   it('preserves ass drawing lines as raw content during parse', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'subx-ass-drawing-'))
     const file = join(dir, 'sample.ass')

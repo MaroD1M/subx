@@ -145,10 +145,43 @@ function isAcceptableTranslatedEntry(entry: SubtitleEntry, targetLanguage: strin
     const translated = String(entry.translatedText || '')
     const normalizedOriginal = SubtitleService.normalizeComparisonText(original)
     const normalizedTranslated = SubtitleService.normalizeComparisonText(translated)
-    if (!normalizedTranslated) return false
+    const isNonVerbalLike = SubtitleService.isNonVerbal(original) || SubtitleService.isBracketOnlyText(SubtitleService.normalizeSubtitleText(original))
+
+    if (!normalizedTranslated) {
+        return isNonVerbalLike && SubtitleService.normalizeSubtitleText(translated).length > 0
+    }
+
     if (SubtitleService.isLikelyContaminatedTranslation(original, translated)) return false
     if (normalizedOriginal !== normalizedTranslated) return true
     return SubtitleService.isAcceptableSameText(original, translated, targetLanguage)
+}
+
+function buildStablePreviousContext(entries: SubtitleEntry[]) {
+    return entries.map(entry => ({
+        ...entry,
+        translatedText: undefined
+    }))
+}
+
+function getConservativeBatchSize(tags: string[]) {
+    if (tags.some(tag => ['lyrics', 'formatting_tokens', 'non_dialogue', 'multi_line_dialogue'].includes(tag))) {
+        return 6
+    }
+    if (tags.includes('long_text')) {
+        return 4
+    }
+    return 8
+}
+
+function splitConservativeBatches(entries: SubtitleEntry[], tags: string[]) {
+    const batchSize = Math.max(1, getConservativeBatchSize(tags))
+    if (entries.length <= batchSize) return [entries]
+
+    const batches: SubtitleEntry[][] = []
+    for (let index = 0; index < entries.length; index += batchSize) {
+        batches.push(entries.slice(index, index + batchSize))
+    }
+    return batches
 }
 
 function expandRetryEntries(entries: SubtitleEntry[], targetIds: string[]) {
@@ -248,6 +281,13 @@ async function translateChunkWithRetry(
             unresolvedEntries = unresolvedEntries.filter(entry => retryIds.includes(String(entry.id)))
 
             if (unresolvedEntries.length === 0) {
+                break
+            }
+
+            const acceptedCount = expectedCount - unresolvedEntries.length
+            if (acceptedCount === 0 && returnedIds.size === expectedCount && attempt >= 1) {
+                diagnostics.validationFailures++
+                writeTaskLog(taskId, 'translating', 'warn', '[止损] 块 #' + (chunkIndex + 1) + ' 连续返回完整条数但有效结果为 0，停止整块重试并转入更细粒度补译')
                 break
             }
 
@@ -722,66 +762,105 @@ export const TaskService = {
                         return entry
                     })
                 } else {
-                    const idMapping = new Map<string, string>()
-                    const remappedChunk: SubtitleEntry[] = uncachedEntries.map((entry, i) => {
-                        const sequentialId = String(i + 1)
-                        idMapping.set(sequentialId, String(entry.id))
-                        return { ...entry, id: sequentialId }
-                    })
-
                     const chunkRisk = analyzeChunkRisk(uncachedEntries, chunkSize)
                     const effectiveStylePrompt = [stylePrompt, chunkRisk.stylePromptSuffix].filter(Boolean).join('\n\n')
+                    const stablePreviousContext = buildStablePreviousContext(previousContext)
                     if (chunkRisk.riskLevel === 'high') {
                         writeTaskLog(taskId, 'translating', 'info', `[风险块] 块 #${index + 1} 命中 ${chunkRisk.tags.join(', ')}，启用保守翻译策略`)
                     }
 
-                    const chunkResult = await translateChunkWithRetry(
-                        openai, remappedChunk, task.targetLanguage, glossary, previousContext,
-                        task.model, taskId, index, effectiveStylePrompt, maxRetries,
-                        {
-                            onEntryTranslated: (entry) => {
-                                const originalId = idMapping.get(String(entry.id))
-                                if (originalId) {
-                                    const originalEntry = uncachedEntries.find(e => String(e.id) === originalId)
-                                    if (originalEntry) {
-                                        translatedMap.set(originalId, {
-                                            ...originalEntry,
-                                            translatedText: entry.translatedText
-                                        })
-                                    }
-                                }
-                            }
-                        },
-                        (config.translationMode === 'stream') && (config.streamUsage || false),
-                        config.translationMode === 'stream'
-                    )
+                    const conservativeBatches = chunkRisk.riskLevel === 'high'
+                        ? splitConservativeBatches(uncachedEntries, chunkRisk.tags)
+                        : [uncachedEntries]
 
-                    try {
-                        const responseRow = db.prepare('SELECT id, response_meta FROM task_responses WHERE task_id = ? AND chunk_index = ? ORDER BY id DESC LIMIT 1').get(taskId, index) as { id?: number, response_meta?: string } | undefined
-                        if (responseRow?.id) {
-                            const currentMeta = responseRow.response_meta ? JSON.parse(String(responseRow.response_meta)) : {}
-                            db.prepare('UPDATE task_responses SET response_meta = ? WHERE id = ?').run(JSON.stringify({ ...currentMeta, chunkRisk, chunkDiagnostics: chunkResult.diagnostics }), responseRow.id)
-                        }
-                    } catch { /* ignore diagnostics patch failure */ }
+                    if (conservativeBatches.length > 1) {
+                        writeTaskLog(taskId, 'translating', 'info', '[保守分批] 块 #' + (index + 1) + ' 已拆为 ' + conservativeBatches.length + ' 个子批次，降低串条与错配风险')
+                    }
 
                     const aiResultByOriginalId = new Map<string, SubtitleEntry>()
-                    for (const entry of chunkResult.entries) {
-                        const originalId = idMapping.get(String(entry.id))
-                        if (originalId) {
-                            const originalEntry = uncachedEntries.find(e => String(e.id) === originalId)
+                    const diagnosticsCollection: ChunkDiagnostics[] = []
+
+                    for (const batchEntries of conservativeBatches) {
+                        const idMapping = new Map<string, string>()
+                        const remappedChunk: SubtitleEntry[] = batchEntries.map((entry, i) => {
+                            const sequentialId = String(i + 1)
+                            idMapping.set(sequentialId, String(entry.id))
+                            return { ...entry, id: sequentialId }
+                        })
+
+                        const chunkResult = await translateChunkWithRetry(
+                            openai,
+                            remappedChunk,
+                            task.targetLanguage,
+                            glossary,
+                            stablePreviousContext,
+                            task.model,
+                            taskId,
+                            index,
+                            effectiveStylePrompt,
+                            maxRetries,
+                            undefined,
+                            (config.translationMode === 'stream') && (config.streamUsage || false),
+                            config.translationMode === 'stream'
+                        )
+
+                        diagnosticsCollection.push(chunkResult.diagnostics)
+                        const allowCache = chunkRisk.riskLevel === 'normal'
+                            && chunkResult.diagnostics.validationFailures === 0
+                            && chunkResult.diagnostics.singleRetryAttempts === 0
+                            && chunkResult.diagnostics.fallbackCount === 0
+
+                        for (const entry of chunkResult.entries) {
+                            const originalId = idMapping.get(String(entry.id))
+                            if (!originalId) continue
+                            const originalEntry = batchEntries.find(e => String(e.id) === originalId)
+                            if (!originalEntry) continue
+
                             const restoredEntry: SubtitleEntry = {
-                                ...originalEntry!,
+                                ...originalEntry,
                                 id: originalId,
                                 translatedText: entry.translatedText
                             }
                             aiResultByOriginalId.set(originalId, restoredEntry)
 
-                            if (entry.translatedText && isAcceptableTranslatedEntry({ ...originalEntry!, translatedText: entry.translatedText }, task.targetLanguage) && !SubtitleService.isNonVerbal(originalEntry!.text)) {
-                                const cacheHash = SubtitleService.computeCacheHash(originalEntry!.text, task.model, task.targetLanguage)
-                                SubtitleService.setCachedTranslation(cacheHash, originalEntry!.text, entry.translatedText, task.model, task.targetLanguage)
+                            if (
+                                allowCache
+                                && entry.translatedText
+                                && isAcceptableTranslatedEntry({ ...originalEntry, translatedText: entry.translatedText }, task.targetLanguage)
+                                && !SubtitleService.isNonVerbal(originalEntry.text)
+                            ) {
+                                const cacheHash = SubtitleService.computeCacheHash(originalEntry.text, task.model, task.targetLanguage)
+                                SubtitleService.setCachedTranslation(cacheHash, originalEntry.text, entry.translatedText, task.model, task.targetLanguage)
                             }
                         }
                     }
+
+                    try {
+                        const responseRow = db.prepare('SELECT id, response_meta FROM task_responses WHERE task_id = ? AND chunk_index = ? ORDER BY id DESC LIMIT 1').get(taskId, index) as { id?: number, response_meta?: string } | undefined
+                        if (responseRow?.id) {
+                            const currentMeta = responseRow.response_meta ? JSON.parse(String(responseRow.response_meta)) : {}
+                            const combinedDiagnostics = diagnosticsCollection.length <= 1
+                                ? diagnosticsCollection[0]
+                                : {
+                                    chunkIndex: index,
+                                    initialSize: uncachedEntries.length,
+                                    retryAttempts: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.retryAttempts || 0), 0),
+                                    validationFailures: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.validationFailures || 0), 0),
+                                    singleRetryAttempts: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.singleRetryAttempts || 0), 0),
+                                    singleRetrySuccesses: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.singleRetrySuccesses || 0), 0),
+                                    singleRetryFailures: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.singleRetryFailures || 0), 0),
+                                    fallbackCount: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.fallbackCount || 0), 0),
+                                    missingIds: Array.from(new Set(diagnosticsCollection.flatMap(item => item?.missingIds || []))).slice(0, 20),
+                                    contaminatedIds: Array.from(new Set(diagnosticsCollection.flatMap(item => item?.contaminatedIds || []))).slice(0, 20),
+                                    finalStatus: diagnosticsCollection.some(item => item?.finalStatus === 'fallback')
+                                        ? 'fallback'
+                                        : diagnosticsCollection.some(item => item?.finalStatus === 'partial')
+                                            ? 'partial'
+                                            : 'ok'
+                                }
+                            db.prepare('UPDATE task_responses SET response_meta = ? WHERE id = ?').run(JSON.stringify({ ...currentMeta, chunkRisk, chunkDiagnostics: combinedDiagnostics }), responseRow.id)
+                        }
+                    } catch { /* ignore diagnostics patch failure */ }
 
                     translatedChunk = chunk.map(entry => {
                         const cachedText = cachedResults.get(String(entry.id))

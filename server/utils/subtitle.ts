@@ -20,7 +20,7 @@ type FormattingTarget = 'srt' | 'ass'
 type FormattingToken = { placeholder: string, value: string }
 type TemplateSlot = { placeholder?: string, text: string }
 type AssSegment = { tags: string[], text: string, drawing?: unknown[] }
-type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate' | 'same_as_source_allowed' | 'suspected_contamination' | 'overlong_translation', original: string, translated: string, severity?: 'soft' | 'hard' }
+type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate' | 'same_as_source_allowed' | 'suspected_contamination' | 'overlong_translation' | 'suspected_shift', original: string, translated: string, severity?: 'soft' | 'hard' }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
   return resolveMediaPath(userPath, rootId)
@@ -123,6 +123,14 @@ export const SubtitleService = {
     if (this.isLikelyMetadataOrProperNoun(original)) return true
     if (this.isLikelySongLyric(original)) return true
     if (this.isChineseVariantConversion(targetLanguage, original, translated)) return true
+
+    const originalText = this.normalizeSubtitleText(original)
+    const translatedText = this.normalizeSubtitleText(translated)
+    const originalLines = originalText.split('\n').map(line => line.trim()).filter(Boolean)
+    const translatedLines = translatedText.split('\n').map(line => line.trim()).filter(Boolean)
+    const allBracketOnly = originalLines.length > 0 && originalLines.every(line => this.isBracketOnlyText(line))
+
+    if (allBracketOnly && translatedLines.length === originalLines.length) return true
     return false
   },
 
@@ -589,6 +597,10 @@ export const SubtitleService = {
   },
 
   validateTranslatedEntries(entries: SubtitleEntry[], targetLanguage: string): TranslationValidationIssue[] {
+    const normalizedEntries = entries.map(entry => ({
+      original: this.normalizeComparisonText(entry.text || ''),
+      translated: this.normalizeComparisonText(entry.translatedText || '')
+    }))
     const shouldCheckLatinHeavy = /^zh|^ja|^ko/i.test(targetLanguage)
     const issues: TranslationValidationIssue[] = []
 
@@ -612,13 +624,25 @@ export const SubtitleService = {
         continue
       }
 
-      if (shouldCheckLatinHeavy && this.looksLatinHeavy(translated) && this.looksLatinHeavy(original) && !this.isLikelySongLyric(original)) {
-        issues.push({ id: String(entry.id), reason: 'latin_heavy', original, translated, severity: this.isLowValueText(original) ? 'soft' : 'hard' })
+      if (this.isLikelyContaminatedTranslation(original, translated)) {
+        issues.push({ id: String(entry.id), reason: 'suspected_contamination', original, translated, severity: 'hard' })
         continue
       }
 
-      if (this.isLikelyContaminatedTranslation(original, translated)) {
-        issues.push({ id: String(entry.id), reason: 'suspected_contamination', original, translated, severity: 'hard' })
+      const currentIndex = entries.findIndex(item => String(item.id) === String(entry.id))
+      const previousOriginal = currentIndex > 0 ? normalizedEntries[currentIndex - 1]?.original || '' : ''
+      const nextOriginal = currentIndex + 1 < normalizedEntries.length ? normalizedEntries[currentIndex + 1]?.original || '' : ''
+      if (normalizedTranslated && normalizedOriginal && normalizedTranslated !== normalizedOriginal) {
+        const matchesPrevious = previousOriginal && normalizedTranslated === previousOriginal
+        const matchesNext = nextOriginal && normalizedTranslated === nextOriginal
+        if (matchesPrevious || matchesNext) {
+          issues.push({ id: String(entry.id), reason: 'suspected_shift', original, translated, severity: 'hard' })
+          continue
+        }
+      }
+
+      if (shouldCheckLatinHeavy && this.looksLatinHeavy(translated) && this.looksLatinHeavy(original) && !this.isLikelySongLyric(original)) {
+        issues.push({ id: String(entry.id), reason: 'latin_heavy', original, translated, severity: this.isLowValueText(original) ? 'soft' : 'hard' })
         continue
       }
 

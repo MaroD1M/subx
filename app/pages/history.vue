@@ -12,63 +12,63 @@
       </div>
     </div>
 
-    <details class="rounded-3xl border border-amber-200/70 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-900/15 p-4 sm:p-5" open>
+    <details class="group rounded-3xl border border-gray-200 dark:border-gray-800 bg-white/85 dark:bg-gray-900/70 shadow-sm p-4 sm:p-5">
       <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div class="space-y-1">
-          <div class="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+          <div class="flex items-center gap-2 text-gray-900 dark:text-white">
             <UIcon name="i-lucide-chart-no-axes-combined" class="w-4 h-4" />
             <span class="text-sm font-semibold">诊断总览</span>
           </div>
-          <p class="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">聚合最近任务的风险标签、响应异常、重试与回退情况，默认折叠为轻量摘要。</p>
-          <p v-if="overviewSummaryText" class="text-[11px] text-amber-900/80 dark:text-amber-200/90">{{ overviewSummaryText }}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">聚合最近任务的风险标签、响应异常、重试与回退情况，默认折叠，仅在需要排查时展开。</p>
+          <p v-if="overviewSummaryText" class="text-[11px] text-gray-600 dark:text-gray-300">{{ overviewSummaryText }}</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-          <UBadge color="warning" variant="subtle">最近 {{ diagnosticsOverview?.summary?.totalTasks || 0 }} 个任务</UBadge>
-          <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-amber-500 shrink-0" />
+          <UBadge color="neutral" variant="subtle">最近 {{ diagnosticsOverview?.summary?.totalTasks || 0 }} 个任务</UBadge>
+          <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-400 shrink-0 transition-transform group-open:rotate-180" />
         </div>
       </summary>
 
       <div class="mt-4 space-y-4">
-        <div v-if="overviewPending" class="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-2">
+        <div v-if="overviewPending" class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
           <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载诊断总览中...
         </div>
         <div v-else-if="diagnosticsOverview" class="space-y-4">
           <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">完成</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.summary.doneTasks }}</p></div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">待核对</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.summary.reviewTasks }}</p></div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">失败</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.summary.errorTasks }}</p></div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">取消</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.summary.cancelledTasks }}</p></div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">缺条块</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.translation.missingIdChunks }}</p></div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">重试块</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.translation.retriedChunks }}</p></div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">单条补译</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.translation.singleRetriedChunks }}</p></div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">回退块</p><p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ diagnosticsOverview.translation.fallbackChunks }}</p></div>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">完成</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.summary.doneTasks }}</p></div>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">待核对</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.summary.reviewTasks }}</p></div>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">失败</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.summary.errorTasks }}</p></div>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">取消</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.summary.cancelledTasks }}</p></div>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">缺条块</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.translation.missingIdChunks }}</p></div>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">重试块</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.translation.retriedChunks }}</p></div>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">单条补译</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.translation.singleRetriedChunks }}</p></div>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">回退块</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.translation.fallbackChunks }}</p></div>
           </div>
 
           <div class="grid gap-4 xl:grid-cols-3">
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 p-4 space-y-2">
-              <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">高风险标签</p>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
+              <p class="text-xs font-semibold text-gray-900 dark:text-white">高风险标签</p>
               <div class="flex flex-wrap gap-2">
-                <UBadge v-for="risk in diagnosticsOverview.riskTags.slice(0, 8)" :key="risk.tag" color="primary" variant="subtle">{{ risk.tag }} × {{ risk.count }}</UBadge>
-                <span v-if="!diagnosticsOverview.riskTags.length" class="text-xs text-amber-700 dark:text-amber-300">暂无</span>
+                <UBadge v-for="risk in diagnosticsOverview.riskTags.slice(0, 8)" :key="risk.tag" color="primary" variant="soft">{{ risk.tag }} × {{ risk.count }}</UBadge>
+                <span v-if="!diagnosticsOverview.riskTags.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
               </div>
             </div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 p-4 space-y-2">
-              <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">响应异常</p>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
+              <p class="text-xs font-semibold text-gray-900 dark:text-white">响应异常</p>
               <div class="flex flex-wrap gap-2">
                 <UBadge v-for="issue in diagnosticsOverview.responseIssues.slice(0, 8)" :key="issue.issue" color="warning" variant="soft">{{ issue.issue }} × {{ issue.count }}</UBadge>
-                <span v-if="!diagnosticsOverview.responseIssues.length" class="text-xs text-amber-700 dark:text-amber-300">暂无</span>
+                <span v-if="!diagnosticsOverview.responseIssues.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
               </div>
             </div>
-            <div class="rounded-2xl bg-white/70 dark:bg-black/10 p-4 space-y-2">
-              <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">核对原因</p>
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
+              <p class="text-xs font-semibold text-gray-900 dark:text-white">核对原因</p>
               <div class="flex flex-wrap gap-2">
-                <UBadge v-for="reason in diagnosticsOverview.reviewReasons.slice(0, 8)" :key="reason.reason" color="error" variant="subtle">{{ reason.reason }} × {{ reason.count }}</UBadge>
-                <span v-if="!diagnosticsOverview.reviewReasons.length" class="text-xs text-amber-700 dark:text-amber-300">暂无</span>
+                <UBadge v-for="reason in diagnosticsOverview.reviewReasons.slice(0, 8)" :key="reason.reason" color="error" variant="soft">{{ reason.reason }} × {{ reason.count }}</UBadge>
+                <span v-if="!diagnosticsOverview.reviewReasons.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
               </div>
             </div>
           </div>
         </div>
-        <div v-else class="text-xs text-amber-700 dark:text-amber-300">暂无诊断总览数据。</div>
+        <div v-else class="text-xs text-gray-500 dark:text-gray-400">暂无诊断总览数据。</div>
       </div>
     </details>
 
