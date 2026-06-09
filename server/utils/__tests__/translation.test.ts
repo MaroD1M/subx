@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseAiTranslations } from '../translation'
 
 describe('TranslationService parser', () => {
-  it('parses json object payloads first', () => {
+  it('parses json object payloads first when text format is absent', () => {
     const parsed = parseAiTranslations(JSON.stringify({
       items: [
         { id: '1', translatedText: '你好' },
@@ -14,6 +14,11 @@ describe('TranslationService parser', () => {
       ['1', '你好'],
       ['2', '世界']
     ])
+  })
+
+  it('prefers text format when text and json coexist', () => {
+    const parsed = parseAiTranslations(`1\n文本优先\n\n{"items":[{"id":"1","translatedText":"JSON结果"}]}`, ['1'])
+    expect(parsed.get('1')).toBe('文本优先')
   })
 
   it('parses fenced json payloads', () => {

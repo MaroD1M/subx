@@ -122,24 +122,31 @@
         </template>
 
         <template #actions-cell="{ row }">
-          <div class="w-full min-w-[170px] flex items-center justify-center py-1">
-            <div class="inline-flex min-w-[154px] items-center justify-center gap-1 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/90 dark:bg-gray-900/70 px-2 py-1.5 shadow-sm">
-              <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" :to="`/task/${row.original.taskId}`" />
+          <div class="w-full min-w-[212px] flex items-center justify-center py-1">
+            <div class="grid grid-cols-5 min-w-[196px] items-center gap-1 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/90 dark:bg-gray-900/70 px-2 py-1.5 shadow-sm">
+              <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" class="justify-center" :to="`/task/${row.original.taskId}`" />
               <UButton
                 v-if="['error', 'cancelled', 'review', 'done'].includes(row.original.status)"
                 icon="i-lucide-refresh-cw"
                 variant="ghost"
                 color="warning"
                 size="xs"
+                class="justify-center"
                 :loading="retryingTaskId === row.original.taskId"
                 title="重新翻译"
                 @click="retryTask(row.original.taskId)"
               />
-              <UButton v-if="row.original.status === 'review'" icon="i-lucide-list-checks" variant="ghost" color="primary" size="xs" @click="openReview(row.original.taskId)" />
-              <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex items-center justify-center rounded-lg p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
+              <span v-else class="h-7" />
+              <UButton v-if="row.original.status === 'review'" icon="i-lucide-list-checks" variant="ghost" color="primary" size="xs" class="justify-center" @click="openReview(row.original.taskId)" />
+              <span v-else class="h-7" />
+              <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex h-7 items-center justify-center rounded-lg p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
                 <UIcon name="i-lucide-download" class="w-4 h-4" />
               </a>
-              <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" :loading="deletingTaskId === row.original.taskId" @click="deleteTask(row.original.taskId)" />
+              <span v-else class="h-7" />
+              <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" class="justify-center" :loading="deletingTaskId === row.original.taskId" @click="deleteTask(row.original.taskId)" />
+              <UDropdownMenu :items="historyActionItems(row.original)">
+                <UButton icon="i-lucide-ellipsis" variant="ghost" color="neutral" size="xs" class="justify-center" />
+              </UDropdownMenu>
             </div>
           </div>
         </template>
@@ -328,6 +335,21 @@ const columns = [
   { id: 'actions', header: '操作' }
 ]
 
+function historyActionItems(task) {
+  const items = []
+  if (task.status === 'review') {
+    items.push({ label: '进入核对', icon: 'i-lucide-list-checks', onSelect: () => openReview(task.taskId) })
+  }
+  if (['error', 'cancelled', 'review', 'done'].includes(String(task.status || ''))) {
+    items.push({ label: '重新翻译', icon: 'i-lucide-refresh-cw', onSelect: () => retryTask(task.taskId) })
+  }
+  if (task.status === 'done') {
+    items.push({ label: '下载字幕', icon: 'i-lucide-download', to: `/api/tasks/${task.taskId}/download` })
+  }
+  items.push({ label: '删除记录', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteTask(task.taskId) })
+  return items
+}
+
 function statusColor(status) {
   switch (status) {
     case 'done': return 'success'
@@ -357,5 +379,10 @@ function statusColor(status) {
 .history-table :deep(th:nth-child(4)),
 .history-table :deep(td:nth-child(4)) {
   width: 148px;
+}
+
+.history-table :deep(th:nth-child(5)),
+.history-table :deep(td:nth-child(5)) {
+  width: 236px;
 }
 </style>

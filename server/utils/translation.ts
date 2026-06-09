@@ -26,9 +26,14 @@ function buildTranslationPrompt(
     return `你是专业影视字幕翻译。将以下字幕逐条翻译为地道的${targetLanguage}。
 ${styleBlock}
 输出格式（严格遵守！）：
-- 优先返回 JSON：{"items":[{"id":"1","translatedText":"..."},{"id":"2","translatedText":"..."}]}
-- JSON 中每个 id 必须与输入序号完全一致，且所有条目都必须返回，不能增减任何条目
-- 如果你无法稳定输出 JSON，才退回纯文本格式：每条翻译占两行，第一行是序号，第二行是翻译文本，条目之间用一个空行分隔
+- 默认使用纯文本逐条输出：每条翻译占两行，第一行是序号，第二行是翻译文本，条目之间用一个空行分隔
+- 例如：1
+你好
+
+2
+世界
+- 如果你非常确定可以稳定输出结构化结果，才允许返回 JSON：{"items":[{"id":"1","translatedText":"..."},{"id":"2","translatedText":"..."}]}
+- 无论是纯文本还是 JSON，每个 id 必须与输入序号完全一致，且所有条目都必须返回，不能增减任何条目
 - 不要输出任何其他内容（不要 markdown、不要解释、不要编号前缀）
 - 不要输出任何字幕格式控制标签，例如 {\an8}、\N、<i>、</i>、<font> 等
 - 如果原文中出现形如 __SUBX_FMT_1__ 的占位符，必须在译文中原样保留，不可翻译、不可删除、不可改序
@@ -134,24 +139,8 @@ function parseJsonTranslations(fullContent: string, expectedIds: string[] = []):
 }
 
 
-function summarizeResponseMeta(fullContent: string, expectedIds: string[]) {
-    const anomaly = detectOutputAnomaly(fullContent)
-    const parsed = parseAiTranslations(fullContent, expectedIds)
-    const format = parseJsonTranslations(fullContent, expectedIds).size > 0 ? 'json' : (parsed.size > 0 ? 'text' : 'unknown')
-    const missingIds = expectedIds.filter(id => !parsed.has(id))
-    return {
-        format,
-        anomaly,
-        parsedCount: parsed.size,
-        expectedCount: expectedIds.length,
-        missingIds: missingIds.slice(0, 20)
-    }
-}
 
-export function parseAiTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
-    const jsonParsed = parseJsonTranslations(fullContent, expectedIds)
-    if (jsonParsed.size > 0) return jsonParsed
-
+function parseTextTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
     const result = new Map<string, string>()
     const normalized = normalizeAiOutput(fullContent)
     const expectedSet = new Set(expectedIds)
@@ -179,6 +168,10 @@ export function parseAiTranslations(fullContent: string, expectedIds: string[] =
         }
 
         if (!currentId) continue
+        if (/^\s*[\[{]\s*"?items"?\s*:/i.test(line) || /^\s*\{\s*"items"\s*:/i.test(line) || /^\s*\[$/.test(line)) {
+            flush()
+            continue
+        }
         if (!line.trim() && buffer.length === 0) continue
         buffer.push(rawLine)
     }
@@ -200,6 +193,33 @@ export function parseAiTranslations(fullContent: string, expectedIds: string[] =
 
     return result
 }
+
+function summarizeResponseMeta(fullContent: string, expectedIds: string[]) {
+    const anomaly = detectOutputAnomaly(fullContent)
+    const textParsed = parseTextTranslations(fullContent, expectedIds)
+    const jsonParsed = parseJsonTranslations(fullContent, expectedIds)
+    const parsed = textParsed.size > 0 ? textParsed : jsonParsed
+    const format = textParsed.size > 0 ? 'text' : (jsonParsed.size > 0 ? 'json' : 'unknown')
+    const missingIds = expectedIds.filter(id => !parsed.has(id))
+    return {
+        format,
+        anomaly,
+        parsedCount: parsed.size,
+        expectedCount: expectedIds.length,
+        missingIds: missingIds.slice(0, 20)
+    }
+}
+
+export function parseAiTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
+    const textParsed = parseTextTranslations(fullContent, expectedIds)
+    if (textParsed.size > 0) return textParsed
+
+    const jsonParsed = parseJsonTranslations(fullContent, expectedIds)
+    if (jsonParsed.size > 0) return jsonParsed
+
+    return new Map<string, string>()
+}
+
 
 export const TranslationService = {
     async translateChunk(

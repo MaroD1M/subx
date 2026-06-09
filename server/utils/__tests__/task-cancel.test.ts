@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const dbState = new Map<string, { status: string, progress: number, error?: string | null }>()
+const dbState = new Map<string, { status: string, progress: number, error?: string | null, forceRetranslate?: number }>()
 const emitted: Array<{ event: string, payload: any }> = []
 
 const mockDb = {
@@ -29,7 +29,7 @@ const mockDb = {
             subtitle_format: 'srt',
             subtitle_style_preset: 'bilingual_simple',
             bilingual_layout: 'translated_first',
-            force_retranslate: 0,
+            force_retranslate: row.forceRetranslate ?? 0,
             total_chunks: 0,
             done_chunks: 0,
             created_at: '2025-01-01 00:00:00',
@@ -43,6 +43,12 @@ const mockDb = {
         return undefined
       },
       run(...args: any[]) {
+        if (sql.includes('INSERT INTO tasks')) {
+          const [taskId, filePath, rootId, sourceType, trackIndex, model, targetLang, outputMode, stylePreset, translationMode, subtitleFormat, subtitleStylePreset, bilingualLayout, forceRetranslate, status, progress] = args
+          dbState.set(String(taskId), { status: String(status), progress: Number(progress), error: null, forceRetranslate: Number(forceRetranslate) })
+          return { changes: 1 }
+        }
+
         if (sql.includes('UPDATE tasks SET status = ?, progress = ?')) {
           const [status, progress, taskId] = args
           const current = dbState.get(taskId) ?? { status: 'queued', progress: 0, error: null }
@@ -144,6 +150,46 @@ describe('Task cancellation guards', () => {
     expect(dbState.get('task-terminal')?.status).toBe('cancelled')
     expect(emitted.some(entry => entry.event === 'cancelled')).toBe(true)
     expect(emitted.at(-1)?.payload?.step).toBe('cancelled')
+  })
+
+
+  it('persists forceRetranslate for retried tasks', async () => {
+    await TaskService.createTask({
+      taskId: 'task-force-retranslate',
+      filePath: '/tmp/demo.srt',
+      rootId: 'root-1',
+      sourceType: 'external',
+      trackIndex: 0,
+      model: 'gpt-test',
+      targetLanguage: 'zh-CN',
+      outputMode: 'translated',
+      stylePreset: 'default',
+      translationMode: 'non_stream',
+      subtitleFormat: 'srt',
+      subtitleStylePreset: 'bilingual_simple',
+      bilingualLayout: 'translated_first',
+      forceRetranslate: true
+    })
+
+    const task = TaskService.getTask('task-force-retranslate')
+    expect(task.forceRetranslate).toBe(true)
+    expect(dbState.get('task-force-retranslate')?.forceRetranslate).toBe(1)
+  })
+
+
+
+  it('keeps review as terminal-like status for later progress updates', async () => {
+    dbState.set('task-review', { status: 'review', progress: 96, error: '待字幕核对' })
+
+    await TaskService.updateStatus('task-review', 'done', 100, {
+      log: '这条完成更新应被丢弃'
+    })
+
+    expect(dbState.get('task-review')).toEqual({
+      status: 'review',
+      progress: 96,
+      error: '待字幕核对'
+    })
   })
 
   it('skips queued tasks that were cancelled before execution starts', async () => {

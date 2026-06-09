@@ -53,7 +53,8 @@ type ChunkDiagnostics = {
     fallbackCount: number
     missingIds: string[]
     contaminatedIds: string[]
-    finalStatus: 'ok' | 'partial' | 'fallback'
+    reviewIds: string[]
+    finalStatus: 'ok' | 'partial' | 'fallback' | 'review'
 }
 
 function resolveLogCategory(step: string | null, level: 'info' | 'error' | 'warn', message: string): TaskLogCategory {
@@ -217,6 +218,7 @@ function expandRetryEntries(entries: SubtitleEntry[], targetIds: string[]) {
     return entries.filter(entry => expandedIds.has(String(entry.id)))
 }
 
+
 async function translateChunkWithRetry(
     openai: OpenAI,
     chunk: SubtitleEntry[],
@@ -248,8 +250,11 @@ async function translateChunkWithRetry(
         fallbackCount: 0,
         missingIds: [],
         contaminatedIds: [],
+        reviewIds: [],
         finalStatus: 'ok'
     }
+
+    const forceReviewMode = !allowSingleRetry
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         assertTaskNotCancelled(taskId)
@@ -291,12 +296,6 @@ async function translateChunkWithRetry(
             }
 
             const acceptedCount = expectedCount - unresolvedEntries.length
-            if (acceptedCount === 0 && returnedIds.size === expectedCount && attempt >= 1) {
-                diagnostics.validationFailures++
-                writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 连续返回完整条数但有效结果为 0，停止整块重试并转入更细粒度补译')
-                break
-            }
-
             const contaminatedIds = results
                 .filter(entry => SubtitleService.isLikelyContaminatedTranslation(String(entry.text || ''), String(entry.translatedText || '')))
                 .map(entry => String(entry.id))
@@ -309,8 +308,20 @@ async function translateChunkWithRetry(
                 taskId,
                 'translating',
                 'warn',
-                '[校验] ' + chunkLabel + ' AI 返回 ' + results.length + '/' + expectedCount + '，有效 ' + (expectedCount - unresolvedEntries.length) + '/' + expectedCount + '，待补译 ' + unresolvedEntries.length + ' 条' + missingSuffix + contaminationSuffix
+                '[校验] ' + chunkLabel + ' AI 返回 ' + results.length + '/' + expectedCount + '，有效 ' + acceptedCount + '/' + expectedCount + '，待处理 ' + unresolvedEntries.length + ' 条' + missingSuffix + contaminationSuffix
             )
+
+            if (forceReviewMode) {
+                diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...unresolvedEntries.map(entry => String(entry.id))])).slice(0, 50)
+                diagnostics.finalStatus = 'review'
+                writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 命中高风险块首轮失败，停止自动重试并直接转入人工核对')
+                break
+            }
+
+            if (acceptedCount === 0 && returnedIds.size === expectedCount && attempt >= 1) {
+                writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 连续返回完整条数但有效结果为 0，停止整块重试并转入更细粒度补译')
+                break
+            }
         } catch (e: any) {
             console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
             const detail = String(e?.message || 'unknown')
@@ -327,6 +338,15 @@ async function translateChunkWithRetry(
                 const missingIds = (Array.isArray(e?.missingIds) ? e.missingIds : []).map((id: any) => String(id))
                 const expandedRetryIds = new Set(expandRetryEntries(unresolvedEntries, missingIds).map(entry => String(entry.id)))
                 unresolvedEntries = unresolvedEntries.filter(entry => expandedRetryIds.has(String(entry.id)))
+                diagnostics.validationFailures++
+                diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...missingIds])).slice(0, 20)
+
+                if (forceReviewMode) {
+                    diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...unresolvedEntries.map(entry => String(entry.id))])).slice(0, 50)
+                    diagnostics.finalStatus = 'review'
+                    writeTaskLog(taskId, 'translating', 'warn', `[止损] ${chunkLabel} 首轮请求异常，已停止自动重试并转入人工核对：${detail}`)
+                    break
+                }
 
                 writeTaskLog(
                     taskId,
@@ -337,14 +357,22 @@ async function translateChunkWithRetry(
                 continue
             }
 
+            if (forceReviewMode) {
+                diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...unresolvedEntries.map(entry => String(entry.id))])).slice(0, 50)
+                diagnostics.finalStatus = 'review'
+                writeTaskLog(taskId, 'translating', 'warn', `[止损] ${chunkLabel} 首轮请求失败，已停止自动重试并转入人工核对：${detail}`)
+                break
+            }
+
             writeTaskLog(taskId, 'translating', 'warn', `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}`)
         }
     }
 
-    if (unresolvedEntries.length > 0 && !allowSingleRetry) {
+    if (unresolvedEntries.length > 0 && forceReviewMode) {
         const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
-        diagnostics.finalStatus = 'fallback'
-        writeTaskLog(taskId, 'translating', 'warn', '[转核对] ' + chunkLabel + ' 剩余 ' + unresolvedEntries.length + ' 条未自动补译，已保留给人工核对：' + ids)
+        diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...unresolvedEntries.map(entry => String(entry.id))])).slice(0, 50)
+        diagnostics.finalStatus = 'review'
+        writeTaskLog(taskId, 'translating', 'warn', '[转核对] ' + chunkLabel + ' 剩余 ' + unresolvedEntries.length + ' 条未自动补译，已升级为任务级人工核对：' + ids)
     } else if (unresolvedEntries.length > 0) {
         const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
         console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 常规重试后仍有 ${unresolvedEntries.length} 条待处理，开始逐条补译。`)
@@ -389,11 +417,17 @@ async function translateChunkWithRetry(
     const stillMissing = chunk.filter(entry => !finalResults.has(String(entry.id)))
     if (stillMissing.length > 0) {
         const ids = stillMissing.map(entry => `#${entry.id}`).join(', ')
-        diagnostics.fallbackCount = stillMissing.length
         diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...stillMissing.map(entry => String(entry.id))])).slice(0, 20)
-        diagnostics.finalStatus = 'fallback'
-        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 补译后仍有 ${stillMissing.length} 条缺失，将回退为原文。`)
-        writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} ${stillMissing.length} 条未成功翻译，已回退原文：${ids}`)
+        if (forceReviewMode || diagnostics.finalStatus === 'review') {
+            diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...stillMissing.map(entry => String(entry.id))])).slice(0, 50)
+            diagnostics.finalStatus = 'review'
+            writeTaskLog(taskId, 'translating', 'warn', `[待核对] ${chunkLabel} 仍有 ${stillMissing.length} 条待人工核对：${ids}`)
+        } else {
+            diagnostics.fallbackCount = stillMissing.length
+            diagnostics.finalStatus = 'fallback'
+            console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 补译后仍有 ${stillMissing.length} 条缺失，将回退为原文。`)
+            writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} ${stillMissing.length} 条未成功翻译，已回退原文：${ids}`)
+        }
     } else if (diagnostics.validationFailures > 0 || diagnostics.singleRetryAttempts > 0) {
         diagnostics.finalStatus = 'partial'
     }
@@ -401,7 +435,10 @@ async function translateChunkWithRetry(
     return {
         entries: chunk.map(entry => {
             const translated = finalResults.get(String(entry.id))
-            return translated || { ...entry, translatedText: entry.text }
+            if (translated) return translated
+            return diagnostics.finalStatus === 'review'
+                ? { ...entry, translatedText: '' }
+                : { ...entry, translatedText: entry.text }
         }),
         diagnostics
     }
@@ -554,12 +591,26 @@ export const TaskService = {
         const db = useDb()
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, translation_mode, subtitle_format, subtitle_style_preset, bilingual_layout, status, progress, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, translation_mode, subtitle_format, subtitle_style_preset, bilingual_layout, force_retranslate, status, progress, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
-            task.taskId, task.filePath, task.rootId || null, task.sourceType, task.trackIndex,
-            task.model, task.targetLanguage, task.outputMode, task.stylePreset || 'default', task.translationMode || 'non_stream', task.subtitleFormat || 'srt', task.subtitleStylePreset || 'bilingual_simple', task.bilingualLayout || 'translated_first', 'queued', 0
+            task.taskId,
+            task.filePath,
+            task.rootId || null,
+            task.sourceType,
+            task.trackIndex,
+            task.model,
+            task.targetLanguage,
+            task.outputMode,
+            task.stylePreset || 'default',
+            task.translationMode || 'non_stream',
+            task.subtitleFormat || 'srt',
+            task.subtitleStylePreset || 'bilingual_simple',
+            task.bilingualLayout || 'translated_first',
+            task.forceRetranslate ? 1 : 0,
+            'queued',
+            0
         )
         writeTaskLog(task.taskId!, 'queued', 'info', '任务已创建，等待执行')
         return this.getTask(task.taskId!)
@@ -582,6 +633,7 @@ export const TaskService = {
             subtitleFormat: task.subtitle_format || 'srt',
             subtitleStylePreset: task.subtitle_style_preset || 'bilingual_simple',
             bilingualLayout: task.bilingual_layout || 'translated_first',
+            forceRetranslate: !!task.force_retranslate,
             totalChunks: task.total_chunks,
             completedChunks: task.done_chunks,
             createdAt: task.created_at,
@@ -594,7 +646,7 @@ export const TaskService = {
         const existing = db.prepare('SELECT status FROM tasks WHERE task_id = ?').get(taskId) as { status?: string } | undefined
         const currentStatus = String(existing?.status || '')
 
-        if (currentStatus === 'cancelled' && status !== 'cancelled') {
+        if ((currentStatus === 'cancelled' && status !== 'cancelled') || (currentStatus === 'review' && status !== 'review')) {
             return
         }
 
@@ -715,6 +767,8 @@ export const TaskService = {
 
             const translatedMap = new Map<string, SubtitleEntry>()
             const completedChunksPerChunk = new Map<number, number>()
+            const forcedReviewIssues = new Map<string, Array<{ id: string, reason: string, severity: 'hard' | 'soft' }>>()
+            let hasForcedReview = false
             let globalCompletedChunks = 0
 
             const updateGlobalProgress = () => {
@@ -771,6 +825,19 @@ export const TaskService = {
                 let translatedChunk: SubtitleEntry[]
 
                 if (uncachedEntries.length === 0) {
+                    if (diagnosticsCollection.some(item => item?.finalStatus === 'review')) {
+                        hasForcedReview = true
+                        for (const item of diagnosticsCollection) {
+                            for (const reviewId of item?.reviewIds || []) {
+                                const originalEntry = chunk.find(entry => String(entry.id) === String(reviewId))
+                                if (!originalEntry) continue
+                                const existing = forcedReviewIssues.get(String(reviewId)) || []
+                                existing.push({ id: String(reviewId), reason: 'high_risk_failed', severity: 'hard' })
+                                forcedReviewIssues.set(String(reviewId), existing)
+                            }
+                        }
+                    }
+
                     translatedChunk = chunk.map(entry => {
                         const cachedText = cachedResults.get(String(entry.id))
                         if (cachedText) {
@@ -885,15 +952,31 @@ export const TaskService = {
                                     fallbackCount: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.fallbackCount || 0), 0),
                                     missingIds: Array.from(new Set(diagnosticsCollection.flatMap(item => item?.missingIds || []))).slice(0, 20),
                                     contaminatedIds: Array.from(new Set(diagnosticsCollection.flatMap(item => item?.contaminatedIds || []))).slice(0, 20),
-                                    finalStatus: diagnosticsCollection.some(item => item?.finalStatus === 'fallback')
-                                        ? 'fallback'
-                                        : diagnosticsCollection.some(item => item?.finalStatus === 'partial')
-                                            ? 'partial'
-                                            : 'ok'
+                                    reviewIds: Array.from(new Set(diagnosticsCollection.flatMap(item => item?.reviewIds || []))).slice(0, 50),
+                                    finalStatus: diagnosticsCollection.some(item => item?.finalStatus === 'review')
+                                        ? 'review'
+                                        : diagnosticsCollection.some(item => item?.finalStatus === 'fallback')
+                                            ? 'fallback'
+                                            : diagnosticsCollection.some(item => item?.finalStatus === 'partial')
+                                                ? 'partial'
+                                                : 'ok'
                                 }
                             db.prepare('UPDATE task_responses SET response_meta = ? WHERE id = ?').run(JSON.stringify({ ...currentMeta, chunkRisk, chunkDiagnostics: combinedDiagnostics }), responseRow.id)
                         }
                     } catch { /* ignore diagnostics patch failure */ }
+
+                    if (diagnosticsCollection.some(item => item?.finalStatus === 'review')) {
+                        hasForcedReview = true
+                        for (const item of diagnosticsCollection) {
+                            for (const reviewId of item?.reviewIds || []) {
+                                const originalEntry = chunk.find(entry => String(entry.id) === String(reviewId))
+                                if (!originalEntry) continue
+                                const existing = forcedReviewIssues.get(String(reviewId)) || []
+                                existing.push({ id: String(reviewId), reason: 'high_risk_failed', severity: 'hard' })
+                                forcedReviewIssues.set(String(reviewId), existing)
+                            }
+                        }
+                    }
 
                     translatedChunk = chunk.map(entry => {
                         const cachedText = cachedResults.get(String(entry.id))
@@ -916,10 +999,13 @@ export const TaskService = {
 
                 updateGlobalProgress()
 
+                const chunkCompletedWithReview = Array.from(forcedReviewIssues.keys()).some(id => chunk.some(entry => String(entry.id) === id))
                 this.updateStatus(taskId, 'translating', 30 + Math.floor((globalCompletedChunks / totalChunks) * 60), {
                     totalChunks,
                     completedChunks: globalCompletedChunks,
-                    log: `[AI] 块 #${index + 1} 翻译完成 (${globalCompletedChunks}/${totalChunks})`
+                    log: chunkCompletedWithReview
+                        ? `[AI] 块 #${index + 1} 处理完成，含待人工核对条目 (${globalCompletedChunks}/${totalChunks})`
+                        : `[AI] 块 #${index + 1} 翻译完成 (${globalCompletedChunks}/${totalChunks})`
                 })
             }))
 
@@ -946,24 +1032,43 @@ export const TaskService = {
                 }
 
                 const issues = SubtitleService.validateTranslatedEntries(translatedEntries, task.targetLanguage)
-                if (issues.length > 0) {
-                    const decision = shouldBlockExport(issues, translatedEntries.length, 'balanced')
-                    const preview = issues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
+                const mergedIssues = [...issues]
+                for (const [reviewId, list] of forcedReviewIssues.entries()) {
+                    for (const issue of list) {
+                        if (!mergedIssues.some(existing => String(existing.id) === String(reviewId) && existing.reason === issue.reason)) {
+                            const targetEntry = translatedEntries.find(entry => String(entry.id) === String(reviewId))
+                            mergedIssues.push({
+                                id: String(reviewId),
+                                reason: issue.reason,
+                                severity: issue.severity,
+                                original: targetEntry?.text || '',
+                                translated: targetEntry?.translatedText || ''
+                            } as any)
+                        }
+                    }
+                }
 
-                    if (!decision.block) {
-                        writeTaskLog(taskId, 'exporting', 'warn', `[继续导出] 检测到 ${issues.length} 条需注意字幕（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}），已继续导出：${preview}`)
-                    } else {
-                        persistReviewEntries(taskId, translatedEntries, issues)
+                if (mergedIssues.length > 0) {
+                    const decision = shouldBlockExport(mergedIssues, translatedEntries.length, 'balanced')
+                    const preview = mergedIssues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
+
+                    if (hasForcedReview || decision.block) {
+                        persistReviewEntries(taskId, translatedEntries, mergedIssues)
                         db.prepare("UPDATE tasks SET status = 'review', progress = 96, error = ?, updated_at = datetime('now') WHERE task_id = ?")
-                            .run(`待字幕核对：${issues.length} 条需要人工确认`, taskId)
+                            .run(`待字幕核对：${mergedIssues.length} 条需要人工确认`, taskId)
                         await this.updateStatus(taskId, 'review' as any, 96, {
                             totalChunks,
                             completedChunks: totalChunks,
-                            log: `[核对] 检测到 ${issues.length} 条字幕需要人工核对（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}）：${preview}`,
+                            log: hasForcedReview
+                                ? `[核对] 已命中高风险强制核对，当前有 ${mergedIssues.length} 条字幕需要人工确认：${preview}`
+                                : `[核对] 检测到 ${mergedIssues.length} 条字幕需要人工核对（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}）：${preview}`,
                             category: 'translation'
                         })
                         return
                     }
+
+                    writeTaskLog(taskId, 'exporting', 'warn', `[继续导出] 检测到 ${mergedIssues.length} 条需注意字幕（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}），已继续导出：${preview}`)
+                    persistReviewEntries(taskId, translatedEntries, mergedIssues)
                 } else {
                     persistReviewEntries(taskId, translatedEntries, [])
                 }
