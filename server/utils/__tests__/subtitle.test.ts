@@ -285,3 +285,16 @@ Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\an8}{\clip(0,0,100,100)}{\t(
     rmSync(dir, { recursive: true, force: true })
   })
 })
+
+  it('splits risky short dialogues into smaller chunks', () => {
+    const entries: SubtitleEntry[] = Array.from({ length: 8 }, (_, index) => ({
+      id: String(index + 1),
+      startTime: '00:00:01,000',
+      endTime: '00:00:02,000',
+      text: index % 2 === 0 ? '- And the Russians?' : '- Nah.'
+    }))
+
+    const chunks = SubtitleService.chunkByTokens(entries, 120)
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(Math.max(...chunks.map(chunk => chunk.length))).toBeLessThan(entries.length)
+  })

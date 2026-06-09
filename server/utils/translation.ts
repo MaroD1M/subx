@@ -25,9 +25,9 @@ function buildTranslationPrompt(
     return `你是专业影视字幕翻译。将以下字幕逐条翻译为地道的${targetLanguage}。
 ${styleBlock}
 输出格式（严格遵守！）：
-- 每条翻译占两行：第一行是序号（纯数字，必须与输入序号完全一致），第二行是翻译文本
-- 条目之间用一个空行分隔
-- 条目顺序必须与输入完全一致，不能增减任何条目
+- 优先返回 JSON：{"items":[{"id":"1","translatedText":"..."},{"id":"2","translatedText":"..."}]}
+- JSON 中每个 id 必须与输入序号完全一致，且所有条目都必须返回，不能增减任何条目
+- 如果你无法稳定输出 JSON，才退回纯文本格式：每条翻译占两行，第一行是序号，第二行是翻译文本，条目之间用一个空行分隔
 - 不要输出任何其他内容（不要 markdown、不要解释、不要编号前缀）
 - 不要输出任何字幕格式控制标签，例如 {\an8}、\N、<i>、</i>、<font> 等
 - 如果原文中出现形如 __SUBX_FMT_1__ 的占位符，必须在译文中原样保留，不可翻译、不可删除、不可改序
@@ -75,7 +75,67 @@ function detectOutputAnomaly(fullContent: string): 'empty' | 'refusal' | 'filter
     return 'other'
 }
 
-function parseStreamedTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
+function extractJsonCandidate(fullContent: string): string | null {
+    const normalized = String(fullContent || '').trim()
+    if (!normalized) return null
+
+    const fencedMatch = normalized.match(/```(?:json)?\s*([\s\S]*?)```/i)
+    if (fencedMatch?.[1]) {
+        return fencedMatch[1].trim()
+    }
+
+    if (normalized.startsWith('[') && normalized.endsWith(']')) {
+        return normalized
+    }
+
+    if (normalized.startsWith('{') && normalized.endsWith('}')) {
+        return normalized
+    }
+
+    const firstBrace = normalized.indexOf('{')
+    const lastBrace = normalized.lastIndexOf('}')
+    const firstBracket = normalized.indexOf('[')
+    const lastBracket = normalized.lastIndexOf(']')
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+        return normalized.slice(firstBracket, lastBracket + 1)
+    }
+
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+        return normalized.slice(firstBrace, lastBrace + 1)
+    }
+
+    return null
+}
+
+function parseJsonTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
+    const result = new Map<string, string>()
+    const expectedSet = new Set(expectedIds)
+    const candidate = extractJsonCandidate(fullContent)
+    if (!candidate) return result
+
+    try {
+        const parsed = JSON.parse(candidate)
+        const items = Array.isArray(parsed)
+            ? parsed
+            : (Array.isArray(parsed?.items) ? parsed.items : [])
+
+        for (const item of items) {
+            const id = String(item?.id ?? '').trim()
+            const translatedText = String(item?.translatedText ?? item?.text ?? '').trim()
+            if (!id || (!expectedSet.size ? false : !expectedSet.has(id))) continue
+            result.set(id, translatedText)
+        }
+    } catch {
+        return new Map<string, string>()
+    }
+
+    return result
+}
+
+export function parseAiTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
+    const jsonParsed = parseJsonTranslations(fullContent, expectedIds)
+    if (jsonParsed.size > 0) return jsonParsed
+
     const result = new Map<string, string>()
     const normalized = normalizeAiOutput(fullContent)
     const expectedSet = new Set(expectedIds)
@@ -330,7 +390,7 @@ End Time: ${new Date().toISOString()}
         }
 
         const expectedIds = chunk.map(entry => String(entry.id))
-        const translatedMap = parseStreamedTranslations(fullContent, expectedIds)
+        const translatedMap = parseAiTranslations(fullContent, expectedIds)
 
         if (translatedMap.size === 0) {
             const anomaly = detectOutputAnomaly(fullContent)
@@ -392,7 +452,7 @@ End Time: ${new Date().toISOString()}
 
     parseNewEntries(buffer: string, startIndex: number, chunk: SubtitleEntry[]): { id: string; translatedText: string }[] {
         const entries: { id: string; translatedText: string }[] = []
-        const parsed = parseStreamedTranslations(buffer, chunk.map(e => String(e.id)))
+        const parsed = parseAiTranslations(buffer, chunk.map(e => String(e.id)))
         const allIds = Array.from(parsed.keys())
 
         for (let i = startIndex; i < allIds.length; i++) {
@@ -410,7 +470,7 @@ End Time: ${new Date().toISOString()}
 
         try {
             const content = readFileSync(partialPath, 'utf-8')
-            return parseStreamedTranslations(content)
+            return parseAiTranslations(content)
         } catch {
             return new Map()
         }

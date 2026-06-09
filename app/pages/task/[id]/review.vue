@@ -59,7 +59,7 @@
           </div>
 
           <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-[72vh] overflow-y-auto">
-            <div v-for="entry in filteredEntries" :key="entry.subtitleId" class="p-3 space-y-3">
+            <div v-for="entry in filteredEntries" :key="entry.subtitleId" :id="`review-entry-${entry.subtitleId}`" class="p-3 space-y-3" :class="focusedSubtitleId === String(entry.subtitleId) ? 'ring-2 ring-warning-400/70 rounded-2xl bg-warning-50/40 dark:bg-warning-900/10' : ''">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 space-y-2">
                   <div class="flex items-center gap-2 flex-wrap">
@@ -119,6 +119,7 @@
           </div>
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <USelect v-model="previewFormat" :items="previewFormatItems" class="w-28" />
+            <USelect v-model="bilingualLayout" :items="bilingualLayoutItems" class="w-36" />
             <span class="text-[11px] text-gray-400">{{ previewFormat === 'ass' ? 'ASS 样式预览' : 'SRT 文本预览' }}</span>
           </div>
         </div>
@@ -136,6 +137,7 @@
 <script setup lang="ts">
 const route = useRoute()
 const taskId = String(route.params.id)
+const focusedSubtitleId = ref('')
 const toast = useToast()
 const saving = ref(false)
 const exporting = ref(false)
@@ -144,15 +146,22 @@ const retranslatingSingleId = ref('')
 const previewLoading = ref(false)
 const previewContent = ref('')
 const previewFormat = ref<'srt' | 'ass'>('srt')
+const bilingualLayout = ref<'translated_first' | 'original_first'>('translated_first')
 const statusFilter = ref('all')
 const reasonFilter = ref('all')
 const summary = reactive({ total: 0, needsReview: 0, edited: 0 })
 const entries = ref<any[]>([])
+const taskMeta = reactive({ outputMode: 'translated', bilingualLayout: 'translated_first' as 'translated_first' | 'original_first' })
 const entrySnapshots = ref<Record<string, { finalText: string, reviewStatus: string, selected: boolean, edited: boolean }>>({})
 
 const previewFormatItems = [
   { label: 'SRT', value: 'srt' },
   { label: 'ASS', value: 'ass' }
+]
+
+const bilingualLayoutItems = [
+  { label: '译文在上', value: 'translated_first' },
+  { label: '原文在上', value: 'original_first' }
 ]
 
 const filterItems = [
@@ -168,7 +177,9 @@ const reasonLabels: Record<string, string> = {
   same_as_source: '译文与原文相同',
   same_as_source_allowed: '同文可接受',
   latin_heavy: '译文仍偏原语言',
-  bilingual_duplicate: '双语内容重复'
+  bilingual_duplicate: '双语内容重复',
+  suspected_contamination: '疑似串条/混入相邻字幕',
+  overlong_translation: '译文异常偏长'
 }
 
 const reasonFilterItems = computed(() => {
@@ -267,7 +278,7 @@ function useOriginal(entry: any) {
 function restoreTranslated(entry: any) {
   entry.finalText = entry.translatedText || entry.originalText
   entry.edited = true
-  entry.reviewStatus = 'edited'
+  entry.reviewStatus = reviewStatuses.includes(entry.reviewStatus) ? entry.reviewStatus : 'edited'
 }
 
 function selectVisible() {
@@ -299,14 +310,25 @@ async function loadReview() {
   summary.total = res.summary.total
   summary.needsReview = res.summary.needsReview
   summary.edited = res.summary.edited
+  taskMeta.outputMode = res.task?.outputMode || 'translated'
+  taskMeta.bilingualLayout = res.task?.bilingualLayout || 'translated_first'
+  bilingualLayout.value = taskMeta.bilingualLayout
   entries.value = res.entries
   rebuildSnapshots(res.entries || [])
+
+  const focusId = String(route.query.focus || '')
+  if (focusId) {
+    focusedSubtitleId.value = focusId
+    await nextTick()
+    const target = document.getElementById(`review-entry-${focusId}`)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 }
 
 async function loadPreview() {
   previewLoading.value = true
   try {
-    const res: any = await $fetch(`/api/tasks/${taskId}/review-preview`, { query: { format: previewFormat.value } })
+    const res: any = await $fetch(`/api/tasks/${taskId}/review-preview`, { query: { format: previewFormat.value, bilingualLayout: bilingualLayout.value } })
     previewContent.value = res.content || ''
   } catch (error: any) {
     toast.add({ title: '预览生成失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
@@ -333,7 +355,7 @@ async function saveChanges(showToast = true) {
   try {
     await $fetch(`/api/tasks/${taskId}/review`, {
       method: 'PATCH',
-      body: { entries: changedEntries }
+      body: { entries: changedEntries, bilingualLayout: bilingualLayout.value }
     })
     if (showToast) toast.add({ title: `已保存 ${changedEntries.length} 条修改`, color: 'success' })
     await Promise.all([loadReview(), loadPreview()])
@@ -429,14 +451,31 @@ watch(previewFormat, () => {
   loadPreview()
 })
 
+watch(bilingualLayout, async (value) => {
+  taskMeta.bilingualLayout = value
+  try {
+    await $fetch(`/api/tasks/${taskId}/review`, {
+      method: 'PATCH',
+      body: { entries: [], bilingualLayout: value }
+    })
+  } catch (error: any) {
+    toast.add({ title: '布局保存失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+  }
+  loadPreview()
+})
+
 onBeforeRouteLeave(() => {
   return confirmLeaveIfDirty()
 })
 
 onMounted(async () => {
   window.addEventListener('beforeunload', handleBeforeUnload)
-  await loadReview()
-  await loadPreview()
+  try {
+    await loadReview()
+    await loadPreview()
+  } catch (error: any) {
+    toast.add({ title: '核对页加载失败', description: error?.data?.message || error?.message || '请返回历史页后重试', color: 'error' })
+  }
 })
 
 onBeforeUnmount(() => {

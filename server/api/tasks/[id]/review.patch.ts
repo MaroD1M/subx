@@ -9,6 +9,15 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const db = useDb()
   const entries = Array.isArray(body?.entries) ? body.entries : []
+  const nextBilingualLayout = body?.bilingualLayout ? String(body.bilingualLayout) : ''
+
+  if (nextBilingualLayout === 'translated_first' || nextBilingualLayout === 'original_first') {
+    db.prepare(`
+      UPDATE tasks
+      SET bilingual_layout = ?, updated_at = datetime('now')
+      WHERE task_id = ?
+    `).run(nextBilingualLayout, id)
+  }
 
   if (!entries.length) {
     return { success: true, updated: 0 }

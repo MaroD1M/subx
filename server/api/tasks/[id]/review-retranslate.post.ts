@@ -71,7 +71,10 @@ export default defineEventHandler(async (event) => {
     allResults.push(...results)
   }
 
-  const issues = SubtitleService.validateTranslatedEntries(allResults as any, task.target_lang)
+  const repaired = SubtitleService.repairTranslatedEntries(allResults as any, task.target_lang, task.output_mode || 'translated')
+  const reviewedResults = repaired.entries
+
+  const issues = SubtitleService.validateTranslatedEntries(reviewedResults as any, task.target_lang)
   const issueMap = new Map<string, string[]>()
   for (const issue of issues) {
     const list = issueMap.get(String(issue.id)) || []
@@ -85,7 +88,7 @@ export default defineEventHandler(async (event) => {
     WHERE task_id = ? AND subtitle_id = ?
   `)
 
-  const updated = allResults.map((entry: any) => {
+  const updated = reviewedResults.map((entry: any) => {
     const reasons = issueMap.get(String(entry.id)) || []
     const status = reasons.length === 0
       ? (SubtitleService.normalizeComparisonText(entry.translatedText) === SubtitleService.normalizeComparisonText(entry.text) ? 'accepted_same' : 'translated')

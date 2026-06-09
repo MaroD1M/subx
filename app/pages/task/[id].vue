@@ -135,7 +135,7 @@
         <div class="flex items-center justify-between pt-4 gap-3 flex-wrap">
           <div class="flex items-center gap-3 flex-wrap">
             <UButton v-if="task.step === 'done'" label="下载结果" icon="i-lucide-download" color="primary" @click="downloadSrt" />
-            <UButton v-if="task.step === 'review'" label="进入核对" icon="i-lucide-list-checks" color="warning" :to="`/task/${taskId}/review`" />
+            <UButton v-if="task.step === 'review'" label="进入核对" icon="i-lucide-list-checks" color="warning" @click="openReviewPage" />
             <UButton v-if="task.step === 'done'" label="返回首页" icon="i-lucide-check-circle" color="secondary" to="/" />
             <UButton v-else-if="task.step === 'error'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
             <UButton v-else label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
@@ -168,6 +168,38 @@
               <div class="space-y-1">
                 <p class="text-sm font-bold" :class="connectionBanner.titleClass">{{ connectionBanner.title }}</p>
                 <p class="text-xs leading-relaxed" :class="connectionBanner.textClass">{{ connectionBanner.message }}</p>
+              </div>
+            </div>
+
+            <div v-if="reviewDiagnosticsIssues.length" class="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 p-4 space-y-3">
+              <div class="flex items-start gap-3">
+                <UIcon name="i-lucide-badge-alert" class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+                <div class="space-y-1 min-w-0">
+                  <p class="text-sm font-bold text-amber-900 dark:text-amber-200">字幕异常诊断</p>
+                  <p class="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">已聚合当前任务进入核对阶段的异常类型与受影响字幕 ID，便于快速定位问题块。</p>
+                </div>
+              </div>
+
+              <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div v-for="issue in reviewDiagnosticsIssues" :key="issue.reason" class="rounded-xl bg-white/80 dark:bg-black/10 px-3 py-3 space-y-2 border border-amber-100 dark:border-amber-900/30">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">{{ reviewReasonLabel(issue.reason) }}</p>
+                    <UBadge color="warning" variant="subtle" size="sm">{{ issue.count }} 条</UBadge>
+                  </div>
+                  <div v-if="issue.subtitleIds.length" class="flex flex-wrap gap-1.5">
+                    <UButton
+                      v-for="subtitleId in issue.subtitleIds"
+                      :key="subtitleId"
+                      :label="`#${subtitleId}`"
+                      size="xs"
+                      color="warning"
+                      variant="ghost"
+                      class="px-1.5"
+                      @click="openReviewPage(subtitleId)"
+                    />
+                  </div>
+                  <p v-else class="text-[11px] text-amber-700 dark:text-amber-300">暂无 ID</p>
+                </div>
               </div>
             </div>
 
@@ -229,7 +261,8 @@ const task = ref({
   targetLanguage: null,
   translationMode: 'non_stream',
   filePath: '',
-  rootName: ''
+  rootName: '',
+  reviewDiagnostics: { totalEntries: 0, needsReview: 0, issues: [] as Array<{ reason: string, count: number, subtitleIds: string[] }> }
 })
 
 const showResponses = ref(false)
@@ -249,9 +282,24 @@ const currentTextTimestamp = ref('')
 const logKeys = ref(new Set<string>())
 const connectionState = ref<'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'history-only' | 'idle'>('connecting')
 const reconnectStatusText = ref('')
+const reviewReasonLabels: Record<string, string> = {
+  missing: '缺少译文',
+  same_as_source: '译文与原文相同',
+  same_as_source_allowed: '同文可接受',
+  latin_heavy: '译文仍偏原语言',
+  bilingual_duplicate: '双语内容重复',
+  suspected_contamination: '疑似串条/混入相邻字幕',
+  overlong_translation: '译文异常偏长'
+}
 
 function formatClock(date = new Date()) {
   return date.toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+const reviewDiagnosticsIssues = computed(() => Array.isArray(task.value.reviewDiagnostics?.issues) ? task.value.reviewDiagnostics.issues : [])
+
+function reviewReasonLabel(reason: string) {
+  return reviewReasonLabels[reason] || reason
 }
 
 function formatTime(value?: string | null) {
@@ -280,6 +328,11 @@ watch(showResponses, (val) => {
 
 function downloadSrt() {
   window.location.assign(`/api/tasks/${taskId}/download`)
+}
+
+function openReviewPage(subtitleId?: string) {
+  const query = subtitleId ? `?focus=${encodeURIComponent(String(subtitleId))}` : ''
+  navigateTo(`/task/${taskId}/review${query}`)
 }
 
 async function cancelTask() {

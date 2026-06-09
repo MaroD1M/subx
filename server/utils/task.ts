@@ -72,8 +72,39 @@ function isAcceptableTranslatedEntry(entry: SubtitleEntry, targetLanguage: strin
     const normalizedOriginal = SubtitleService.normalizeComparisonText(original)
     const normalizedTranslated = SubtitleService.normalizeComparisonText(translated)
     if (!normalizedTranslated) return false
+    if (SubtitleService.isLikelyContaminatedTranslation(original, translated)) return false
     if (normalizedOriginal !== normalizedTranslated) return true
     return SubtitleService.isAcceptableSameText(original, translated, targetLanguage)
+}
+
+function expandRetryEntries(entries: SubtitleEntry[], targetIds: string[]) {
+    if (!targetIds.length) return entries
+
+    const idSet = new Set(targetIds.map(id => String(id)))
+    const expandedIds = new Set<string>()
+    const targetIndexes: number[] = []
+
+    entries.forEach((entry, index) => {
+        const currentId = String(entry.id)
+        if (!idSet.has(currentId)) return
+
+        targetIndexes.push(index)
+
+        expandedIds.add(currentId)
+        if (index > 0) expandedIds.add(String(entries[index - 1]!.id))
+        if (index + 1 < entries.length) expandedIds.add(String(entries[index + 1]!.id))
+    })
+
+    if (targetIndexes.length >= 2) {
+        const minIndex = Math.max(0, Math.min(...targetIndexes) - 1)
+        const maxIndex = Math.min(entries.length - 1, Math.max(...targetIndexes) + 1)
+
+        for (let index = minIndex; index <= maxIndex; index++) {
+            expandedIds.add(String(entries[index]!.id))
+        }
+    }
+
+    return entries.filter(entry => expandedIds.has(String(entry.id)))
 }
 
 async function translateChunkWithRetry(
@@ -124,18 +155,23 @@ async function translateChunkWithRetry(
             const unresolvedIds = unresolvedEntries
                 .map(entry => String(entry.id))
                 .filter(id => !finalResults.has(id))
-            unresolvedEntries = unresolvedEntries.filter(entry => unresolvedIds.includes(String(entry.id)))
+            const retryIds = Array.from(new Set([...unresolvedIds, ...expandRetryEntries(unresolvedEntries, missingIds).map(entry => String(entry.id))]))
+            unresolvedEntries = unresolvedEntries.filter(entry => retryIds.includes(String(entry.id)))
 
             if (unresolvedEntries.length === 0) {
                 break
             }
 
+            const contaminatedIds = results
+                .filter(entry => SubtitleService.isLikelyContaminatedTranslation(String(entry.text || ''), String(entry.translatedText || '')))
+                .map(entry => String(entry.id))
             const missingSuffix = missingIds.length > 0 ? `，缺失 ID: ${missingIds.join(', ')}` : ''
+            const contaminationSuffix = contaminatedIds.length > 0 ? `，疑似串条 ID: ${contaminatedIds.join(', ')}` : ''
             writeTaskLog(
                 taskId,
                 'translating',
                 'warn',
-                `[校验] 块 #${chunkIndex + 1} AI 返回 ${results.length}/${expectedCount}，有效 ${expectedCount - unresolvedEntries.length}/${expectedCount}，待补译 ${unresolvedEntries.length} 条${missingSuffix}`
+                `[校验] 块 #${chunkIndex + 1} AI 返回 ${results.length}/${expectedCount}，有效 ${expectedCount - unresolvedEntries.length}/${expectedCount}，待补译 ${unresolvedEntries.length} 条${missingSuffix}${contaminationSuffix}`
             )
         } catch (e: any) {
             console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
@@ -150,14 +186,15 @@ async function translateChunkWithRetry(
                     }
                 }
 
-                const missingIdSet = new Set((Array.isArray(e?.missingIds) ? e.missingIds : []).map((id: any) => String(id)))
-                unresolvedEntries = unresolvedEntries.filter(entry => missingIdSet.has(String(entry.id)))
+                const missingIds = (Array.isArray(e?.missingIds) ? e.missingIds : []).map((id: any) => String(id))
+                const expandedRetryIds = new Set(expandRetryEntries(unresolvedEntries, missingIds).map(entry => String(entry.id)))
+                unresolvedEntries = unresolvedEntries.filter(entry => expandedRetryIds.has(String(entry.id)))
 
                 writeTaskLog(
                     taskId,
                     'translating',
                     'warn',
-                    `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}；已保留 ${e.partialResults.length} 条有效结果，待补 ${unresolvedEntries.length} 条`
+                    `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}；已保留 ${e.partialResults.length} 条有效结果，回炉 ${unresolvedEntries.length} 条（含相邻疑似串条）`
                 )
                 continue
             }

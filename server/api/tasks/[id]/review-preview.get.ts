@@ -9,6 +9,7 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event)
   const format = String(query.format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt'
+  const requestedBilingualLayout = String(query.bilingualLayout || '')
   const db = useDb()
   const task = db.prepare('SELECT output_mode, subtitle_style_preset, bilingual_layout FROM tasks WHERE task_id = ?').get(id) as any
   const rows = db.prepare(`
@@ -35,7 +36,7 @@ export default defineEventHandler(async (event) => {
       entries as any,
       task?.subtitle_style_preset || 'bilingual_simple',
       (task?.output_mode || 'translated') as any,
-      task?.bilingual_layout || 'translated_first'
+      (requestedBilingualLayout === 'translated_first' || requestedBilingualLayout === 'original_first') ? requestedBilingualLayout : (task?.bilingual_layout || 'translated_first')
     )
     return { content, count: rows.length, format }
   }

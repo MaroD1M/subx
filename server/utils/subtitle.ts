@@ -20,7 +20,7 @@ type FormattingTarget = 'srt' | 'ass'
 type FormattingToken = { placeholder: string, value: string }
 type TemplateSlot = { placeholder?: string, text: string }
 type AssSegment = { tags: string[], text: string, drawing?: unknown[] }
-type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate' | 'same_as_source_allowed', original: string, translated: string, severity?: 'soft' | 'hard' }
+type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate' | 'same_as_source_allowed' | 'suspected_contamination' | 'overlong_translation', original: string, translated: string, severity?: 'soft' | 'hard' }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
   return resolveMediaPath(userPath, rootId)
@@ -42,6 +42,33 @@ export const SubtitleService = {
     if (normalized.length <= 2) return true
     if (this.isLikelyMetadataOrProperNoun(text)) return true
     if (this.isLikelySongLyric(text)) return true
+    return false
+  },
+
+  countDialogueLines(text: string): number {
+    return this.normalizeSubtitleText(text)
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .filter(line => !/^[\[\(（【].*[\]\)）】]$/.test(line)).length
+  },
+
+  isLikelyContaminatedTranslation(original: string, translated: string): boolean {
+    const normalizedOriginal = this.normalizeComparisonText(original)
+    const normalizedTranslated = this.normalizeComparisonText(translated)
+    if (!normalizedOriginal || !normalizedTranslated) return false
+
+    const originalLines = this.countDialogueLines(original)
+    const translatedLines = this.countDialogueLines(translated)
+    const originalLength = Array.from(normalizedOriginal).length
+    const translatedLength = Array.from(normalizedTranslated).length
+    const ratio = translatedLength / Math.max(originalLength, 1)
+    const dialoguePrefixes = (this.normalizeSubtitleText(translated).match(/^\s*[-—–]\s+/gm) || []).length
+
+    if (originalLines <= 1 && translatedLines >= 3 && dialoguePrefixes >= 2) return true
+    if (originalLines <= 2 && translatedLines >= originalLines + 2 && ratio > 3.2) return true
+    if (originalLength > 0 && translatedLength >= Math.max(40, originalLength * 3.8) && translatedLines >= Math.max(3, originalLines + 2)) return true
+
     return false
   },
 
@@ -429,6 +456,29 @@ export const SubtitleService = {
     return visible > 0 && letters / visible >= 0.7
   },
 
+  isShortDialogueText(text: string): boolean {
+    const normalized = this.normalizeSubtitleText(text)
+    if (!normalized) return false
+    const compact = normalized.replace(/\s+/g, ' ').trim()
+    const visibleLength = Array.from(compact).length
+    const lineCount = compact.split('\n').filter(Boolean).length
+    const dialoguePrefixCount = (compact.match(/^\s*[-—–]\s+/gm) || []).length
+    return visibleLength <= 42 || lineCount >= 2 || dialoguePrefixCount > 0
+  },
+
+  isHighRiskDialogueEntry(entry: SubtitleEntry): boolean {
+    const text = String(entry.text || '')
+    if (this.isNonVerbal(text)) return false
+    const normalized = this.normalizeSubtitleText(text)
+    if (!normalized) return false
+
+    const dialoguePrefixCount = (normalized.match(/^\s*[-—–]\s+/gm) || []).length
+    const shortQuestion = /\?$|？$/.test(normalized) && Array.from(normalized).length <= 20
+    const ultraShortReply = Array.from(this.normalizeComparisonText(normalized)).length <= 10
+
+    return dialoguePrefixCount > 0 || shortQuestion || ultraShortReply || this.isShortDialogueText(normalized)
+  },
+
   splitBilingualLines(text: unknown): string[] {
     return this.normalizeSubtitleText(text)
       .split('\n')
@@ -564,6 +614,18 @@ export const SubtitleService = {
 
       if (shouldCheckLatinHeavy && this.looksLatinHeavy(translated) && this.looksLatinHeavy(original) && !this.isLikelySongLyric(original)) {
         issues.push({ id: String(entry.id), reason: 'latin_heavy', original, translated, severity: this.isLowValueText(original) ? 'soft' : 'hard' })
+        continue
+      }
+
+      if (this.isLikelyContaminatedTranslation(original, translated)) {
+        issues.push({ id: String(entry.id), reason: 'suspected_contamination', original, translated, severity: 'hard' })
+        continue
+      }
+
+      const normalizedOriginalLength = Array.from(normalizedOriginal).length
+      const normalizedTranslatedLength = Array.from(normalizedTranslated).length
+      if (normalizedOriginalLength > 0 && normalizedTranslatedLength >= Math.max(60, normalizedOriginalLength * 4.8)) {
+        issues.push({ id: String(entry.id), reason: 'overlong_translation', original, translated, severity: 'hard' })
       }
     }
 
@@ -809,8 +871,21 @@ export const SubtitleService = {
     for (const entry of entries) {
       const text = entry.text || ''
       const estimatedTokens = Math.ceil(text.length / 3.5)
+      const highRisk = this.isHighRiskDialogueEntry(entry)
+      const riskAwareMaxTokens = highRisk ? Math.max(20, Math.min(maxTokens, Math.floor(maxTokens * 0.2))) : maxTokens
+      const previousRisky = currentChunk.some(chunkEntry => this.isHighRiskDialogueEntry(chunkEntry))
 
-      if (currentTokens + estimatedTokens > maxTokens && currentChunk.length > 0) {
+      if (highRisk && currentChunk.length >= 3 && currentTokens >= Math.max(60, Math.floor(riskAwareMaxTokens * 0.5))) {
+        chunks.push(currentChunk)
+        currentChunk = []
+        currentTokens = 0
+      }
+
+      if (currentTokens + estimatedTokens > riskAwareMaxTokens && currentChunk.length > 0) {
+        chunks.push(currentChunk)
+        currentChunk = []
+        currentTokens = 0
+      } else if (!highRisk && previousRisky && currentChunk.length >= 4 && currentTokens >= Math.max(60, Math.floor(maxTokens * 0.25))) {
         chunks.push(currentChunk)
         currentChunk = []
         currentTokens = 0
