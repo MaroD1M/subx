@@ -43,6 +43,7 @@ export interface TranslationTask {
   subtitleFormat?: 'srt' | 'ass' | 'both'
   subtitleStylePreset?: string
   bilingualLayout?: 'translated_first' | 'original_first'
+  forceRetranslate?: boolean
   status: TaskStatus
   progress: number             // 0-100
   totalChunks: number

@@ -696,6 +696,9 @@ export const TaskService = {
             if (stylePrompt) {
                 await this.updateStatus(taskId, 'translating', 30, { log: `使用翻译风格预设: ${stylePresetConfig!.name}` })
             }
+            if (task.forceRetranslate) {
+                await this.updateStatus(taskId, 'translating', 30, { log: '已启用重新翻译：本次任务将跳过本地缓存。' })
+            }
 
             const translatedMap = new Map<string, SubtitleEntry>()
             const completedChunksPerChunk = new Map<number, number>()
@@ -727,6 +730,7 @@ export const TaskService = {
                 const cachedResults = new Map<string, string>()
                 const nonVerbalResults = new Map<string, string>()
 
+                const shouldUseCache = !task.forceRetranslate
                 for (const entry of chunk) {
                     if (SubtitleService.isNonVerbal(entry.text)) {
                         nonVerbalResults.set(String(entry.id), entry.text)
@@ -734,6 +738,10 @@ export const TaskService = {
                     }
 
                     const sourceText = entry.text
+                    if (!shouldUseCache) {
+                        uncachedEntries.push(entry)
+                        continue
+                    }
                     const cacheHash = SubtitleService.computeCacheHash(sourceText, task.model, task.targetLanguage)
                     const cached = SubtitleService.getCachedTranslation(cacheHash)
                     if (cached) {

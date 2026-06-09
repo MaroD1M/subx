@@ -29,6 +29,7 @@ const mockDb = {
             subtitle_format: 'srt',
             subtitle_style_preset: 'bilingual_simple',
             bilingual_layout: 'translated_first',
+            force_retranslate: 0,
             total_chunks: 0,
             done_chunks: 0,
             created_at: '2025-01-01 00:00:00',

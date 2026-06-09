@@ -54,7 +54,8 @@ export default defineEventHandler(async (event) => {
       translationMode: oldTask.translationMode || config.translationMode || 'non_stream',
       subtitleFormat: oldTask.subtitleFormat || config.subtitleFormat || 'srt',
       subtitleStylePreset: oldTask.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
-      bilingualLayout: oldTask.bilingualLayout || config.bilingualLayout || 'translated_first'
+      bilingualLayout: oldTask.bilingualLayout || config.bilingualLayout || 'translated_first',
+      forceRetranslate: true
     })
 
     globalTaskQueue.add(newTaskId, {

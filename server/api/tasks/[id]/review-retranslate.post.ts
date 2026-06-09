@@ -34,6 +34,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = await ConfigService.getConfig(true)
+  db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, 'review', 'translation', 'info', ?, datetime('now'))")
+    .run(id, '[核对重译] 已开始重新翻译 ' + subtitleIds.length + ' 条字幕，本次将直接请求模型并跳过任务级缓存。')
+
   const openai = new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.apiBaseUrl
@@ -113,7 +116,7 @@ export default defineEventHandler(async (event) => {
   })
 
   db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, 'review', 'translation', 'info', ?, datetime('now'))")
-    .run(id, `[核对重译] 已按 ${chunks.length} 个分块重新翻译 ${updated.length} 条字幕。`)
+    .run(id, `[核对重译] 已按 ${chunks.length} 个分块重新翻译 ${updated.length} 条字幕（已跳过任务级缓存）。`)
 
   return { success: true, chunks: chunks.length, entries: updated }
 })

@@ -39,6 +39,7 @@ export function useDb() {
       subtitle_format TEXT NOT NULL DEFAULT 'srt',
       subtitle_style_preset TEXT NOT NULL DEFAULT 'bilingual_simple',
       bilingual_layout TEXT NOT NULL DEFAULT 'translated_first',
+      force_retranslate INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'queued',
       progress INTEGER NOT NULL DEFAULT 0,
       total_chunks INTEGER DEFAULT 0,
@@ -145,6 +146,10 @@ export function useDb() {
 
   try {
     _db.exec(`ALTER TABLE tasks ADD COLUMN translation_mode TEXT NOT NULL DEFAULT 'non_stream'`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN force_retranslate INTEGER NOT NULL DEFAULT 0`)
   } catch { /* column already exists */ }
 
   try {
