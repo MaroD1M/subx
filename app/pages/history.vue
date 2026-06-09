@@ -12,8 +12,8 @@
       </div>
     </div>
 
-    <details class="group rounded-3xl border border-gray-200 dark:border-gray-800 bg-white/85 dark:bg-gray-900/70 shadow-sm p-4 sm:p-5">
-      <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <details class="group glass-panel rounded-3xl overflow-hidden p-2">
+      <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 rounded-[calc(theme(borderRadius.3xl)-0.5rem)] bg-white/85 dark:bg-gray-900/70 px-4 py-4 sm:px-5">
         <div class="space-y-1">
           <div class="flex items-center gap-2 text-gray-900 dark:text-white">
             <UIcon name="i-lucide-chart-no-axes-combined" class="w-4 h-4" />
@@ -28,7 +28,7 @@
         </div>
       </summary>
 
-      <div class="mt-4 space-y-4">
+      <div class="px-4 pb-4 sm:px-5 sm:pb-5 space-y-4">
         <div v-if="overviewPending" class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
           <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载诊断总览中...
         </div>
@@ -48,7 +48,7 @@
             <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
               <p class="text-xs font-semibold text-gray-900 dark:text-white">高风险标签</p>
               <div class="flex flex-wrap gap-2">
-                <UBadge v-for="risk in diagnosticsOverview.riskTags.slice(0, 8)" :key="risk.tag" color="primary" variant="soft">{{ risk.tag }} × {{ risk.count }}</UBadge>
+                <UBadge v-for="risk in diagnosticsOverview.riskTags.slice(0, 8)" :key="risk.tag" color="primary" variant="soft">{{ riskTagLabel(risk.tag) }} × {{ risk.count }}</UBadge>
                 <span v-if="!diagnosticsOverview.riskTags.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
               </div>
             </div>
@@ -62,7 +62,7 @@
             <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
               <p class="text-xs font-semibold text-gray-900 dark:text-white">核对原因</p>
               <div class="flex flex-wrap gap-2">
-                <UBadge v-for="reason in diagnosticsOverview.reviewReasons.slice(0, 8)" :key="reason.reason" color="error" variant="soft">{{ reason.reason }} × {{ reason.count }}</UBadge>
+                <UBadge v-for="reason in diagnosticsOverview.reviewReasons.slice(0, 8)" :key="reason.reason" color="error" variant="soft">{{ reviewReasonLabel(reason.reason) }} × {{ reason.count }}</UBadge>
                 <span v-if="!diagnosticsOverview.reviewReasons.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
               </div>
             </div>
@@ -193,6 +193,35 @@ const overviewSummaryText = computed(() => {
   ].join(' · ')
 })
 const tasks = computed(() => data.value?.tasks || [])
+const riskTagLabels = {
+  non_dialogue: '非对白内容',
+  lyrics: '歌词/吟唱',
+  formatting_tokens: '格式标记密集',
+  repeated_short_lines: '短句重复较多',
+  punctuation_heavy: '符号密集',
+  speaker_labels: '说话人标签',
+  mixed_language: '多语言混杂',
+  long_lines: '长句较多'
+}
+
+const reviewReasonLabels = {
+  missing: '缺少译文',
+  same_as_source: '译文与原文相同',
+  same_as_source_allowed: '同文可接受',
+  latin_heavy: '译文仍偏原语言',
+  bilingual_duplicate: '双语内容重复',
+  suspected_contamination: '疑似串条/混入相邻字幕',
+  overlong_translation: '译文异常偏长'
+}
+
+function riskTagLabel(tag) {
+  return riskTagLabels[tag] || tag
+}
+
+function reviewReasonLabel(reason) {
+  return reviewReasonLabels[reason] || reason
+}
+
 
 async function clearHistory() {
   isClearing.value = true

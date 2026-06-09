@@ -13,7 +13,7 @@
           <UIcon name="i-lucide-shield-check" class="w-10 h-10 text-white" />
         </div>
         <div class="space-y-1">
-          <h1 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400">SubX Auth</h1>
+          <h1 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400">SubX 安全验证</h1>
           <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">本地部署的字幕提取与翻译入口</p>
         </div>
       </div>
@@ -24,7 +24,7 @@
           <UIcon name="i-lucide-shield-alert" class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
           <div class="space-y-1">
             <p class="text-xs font-bold text-amber-700 dark:text-amber-400">连接不安全</p>
-            <p class="text-[10px] text-amber-600 dark:text-amber-500/80 leading-relaxed">检测到当前正在通过非 HTTPS 连接访问。为了您的密钥安全，建议在生产环境启用 SSL 加密。</p>
+            <p class="text-[10px] text-amber-600 dark:text-amber-500/80 leading-relaxed">检测到当前正在通过非 HTTPS 连接访问。为了您的密钥安全，建议在生产环境启用 HTTPS 加密。</p>
           </div>
         </div>
       </ClientOnly>

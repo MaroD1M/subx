@@ -65,6 +65,9 @@ function resolveLogCategory(step: string | null, level: 'info' | 'error' | 'warn
 }
 
 function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'error' | 'warn', message: string, category?: TaskLogCategory) {
+    if (isTaskCancelled(taskId) && step !== 'cancelled' && step !== 'error') {
+        return
+    }
     const db = useDb()
     const resolvedCategory = category || resolveLogCategory(step, level, message)
     db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
@@ -227,10 +230,13 @@ async function translateChunkWithRetry(
     maxRetries: number,
     callbacks?: { onEntryTranslated?: (entry: { id: string; translatedText: string }) => void },
     streamUsage: boolean = false,
-    useStreaming: boolean = false
+    useStreaming: boolean = false,
+    logLabel?: string,
+    allowSingleRetry: boolean = true
 ): Promise<{ entries: SubtitleEntry[], diagnostics: ChunkDiagnostics }> {
     const finalResults = new Map<string, SubtitleEntry>()
     let unresolvedEntries = [...chunk]
+    const chunkLabel = logLabel || ('块 #' + (chunkIndex + 1))
     const diagnostics: ChunkDiagnostics = {
         chunkIndex,
         initialSize: chunk.length,
@@ -252,7 +258,7 @@ async function translateChunkWithRetry(
         if (attempt > 0) {
             diagnostics.retryAttempts = Math.max(diagnostics.retryAttempts, attempt)
             console.log(`[Retry] Task ${taskId} chunk ${chunkIndex}: 正在进行第 ${attempt}/${maxRetries} 次增量重试，剩余 ${unresolvedEntries.length} 条待处理`)
-            writeTaskLog(taskId, 'translating', 'warn', `[重试] 块 #${chunkIndex + 1} 第 ${attempt}/${maxRetries} 次重试，仅补译剩余 ${unresolvedEntries.length} 条`)
+            writeTaskLog(taskId, 'translating', 'warn', '[重试] ' + chunkLabel + ' 第 ' + attempt + '/' + maxRetries + ' 次重试，仅补译剩余 ' + unresolvedEntries.length + ' 条')
             await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
         }
 
@@ -287,7 +293,7 @@ async function translateChunkWithRetry(
             const acceptedCount = expectedCount - unresolvedEntries.length
             if (acceptedCount === 0 && returnedIds.size === expectedCount && attempt >= 1) {
                 diagnostics.validationFailures++
-                writeTaskLog(taskId, 'translating', 'warn', '[止损] 块 #' + (chunkIndex + 1) + ' 连续返回完整条数但有效结果为 0，停止整块重试并转入更细粒度补译')
+                writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 连续返回完整条数但有效结果为 0，停止整块重试并转入更细粒度补译')
                 break
             }
 
@@ -303,7 +309,7 @@ async function translateChunkWithRetry(
                 taskId,
                 'translating',
                 'warn',
-                `[校验] 块 #${chunkIndex + 1} AI 返回 ${results.length}/${expectedCount}，有效 ${expectedCount - unresolvedEntries.length}/${expectedCount}，待补译 ${unresolvedEntries.length} 条${missingSuffix}${contaminationSuffix}`
+                '[校验] ' + chunkLabel + ' AI 返回 ' + results.length + '/' + expectedCount + '，有效 ' + (expectedCount - unresolvedEntries.length) + '/' + expectedCount + '，待补译 ' + unresolvedEntries.length + ' 条' + missingSuffix + contaminationSuffix
             )
         } catch (e: any) {
             console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
@@ -335,7 +341,11 @@ async function translateChunkWithRetry(
         }
     }
 
-    if (unresolvedEntries.length > 0) {
+    if (unresolvedEntries.length > 0 && !allowSingleRetry) {
+        const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
+        diagnostics.finalStatus = 'fallback'
+        writeTaskLog(taskId, 'translating', 'warn', '[转核对] ' + chunkLabel + ' 剩余 ' + unresolvedEntries.length + ' 条未自动补译，已保留给人工核对：' + ids)
+    } else if (unresolvedEntries.length > 0) {
         const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
         console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 常规重试后仍有 ${unresolvedEntries.length} 条待处理，开始逐条补译。`)
         writeTaskLog(taskId, 'translating', 'warn', `[补译] 块 #${chunkIndex + 1} 逐条补译 ${unresolvedEntries.length} 条：${ids}`)
@@ -359,6 +369,7 @@ async function translateChunkWithRetry(
                     maxRetries + 1,
                     false
                 )
+                assertTaskNotCancelled(taskId)
                 const singleTranslated = singleResults[0]
                 if (singleTranslated?.translatedText && isAcceptableTranslatedEntry({ ...entry, translatedText: singleTranslated.translatedText }, targetLanguage)) {
                     finalResults.set(String(entry.id), { ...entry, translatedText: singleTranslated.translatedText })
@@ -646,7 +657,9 @@ export const TaskService = {
             const allEntries = await SubtitleService.parseSubtitle(srtPath)
 
             const config = await ConfigService.getConfig()
-            const chunkSize = config.chunkSize || 2000
+            const translationStrategy = config.translationStrategy === 'efficient' ? 'efficient' : 'balanced'
+            const rawChunkSize = config.chunkSize || 2000
+            const chunkSize = translationStrategy === 'efficient' ? Math.min(rawChunkSize, 1200) : Math.min(rawChunkSize, 2000)
             const subtitleFormat = task.subtitleFormat || config.subtitleFormat || 'srt'
             const subtitleStylePreset = task.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple'
             const bilingualLayout = task.bilingualLayout || config.bilingualLayout || 'translated_first'
@@ -772,7 +785,7 @@ export const TaskService = {
                 } else {
                     const chunkRisk = analyzeChunkRisk(uncachedEntries, chunkSize)
                     const effectiveStylePrompt = [stylePrompt, chunkRisk.stylePromptSuffix].filter(Boolean).join('\n\n')
-                    const stablePreviousContext = buildStablePreviousContext(previousContext)
+                    const stablePreviousContext: SubtitleEntry[] = []
                     if (chunkRisk.riskLevel === 'high') {
                         writeTaskLog(taskId, 'translating', 'info', `[风险块] 块 #${index + 1} 命中 ${chunkRisk.tags.join(', ')}，启用保守翻译策略`)
                     }
@@ -780,15 +793,20 @@ export const TaskService = {
                     const conservativeBatches = chunkRisk.riskLevel === 'high'
                         ? splitConservativeBatches(uncachedEntries, chunkRisk.tags)
                         : [uncachedEntries]
+                    const shouldSkipSingleRetry = chunkRisk.riskLevel === 'high' || translationStrategy === 'efficient'
 
                     if (conservativeBatches.length > 1) {
                         writeTaskLog(taskId, 'translating', 'info', '[保守分批] 块 #' + (index + 1) + ' 已拆为 ' + conservativeBatches.length + ' 个子批次，降低串条与错配风险')
+                    }
+                    if (shouldSkipSingleRetry) {
+                        writeTaskLog(taskId, 'translating', 'info', '[省 token] 块 #' + (index + 1) + ' 命中高风险或稳妥模式，剩余异常将直接进入核对，不再自动逐条补译')
                     }
 
                     const aiResultByOriginalId = new Map<string, SubtitleEntry>()
                     const diagnosticsCollection: ChunkDiagnostics[] = []
 
-                    for (const batchEntries of conservativeBatches) {
+                    for (const [batchIndex, batchEntries] of conservativeBatches.entries()) {
+                        assertTaskNotCancelled(taskId)
                         const idMapping = new Map<string, string>()
                         const remappedChunk: SubtitleEntry[] = batchEntries.map((entry, i) => {
                             const sequentialId = String(i + 1)
@@ -796,6 +814,11 @@ export const TaskService = {
                             return { ...entry, id: sequentialId }
                         })
 
+                        const firstOriginalId = String(batchEntries[0]?.id || '')
+                        const lastOriginalId = String(batchEntries[batchEntries.length - 1]?.id || firstOriginalId)
+                        const batchLabel = conservativeBatches.length > 1
+                            ? '块 #' + (index + 1) + '.' + (batchIndex + 1) + '（原字幕 #' + firstOriginalId + (lastOriginalId && lastOriginalId !== firstOriginalId ? '-' + lastOriginalId : '') + '）'
+                            : '块 #' + (index + 1)
                         const chunkResult = await translateChunkWithRetry(
                             openai,
                             remappedChunk,
@@ -809,7 +832,9 @@ export const TaskService = {
                             maxRetries,
                             undefined,
                             (config.translationMode === 'stream') && (config.streamUsage || false),
-                            config.translationMode === 'stream'
+                            config.translationMode === 'stream',
+                            batchLabel,
+                            !shouldSkipSingleRetry && conservativeBatches.length === 1
                         )
 
                         diagnosticsCollection.push(chunkResult.diagnostics)
@@ -956,11 +981,13 @@ export const TaskService = {
 
         } catch (e: any) {
             if (e instanceof TaskCancelledError || isTaskCancelled(taskId)) {
-                await this.updateStatus(taskId, 'error', 0, {
+                const current = this.getTask(taskId)
+                await this.updateStatus(taskId, 'cancelled', current.progress || 0, {
                     error: '用户取消任务',
-                    log: '任务已取消，后台执行已停止。'
+                    log: '任务已取消，后台执行已停止。',
+                    level: 'warn'
                 })
-                useDb().prepare('UPDATE tasks SET status = \'error\', error = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run('用户取消任务', taskId)
+                useDb().prepare("UPDATE tasks SET status = 'cancelled', error = ?, updated_at = datetime('now') WHERE task_id = ?").run('用户取消任务', taskId)
                 return
             }
 

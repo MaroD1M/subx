@@ -76,6 +76,7 @@ export interface AppConfig {
   concurrency: number          // 并发数
   maxRetries: number           // 最大重试次数
   translationMode?: 'non_stream' | 'stream' // 默认非流式，流式为兼容性较弱的可选项
+  translationStrategy?: 'balanced' | 'efficient'
   glossary: Record<string, string>  // 术语表
   mediaRoots?: MediaRoot[]     // 媒体库配置
   streamUsage?: boolean        // 是否开启流式 Token 统计

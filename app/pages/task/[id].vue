@@ -146,7 +146,7 @@
           <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
             <div>
               <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">诊断信息</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">连接状态、翻译模式与 Token 统计默认折叠显示。</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">连接状态、翻译模式与用量统计默认折叠显示。</p>
             </div>
             <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-400" />
           </summary>
@@ -205,19 +205,19 @@
 
             <div v-if="task.step === 'done'" class="space-y-3">
               <div class="flex items-center justify-between">
-                <UButton :label="showResponses ? '隐藏 Token 统计' : '查看 Token 统计'" icon="i-lucide-chart-column-big" color="neutral" variant="ghost" @click="showResponses = !showResponses" />
+                <UButton :label="showResponses ? '隐藏用量统计' : '查看用量统计'" icon="i-lucide-chart-column-big" color="neutral" variant="ghost" @click="showResponses = !showResponses" />
               </div>
 
               <div v-if="showResponses" class="rounded-2xl bg-gray-950 text-gray-100 p-4 ring-1 ring-white/10 space-y-4">
                 <div v-if="responsesLoading" class="flex items-center gap-2 text-xs text-gray-400">
-                  <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载 Token 统计...
+                  <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载用量统计...
                 </div>
                 <div v-else-if="responsesSummary" class="space-y-4">
                   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">分块数</span><p class="text-sm font-medium text-gray-100">{{ responsesSummary.totalChunks }}</p></div>
-                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输入 Tokens</span><p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p></div>
-                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出 Tokens</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
-                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总 Tokens</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
+                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输入令牌</span><p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p></div>
+                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出令牌</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
+                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总令牌</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
                   </div>
                   <div v-if="responseDiagnosticsSummary" class="rounded-2xl border border-amber-200/70 bg-amber-50/70 dark:border-amber-800/60 dark:bg-amber-900/15 p-4 space-y-3">
                     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -272,7 +272,7 @@
                     <div v-if="responseDiagnosticsSummary.riskTags?.length" class="space-y-2">
                       <p class="text-[11px] text-amber-700 dark:text-amber-300">高风险标签分布</p>
                       <div class="flex flex-wrap gap-2">
-                        <UBadge v-for="risk in responseDiagnosticsSummary.riskTags" :key="risk.tag" color="primary" variant="subtle">{{ risk.tag }} × {{ risk.count }}</UBadge>
+                        <UBadge v-for="risk in responseDiagnosticsSummary.riskTags" :key="risk.tag" color="primary" variant="subtle">{{ riskTagLabel(risk.tag) }} × {{ risk.count }}</UBadge>
                       </div>
                     </div>
                   </div>
@@ -284,16 +284,16 @@
                       <details v-for="r in responsesRecords" :key="`preview-${r.id}`" class="rounded-xl border border-gray-800/70 bg-black/20 px-3 py-3">
                         <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
                           <div class="min-w-0">
-                            <p class="text-xs font-semibold text-gray-200">块 #{{ (r.chunk_index || 0) + 1 }} · {{ r.model || 'unknown' }}</p>
+                            <p class="text-xs font-semibold text-gray-200">块 #{{ (r.chunk_index || 0) + 1 }} · {{ r.model || '未知模型' }}</p>
                             <div class="mt-1 flex flex-wrap gap-1.5">
-                              <UBadge size="xs" color="neutral" variant="subtle">{{ r.response_meta?.format || 'unknown' }}</UBadge>
+                              <UBadge size="xs" color="neutral" variant="subtle">{{ r.response_meta?.format || '未知格式' }}</UBadge>
                               <UBadge size="xs" :color="r.response_issue === 'empty' || r.response_issue === 'refusal' || r.response_issue === 'filtered' ? 'warning' : 'primary'" variant="subtle">{{ r.response_issue_label }}</UBadge>
                               <UBadge v-if="r.response_meta && Number(r.response_meta.expectedCount || 0) > 0" size="xs" color="neutral" variant="subtle">解析 {{ r.response_meta.parsedCount }}/{{ r.response_meta.expectedCount }}</UBadge>
                               <UBadge v-if="r.response_meta?.missingIds?.length" size="xs" color="warning" variant="soft">缺失 ID: {{ r.response_meta.missingIds.slice(0, 4).join(', ') }}{{ r.response_meta.missingIds.length > 4 ? '…' : '' }}</UBadge>
                               <UBadge v-if="r.response_meta?.chunkDiagnostics?.retryAttempts" size="xs" color="primary" variant="subtle">重试 {{ r.response_meta.chunkDiagnostics.retryAttempts }} 次</UBadge>
                               <UBadge v-if="r.response_meta?.chunkDiagnostics?.singleRetryAttempts" size="xs" color="warning" variant="subtle">单条补译 {{ r.response_meta.chunkDiagnostics.singleRetryAttempts }} 条</UBadge>
                               <UBadge v-if="r.response_meta?.chunkDiagnostics?.fallbackCount" size="xs" color="error" variant="soft">回退原文 {{ r.response_meta.chunkDiagnostics.fallbackCount }} 条</UBadge>
-                              <UBadge v-for="tag in (r.response_meta?.chunkRisk?.tags || []).slice(0, 4)" :key="`${r.id}-${tag}`" size="xs" color="primary" variant="subtle">{{ tag }}</UBadge>
+                              <UBadge v-for="tag in (r.response_meta?.chunkRisk?.tags || []).slice(0, 4)" :key="`${r.id}-${tag}`" size="xs" color="primary" variant="subtle">{{ riskTagLabel(tag) }}</UBadge>
                             </div>
                             <p class="mt-2 text-[11px] text-gray-400 line-clamp-2 break-words">{{ r.raw_response_preview || '暂无返回内容' }}</p>
                           </div>
@@ -301,11 +301,11 @@
                         </summary>
                         <div class="mt-3 grid gap-3 lg:grid-cols-2">
                           <div class="space-y-1 min-w-0">
-                            <p class="text-[10px] uppercase tracking-widest text-gray-500">请求预览</p>
+                            <p class="text-[10px] uppercase tracking-widest text-gray-500">请求内容</p>
                             <pre class="text-[11px] leading-5 whitespace-pre-wrap break-words text-gray-400 max-h-48 overflow-y-auto custom-scrollbar">{{ r.raw_request || '暂无请求内容' }}</pre>
                           </div>
                           <div class="space-y-1 min-w-0">
-                            <p class="text-[10px] uppercase tracking-widest text-gray-500">返回全文</p>
+                            <p class="text-[10px] uppercase tracking-widest text-gray-500">返回内容</p>
                             <pre class="text-[11px] leading-5 whitespace-pre-wrap break-words text-gray-200 max-h-48 overflow-y-auto custom-scrollbar">{{ r.raw_response || '暂无返回内容' }}</pre>
                           </div>
                         </div>
@@ -315,7 +315,7 @@
                   <div class="max-h-48 overflow-y-auto custom-scrollbar">
                     <table class="w-full text-left">
                       <thead>
-                        <tr class="text-gray-600 text-[10px] uppercase"><th class="pb-2 pr-4">块</th><th class="pb-2 pr-4">模型</th><th class="pb-2 pr-4">输入</th><th class="pb-2 pr-4">输出</th><th class="pb-2">合计</th></tr>
+                        <tr class="text-gray-600 text-[10px] uppercase"><th class="pb-2 pr-4">块</th><th class="pb-2 pr-4">模型</th><th class="pb-2 pr-4">输入令牌</th><th class="pb-2 pr-4">输出令牌</th><th class="pb-2">总计令牌</th></tr>
                       </thead>
                       <tbody class="text-gray-400">
                         <tr v-for="r in responsesRecords" :key="r.id" class="border-t border-gray-800/50">
@@ -417,6 +417,17 @@ const reviewReasonLabels: Record<string, string> = {
   overlong_translation: '译文异常偏长'
 }
 
+const riskTagLabels: Record<string, string> = {
+  non_dialogue: '非对白内容',
+  lyrics: '歌词/吟唱',
+  formatting_tokens: '格式标记密集',
+  repeated_short_lines: '短句重复较多',
+  punctuation_heavy: '符号密集',
+  speaker_labels: '说话人标签',
+  mixed_language: '多语言混杂',
+  long_lines: '长句较多'
+}
+
 function formatClock(date = new Date()) {
   return date.toLocaleTimeString('zh-CN', { hour12: false })
 }
@@ -425,6 +436,10 @@ const reviewDiagnosticsIssues = computed(() => Array.isArray(task.value.reviewDi
 
 function reviewReasonLabel(reason: string) {
   return reviewReasonLabels[reason] || reason
+}
+
+function riskTagLabel(tag: string) {
+  return riskTagLabels[tag] || tag
 }
 
 function formatTime(value?: string | null) {
@@ -726,7 +741,7 @@ const failureSummary = computed(() => {
     return {
       icon: 'i-lucide-key-round',
       title: '鉴权配置异常',
-      summary: '请优先检查 API Key、供应商地址与模型配置是否正确。',
+      summary: '请优先检查接口密钥、服务商地址与模型配置是否正确。',
       typeLabel: '鉴权失败',
       detail: sourceText
     }

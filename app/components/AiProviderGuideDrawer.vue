@@ -73,12 +73,12 @@
               <div class="space-y-4 pb-4">
                 <div class="grid gap-3">
                   <div class="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/40">
-                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400">推荐基础 URL</p>
+                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400">推荐基础地址</p>
                     <p class="mt-2 break-words text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">{{ activeProvider.apiBaseUrl || '请以服务商文档提供的兼容地址为准' }}</p>
                   </div>
                   <div class="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/40">
                     <p class="text-xs font-medium text-gray-500 dark:text-gray-400">模型填写建议</p>
-                    <p class="mt-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">{{ activeProvider.defaultModel || '请填写服务商提供的模型 ID' }}</p>
+                    <p class="mt-2 text-sm font-medium leading-6 text-gray-900 dark:text-gray-100">{{ activeProvider.defaultModel || '请填写服务商提供的模型标识' }}</p>
                     <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ activeProvider.recommendManualModel ? '推荐开启手动填写模型名称。' : '可优先尝试自动获取模型列表。' }}</p>
                   </div>
                 </div>

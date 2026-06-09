@@ -2,7 +2,7 @@
   <div class="max-w-[1500px] mx-auto py-6 space-y-5">
     <div class="flex items-start justify-between gap-4 flex-wrap">
       <div>
-        <p class="text-xs font-semibold tracking-widest text-warning-500 uppercase">Subtitle Review</p>
+        <p class="text-xs font-semibold tracking-widest text-warning-500 uppercase">字幕核对中心</p>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white mt-1">字幕核对</h1>
         <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">批量筛选、重译、手动修正，并实时预览最终字幕。</p>
       </div>

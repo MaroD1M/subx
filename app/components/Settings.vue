@@ -4,7 +4,7 @@
       <UIcon name="i-lucide-shield-alert" class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
       <div class="space-y-1">
         <p class="text-xs font-bold text-amber-700 dark:text-amber-400">连接不安全</p>
-        <p class="text-[10px] text-amber-600 dark:text-amber-500/80 leading-relaxed">当前连接未启用 HTTPS，建议在生产环境开启 SSL。</p>
+        <p class="text-[10px] text-amber-600 dark:text-amber-500/80 leading-relaxed">当前连接未启用 HTTPS，建议在生产环境开启 HTTPS。</p>
       </div>
     </div>
 
@@ -18,11 +18,11 @@
       </div>
 
       <div class="space-y-1">
-        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">API 密钥</label>
+        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">接口密钥</label>
         <UInput v-model="config.apiKey" type="password" placeholder="sk-..." icon="i-lucide-key" class="w-full" @blur="tryFetchModels" />
       </div>
 
-      <UFormField label="API 基础 URL" class="w-full">
+      <UFormField label="接口基础地址" class="w-full">
         <UInput v-model="config.apiBaseUrl" placeholder="https://api.openai.com/v1" icon="i-lucide-globe" class="w-full" @blur="tryFetchModels" />
       </UFormField>
 
@@ -36,7 +36,7 @@
           <div class="flex items-center justify-between gap-3 p-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40">
             <div class="space-y-0.5">
               <p class="text-xs font-medium text-gray-700 dark:text-gray-300">手动填写模型名称</p>
-              <p class="text-[11px] text-gray-500 dark:text-gray-400">开启后直接输入模型 ID，不依赖模型列表。</p>
+              <p class="text-[11px] text-gray-500 dark:text-gray-400">开启后可直接输入模型标识，不依赖模型列表。</p>
             </div>
             <USwitch v-model="useManualModelInput" />
           </div>
@@ -66,11 +66,13 @@
         <UFormField label="翻译模式">
           <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
         </UFormField>
-
-              </div>
+        <UFormField label="翻译策略">
+          <USelect v-model="config.translationStrategy" :items="translationStrategyItems" class="w-full" />
+        </UFormField>
+      </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-        <UFormField label="分块大小 (Token)" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
+        <UFormField label="分块大小（估算令牌）" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
           <UInputNumber v-model="config.chunkSize" :min="100" :max="6000" :step="100" class="w-full mt-auto" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
         </UFormField>
         <UFormField label="并发任务数" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
@@ -101,7 +103,7 @@
           <div class="rounded-xl bg-white/70 dark:bg-gray-950/20 border border-gray-100 dark:border-gray-800 p-3.5" :class="config.translationMode !== 'stream' ? 'opacity-60' : ''">
             <div class="flex items-center justify-between gap-3">
               <div class="space-y-0.5">
-                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">流式 Token 统计</label>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">流式用量统计</label>
                 <p class="text-[11px] text-gray-500 dark:text-gray-400">仅在流式模式下生效，兼容性较弱，默认建议关闭。</p>
               </div>
               <USwitch v-model="config.streamUsage" :disabled="config.translationMode !== 'stream'" @click.stop />
@@ -155,12 +157,17 @@ const translationModeItems = [
   { label: '非流式（推荐）', value: 'non_stream' },
   { label: '流式（兼容性较弱）', value: 'stream' }
 ]
+const translationStrategyItems = [
+  { label: '平衡模式', value: 'balanced' },
+  { label: '省配额 / 稳妥模式', value: 'efficient' }
+]
 if (config.value) {
   if (config.value.chunkSize) config.value.chunkSize = Number(config.value.chunkSize)
   if (config.value.concurrency) config.value.concurrency = Number(config.value.concurrency)
   if (config.value.maxRetries) config.value.maxRetries = Number(config.value.maxRetries)
   if (config.value.logRetentionDays) config.value.logRetentionDays = Number(config.value.logRetentionDays)
   if (!config.value.translationMode) config.value.translationMode = 'non_stream'
+  if (!config.value.translationStrategy) config.value.translationStrategy = 'balanced'
   if (config.value.streamUsage === undefined) config.value.streamUsage = false
 }
 
@@ -190,6 +197,7 @@ function buildConfigSnapshot(value: any) {
     maxRetries: Number(value?.maxRetries || 0),
     logRetentionDays: Number(value?.logRetentionDays || 0),
     translationMode: String(value?.translationMode || 'non_stream'),
+    translationStrategy: String(value?.translationStrategy || 'balanced'),
     streamUsage: !!value?.streamUsage,
     glossary: value?.glossary || {}
   })
@@ -234,7 +242,7 @@ async function tryFetchModels() {
     const res = await $fetch('/api/model-list', { method: 'POST', body: { apiKey, baseURL } })
     modelItems.value = res.models.map((m: any) => ({ label: m.id.startsWith('models/') ? m.id.replace('models/', '') : m.id, value: m.id }))
   } catch {
-    modelError.value = '无法获取模型列表，请检查密钥和 URL 是否正确'
+    modelError.value = '无法获取模型列表，请检查密钥和地址是否正确'
     modelItems.value = []
   } finally {
     fetchingModels.value = false

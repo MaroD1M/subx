@@ -894,7 +894,9 @@ export const SubtitleService = {
 
     for (const entry of entries) {
       const text = entry.text || ''
-      const estimatedTokens = Math.ceil(text.length / 3.5)
+      const lineCount = text.split('\n').filter(Boolean).length
+      const placeholderCount = (text.match(/__SUBX_FMT_\d+__/g) || []).length
+      const estimatedTokens = Math.ceil(text.length / 3.2) + Math.ceil(lineCount * 1.5) + placeholderCount * 2
       const highRisk = this.isHighRiskDialogueEntry(entry)
       const riskAwareMaxTokens = highRisk ? Math.max(20, Math.min(maxTokens, Math.floor(maxTokens * 0.2))) : maxTokens
       const previousRisky = currentChunk.some(chunkEntry => this.isHighRiskDialogueEntry(chunkEntry))

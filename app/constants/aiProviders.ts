@@ -30,9 +30,9 @@ export const AI_PROVIDER_GUIDES: AiProviderGuide[] = [
     recommendManualModel: false,
     supportsModelList: true,
     steps: [
-      '在 OpenAI 平台创建 API Key。',
-      '将 API Key 填入“OpenAI API 密钥”。',
-      '将 API 基础 URL 填为 https://api.openai.com/v1。'
+      '在 OpenAI 平台创建接口密钥。',
+      '将接口密钥填入“OpenAI 接口密钥”。',
+      '将接口基础地址填为 https://api.openai.com/v1。'
     ],
     notes: [
       '支持自动获取模型列表。',
@@ -51,8 +51,8 @@ export const AI_PROVIDER_GUIDES: AiProviderGuide[] = [
     recommendManualModel: true,
     supportsModelList: false,
     steps: [
-      '在 DeepSeek 平台创建 API Key。',
-      '填写 API Key 与基础 URL。',
+      '在 DeepSeek 平台创建接口密钥。',
+      '填写接口密钥与基础地址。',
       '如无法获取模型列表，可直接手动填写模型名 deepseek-chat。'
     ],
     notes: [
@@ -72,7 +72,7 @@ export const AI_PROVIDER_GUIDES: AiProviderGuide[] = [
     supportsModelList: false,
     steps: [
       '确认你使用的是 Gemini 的 OpenAI 兼容入口，而不是原生 Gemini API。',
-      '填写服务商提供的兼容 Base URL 与 API Key。',
+      '填写服务商提供的兼容基础地址与接口密钥。',
       '如无模型列表接口，请开启手动填写模型名称。'
     ],
     notes: [
@@ -91,7 +91,7 @@ export const AI_PROVIDER_GUIDES: AiProviderGuide[] = [
     supportsModelList: false,
     steps: [
       '确认当前接入地址是否为 OpenAI 兼容接口。',
-      '填写平台提供的 API Key、基础 URL 与模型名。',
+      '填写平台提供的接口密钥、基础地址与模型名。',
       '如果列表获取失败，直接手动填写模型名称。'
     ],
     notes: [
@@ -107,9 +107,9 @@ export const AI_PROVIDER_GUIDES: AiProviderGuide[] = [
     recommendManualModel: true,
     supportsModelList: false,
     steps: [
-      '填写服务商提供的 API Key。',
-      '将 API 基础 URL 填为对方提供的 API 根路径，通常类似 /v1。',
-      '如果无法自动列出模型，请手动填写模型 ID。'
+      '填写服务商提供的接口密钥。',
+      '将接口基础地址填为对方提供的接口根路径，通常类似 /v1。',
+      '如果无法自动列出模型，请手动填写模型标识。'
     ],
     notes: [
       '只要接口兼容 OpenAI 协议，通常都可以先尝试接入。',
