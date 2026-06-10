@@ -164,13 +164,6 @@ function isAcceptableTranslatedEntry(entry: SubtitleEntry, targetLanguage: strin
     return SubtitleService.isAcceptableSameText(original, translated, targetLanguage)
 }
 
-function buildStablePreviousContext(entries: SubtitleEntry[]) {
-    return entries.map(entry => ({
-        ...entry,
-        translatedText: undefined
-    }))
-}
-
 function expandRetryEntries(entries: SubtitleEntry[], targetIds: string[]) {
     if (!targetIds.length) return entries
 
@@ -508,6 +501,7 @@ export const TaskService = {
             0
         )
         writeTaskLog(task.taskId!, 'queued', 'info', '任务已创建，等待执行')
+        console.log(`[Task] 创建任务: ${task.taskId} 文件: ${task.filePath}`)
         return this.getTask(task.taskId!)
     },
 
@@ -617,6 +611,7 @@ export const TaskService = {
             const chunks = initialChunks
             const totalChunks = chunks.length
             await this.updateStatus(taskId, 'parsing', 25, { log: `解析完成，共划分为 ${totalChunks} 个文本块。` })
+            console.log(`[Task] 任务 ${taskId}: ${allEntries.length} 条字幕 → ${totalChunks} 个块 (chunkSize=${chunkSize})`)
 
             const db = useDb()
             db.prepare('UPDATE tasks SET total_chunks = ? WHERE task_id = ?').run(totalChunks, taskId)
@@ -873,6 +868,7 @@ export const TaskService = {
             await this.updateStatus(taskId, 'done', 100)
             db.prepare('UPDATE tasks SET status = \'done\', progress = 100, output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
                 .run(savedPath, taskId)
+            console.log(`[Task] 完成任务: ${taskId} 输出: ${savedPath}`)
 
         } catch (e: any) {
             if (e instanceof TaskCancelledError || isTaskCancelled(taskId)) {

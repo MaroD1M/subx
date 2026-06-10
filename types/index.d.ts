@@ -80,6 +80,11 @@ export interface AppConfig {
   mediaRoots?: MediaRoot[]     // 媒体库配置
   streamUsage?: boolean        // 是否开启流式 Token 统计
   logRetentionDays?: number    // AI 日志保留天数
+  outputMode?: string          // 输出模式
+  stylePreset?: string         // 翻译风格预设
+  subtitleFormat?: string      // 字幕格式 srt/ass/both
+  subtitleStylePreset?: string // 字幕样式预设
+  bilingualLayout?: string     // 双语排版
 }
 
 /** 文件节点 (用于文件浏览器) */

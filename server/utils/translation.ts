@@ -564,18 +564,6 @@ End Time: ${new Date().toISOString()}
         return entries
     },
 
-    loadPartialTranslations(taskId: string, chunkIndex: number): Map<string, string> {
-        const partialPath = join(process.cwd(), 'temp', `${taskId}.chunk-${chunkIndex}.partial`)
-        if (!existsSync(partialPath)) return new Map()
-
-        try {
-            const content = readFileSync(partialPath, 'utf-8')
-            return parseAiTranslations(content)
-        } catch {
-            return new Map()
-        }
-    },
-
     cleanupPartialFiles(taskId: string, totalChunks: number) {
         for (let i = 0; i < totalChunks; i++) {
             const partialPath = join(process.cwd(), 'temp', `${taskId}.chunk-${i}.partial`)

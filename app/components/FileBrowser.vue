@@ -554,8 +554,10 @@ async function onSelect(node: FileNode) {
   }
 
   const ext = node.name.toLowerCase()
-  if (!ext.endsWith('.mkv') && !ext.endsWith('.srt') && !ext.endsWith('.vtt') && !ext.endsWith('.ass') && !ext.endsWith('.ssa')) {
-    toast.add({ title: '格式不支持', description: '目前视频仅支持 .mkv 格式，或直接选择 .srt / .vtt / .ass / .ssa 字幕文件。', color: 'amber' })
+  const videoExts = ['.mkv', '.mp4', '.avi', '.webm', '.ts']
+  const subExts = ['.srt', '.vtt', '.ass', '.ssa']
+  if (!videoExts.some(e => ext.endsWith(e)) && !subExts.some(e => ext.endsWith(e))) {
+    toast.add({ title: '格式不支持', description: '视频支持 mkv/mp4/avi/webm/ts，字幕支持 srt/vtt/ass/ssa。', color: 'amber' })
     return
   }
 

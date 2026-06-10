@@ -56,7 +56,7 @@ const fallbackTitle = computed(() => {
   if (path === '/login') return '身份验证 - SubX'
   if (path === '/history') return '翻译历史 - SubX'
   if (path === '/media-libraries') return '媒体库管理 - SubX'
-  if (/^\/task\/[^/]+\/review$/.test(path)) return '字幕核对 - SubX'
+    if (/^\/review\/[^/]+$/.test(path)) return '字幕核对 - SubX'
   if (/^\/task\/[^/]+$/.test(path)) return '翻译任务详情 - SubX'
   return 'SubX - 自动化视频字幕提取与翻译工具'
 })

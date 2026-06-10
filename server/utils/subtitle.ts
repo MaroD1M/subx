@@ -846,6 +846,7 @@ export const SubtitleService = {
     if (subtitleFormat === 'srt') {
       const srtPath = `${basePath}.srt`
       writeFileSync(srtPath, srtContent, 'utf-8')
+      console.log(`[Subtitle] 输出 SRT: ${srtPath} (${srtEntries.length} 条)`)
       return srtPath
     }
 
@@ -859,12 +860,14 @@ export const SubtitleService = {
 
     if (subtitleFormat === 'ass') {
       writeFileSync(assPath, assContent, 'utf-8')
+      console.log(`[Subtitle] 输出 ASS: ${assPath} (${srtEntries.length} 条)`)
       return assPath
     }
 
     const srtPath = `${basePath}.srt`
     writeFileSync(srtPath, srtContent, 'utf-8')
     writeFileSync(assPath, assContent, 'utf-8')
+    console.log(`[Subtitle] 输出 SRT+ASS: ${srtPath} + ${assPath} (${srtEntries.length} 条)`)
     return assPath
   },
 

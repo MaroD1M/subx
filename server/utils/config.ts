@@ -75,6 +75,7 @@ export const ConfigService = {
         stmt.run(key, valStr)
         configCache = null
         configCacheAt = 0
+        console.log(`[Config] 更新配置: ${key} = ${key === 'apiKey' ? '****' : valStr.substring(0, 40)}`)
     },
 
     async cleanupLogsIfNeeded() {
