@@ -36,7 +36,6 @@ function assertTaskNotCancelled(taskId: string) {
 type TaskLogCategory = 'system' | 'translation' | 'export' | 'error' | 'process'
 
 type ChunkRiskProfile = {
-    riskLevel: 'normal' | 'high'
     tags: string[]
     stylePromptSuffix?: string
 }
@@ -506,7 +505,6 @@ function analyzeChunkRisk(entries: SubtitleEntry[]): ChunkRiskProfile {
     if (tags.has('formatting_tokens')) styleHints.push('当前块包含格式占位符，必须严格保留所有 __SUBX_FMT_n__ 占位符及顺序。')
 
     return {
-        riskLevel: 'normal',
         tags: Array.from(tags),
         stylePromptSuffix: styleHints.length ? styleHints.join('\n') : undefined
     }
@@ -666,8 +664,7 @@ export const TaskService = {
             await this.updateStatus(taskId, 'translating', 30, { totalChunks, completedChunks: 0 })
 
             const openai = new OpenAI({ apiKey: openaiConfig.apiKey, baseURL: openaiConfig.baseUrl })
-            const chunkLimit = Math.max(1, config.concurrency || 3)
-            const limit = pLimit(chunkLimit)
+            const limit = pLimit(1)
             const maxRetries = config.maxRetries || 3
 
             const glossary = config.glossary || {}

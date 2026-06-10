@@ -499,29 +499,6 @@ export const SubtitleService = {
     return visible > 0 && letters / visible >= 0.7
   },
 
-  isShortDialogueText(text: string): boolean {
-    const normalized = this.normalizeSubtitleText(text)
-    if (!normalized) return false
-    const compact = normalized.replace(/\s+/g, ' ').trim()
-    const visibleLength = Array.from(compact).length
-    const lineCount = compact.split('\n').filter(Boolean).length
-    const dialoguePrefixCount = (compact.match(/^\s*[-—–]\s+/gm) || []).length
-    return visibleLength <= 42 || lineCount >= 2 || dialoguePrefixCount > 0
-  },
-
-  isHighRiskDialogueEntry(entry: SubtitleEntry): boolean {
-    const text = String(entry.text || '')
-    if (this.isNonVerbal(text)) return false
-    const normalized = this.normalizeSubtitleText(text)
-    if (!normalized) return false
-
-    const dialoguePrefixCount = (normalized.match(/^\s*[-—–]\s+/gm) || []).length
-    const shortQuestion = /\?$|？$/.test(normalized) && Array.from(normalized).length <= 20
-    const ultraShortReply = Array.from(this.normalizeComparisonText(normalized)).length <= 10
-
-    return dialoguePrefixCount > 0 || shortQuestion || ultraShortReply || this.isShortDialogueText(normalized)
-  },
-
   splitBilingualLines(text: unknown): string[] {
     return this.normalizeSubtitleText(text)
       .split('\n')
@@ -932,21 +909,8 @@ export const SubtitleService = {
       const lineCount = text.split('\n').filter(Boolean).length
       const placeholderCount = (text.match(/__SUBX_FMT_\d+__/g) || []).length
       const estimatedTokens = Math.ceil(text.length / 3.2) + Math.ceil(lineCount * 1.5) + placeholderCount * 2
-      const highRisk = this.isHighRiskDialogueEntry(entry)
-      const riskAwareMaxTokens = highRisk ? Math.max(20, Math.min(maxTokens, Math.floor(maxTokens * 0.2))) : maxTokens
-      const previousRisky = currentChunk.some(chunkEntry => this.isHighRiskDialogueEntry(chunkEntry))
 
-      if (highRisk && currentChunk.length >= 3 && currentTokens >= Math.max(60, Math.floor(riskAwareMaxTokens * 0.5))) {
-        chunks.push(currentChunk)
-        currentChunk = []
-        currentTokens = 0
-      }
-
-      if (currentTokens + estimatedTokens > riskAwareMaxTokens && currentChunk.length > 0) {
-        chunks.push(currentChunk)
-        currentChunk = []
-        currentTokens = 0
-      } else if (!highRisk && previousRisky && currentChunk.length >= 4 && currentTokens >= Math.max(60, Math.floor(maxTokens * 0.25))) {
+      if (currentTokens + estimatedTokens > maxTokens && currentChunk.length > 0) {
         chunks.push(currentChunk)
         currentChunk = []
         currentTokens = 0
