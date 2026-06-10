@@ -143,12 +143,6 @@ class TaskQueue {
 
 export const globalTaskQueue = new TaskQueue()
 
-function isAcceptableTranslatedEntry(entry: SubtitleEntry, targetLanguage: string) {
-    const translated = entry?.translatedText ? String(entry.translatedText) : ''
-    if (!translated) return false
-    return translated !== String(entry.text || '')
-}
-
 function expandRetryEntries(entries: SubtitleEntry[], targetIds: string[]) {
     if (!targetIds.length) return entries
 
@@ -238,10 +232,9 @@ async function translateChunkWithRetry(
             for (const entry of results) {
                 const id = String(entry.id)
                 const translatedText = String(entry.translatedText || '')
-                if (translatedText && translatedText !== String(entry.text || '')) {
+                const accepted = translatedText && translatedText !== String(entry.text || '')
+                if (accepted) {
                     returnedIds.add(id)
-                }
-                if (isAcceptableTranslatedEntry(entry, targetLanguage)) {
                     finalResults.set(id, entry)
                     acceptedIds.add(id)
                 }
@@ -279,10 +272,13 @@ async function translateChunkWithRetry(
             if (acceptedCount === 0) {
                 const sampleIds = results.slice(0, 3).map(entry => `#${entry.id} "${String(entry.text || '').substring(0, 30)}" → "${String(entry.translatedText || '').substring(0, 30)}"`)
                 writeTaskLog(taskId, 'translating', 'warn', `[解析内容] ${chunkLabel} 已匹配全部 ID 但翻译均未通过校验(有效 ${acceptedCount}/${expectedCount})，示例: ${sampleIds.join(' | ')}`)
-                const first = results[0]
-                if (first) {
-                    console.log(`[Validate Reject] task=${taskId} id=${first.id} orig="${String(first.text).substring(0, 60)}" trans="${String(first.translatedText).substring(0, 60)}" normOrig="${SubtitleService.normalizeComparisonText(first.text).substring(0, 60)}" normTrans="${SubtitleService.normalizeComparisonText(first.translatedText).substring(0, 60)}"`)
-                }
+                console.log(`[REJECTED ALL] taskId=${taskId} chunk=${chunkIndex} attempt=${attempt} entries=${results.length} accepted=0`)
+                results.slice(0, 5).forEach(entry => {
+                    const eid = entry.id
+                    const orig = String(entry.text || '')
+                    const trans = String(entry.translatedText || '')
+                    console.log(`  #${eid} orig="${orig.substring(0, 40)}" | trans="${trans.substring(0, 40)}" | same=${trans === orig} | transTruthy=${!!trans}`)
+                })
                 if (attempt >= 2) {
                     writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 连续 ' + (attempt + 1) + ' 次尝试均无有效翻译，停止整块重试并转入更细粒度补译')
                     break
@@ -296,7 +292,8 @@ async function translateChunkWithRetry(
             if (Array.isArray(e?.partialResults) && e.partialResults.length > 0) {
                 for (const entry of e.partialResults) {
                     const id = String(entry.id)
-                    if (isAcceptableTranslatedEntry(entry, targetLanguage)) {
+                    const translatedText = String(entry.translatedText || '')
+                    if (translatedText && translatedText !== String(entry.text || '')) {
                         finalResults.set(id, entry)
                     }
                 }
@@ -745,7 +742,7 @@ export const TaskService = {
                         aiResultByOriginalId.set(originalId, restoredEntry)
 
                         if (allowCache && entry.translatedText
-                            && isAcceptableTranslatedEntry({ ...originalEntry, translatedText: entry.translatedText }, task.targetLanguage)
+                            && entry.translatedText !== originalEntry.text
                             && !SubtitleService.isNonVerbal(originalEntry.text)
                         ) {
                             const cacheHash = SubtitleService.computeCacheHash(originalEntry.text, task.model, task.targetLanguage)
