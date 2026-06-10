@@ -144,24 +144,9 @@ class TaskQueue {
 export const globalTaskQueue = new TaskQueue()
 
 function isAcceptableTranslatedEntry(entry: SubtitleEntry, targetLanguage: string) {
-    if (!entry?.translatedText) return false
-    const original = String(entry.text || '')
-    const translated = String(entry.translatedText || '')
-
-    if (translated !== original) return true
-
-    const normalizedOriginal = SubtitleService.normalizeComparisonText(original)
-    const normalizedTranslated = SubtitleService.normalizeComparisonText(translated)
-
-    if (normalizedOriginal && normalizedTranslated && normalizedOriginal !== normalizedTranslated) return true
-
-    if (!normalizedTranslated) {
-        const isNonVerbalLike = SubtitleService.isNonVerbal(original) || SubtitleService.isBracketOnlyText(SubtitleService.normalizeSubtitleText(original))
-        return isNonVerbalLike && SubtitleService.normalizeSubtitleText(translated).length > 0
-    }
-
-    if (SubtitleService.isLikelyContaminatedTranslation(original, translated)) return false
-    return SubtitleService.isAcceptableSameText(original, translated, targetLanguage)
+    const translated = entry?.translatedText ? String(entry.translatedText) : ''
+    if (!translated) return false
+    return translated !== String(entry.text || '')
 }
 
 function expandRetryEntries(entries: SubtitleEntry[], targetIds: string[]) {

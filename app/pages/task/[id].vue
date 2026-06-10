@@ -138,6 +138,7 @@
             <UButton v-if="task.step === 'done'" label="下载原始" icon="i-lucide-file-text" color="neutral" variant="ghost" @click="downloadOriginal" />
             <UButton v-if="task.step === 'review'" label="进入核对" icon="i-lucide-list-checks" color="warning" @click="openReviewPage" />
             <UButton v-if="task.step === 'done'" label="返回首页" icon="i-lucide-check-circle" color="secondary" to="/" />
+            <UButton v-if="task.step === 'done'" label="返回历史" icon="i-lucide-history" color="neutral" variant="ghost" to="/history" />
             <UButton v-else-if="task.step === 'error' || task.step === 'cancelled'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
             <UButton v-else label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
           </div>

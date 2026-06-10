@@ -62,7 +62,9 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 404, message: '无法找到原始字幕文件' })
     }
 
-    const fileName = basename(sourcePath)
+    const baseName = basename(row.file_path || 'subtitle').replace(/\.[^.]+$/, '')
+    const ext = basename(sourcePath).includes('.') ? basename(sourcePath).split('.').pop() : 'srt'
+    const fileName = `${baseName}.original.${ext}`
 
     setHeaders(event, {
         'Content-Type': 'text/plain; charset=utf-8',
