@@ -7,7 +7,6 @@
         <p class="text-neutral-500 max-w-2xl leading-relaxed">查看任务结果、失败原因与历史日志。</p>
       </div>
       <div class="flex items-center gap-2 md:pb-0.5">
-        <UButton label="返回首页" variant="outline" color="neutral" icon="i-lucide-arrow-left" to="/" />
         <UButton label="清空历史" variant="ghost" color="error" icon="i-lucide-trash-2" @click="isClearModalOpen = true" />
       </div>
     </div>
