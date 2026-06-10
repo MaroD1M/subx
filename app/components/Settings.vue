@@ -69,7 +69,7 @@
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-        <UFormField label="分块大小（估算令牌）" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
+        <UFormField label="分块大小" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
           <UInputNumber v-model="config.chunkSize" :min="100" :max="6000" :step="100" class="w-full mt-auto" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
         </UFormField>
         <UFormField label="并发任务数" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">

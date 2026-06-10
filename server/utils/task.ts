@@ -147,12 +147,13 @@ function isAcceptableTranslatedEntry(entry: SubtitleEntry, targetLanguage: strin
     if (!entry?.translatedText) return false
     const original = String(entry.text || '')
     const translated = String(entry.translatedText || '')
+
+    if (translated !== original) return true
+
     const normalizedOriginal = SubtitleService.normalizeComparisonText(original)
     const normalizedTranslated = SubtitleService.normalizeComparisonText(translated)
 
-    if (normalizedOriginal && normalizedTranslated && normalizedOriginal !== normalizedTranslated) {
-        return true
-    }
+    if (normalizedOriginal && normalizedTranslated && normalizedOriginal !== normalizedTranslated) return true
 
     if (!normalizedTranslated) {
         const isNonVerbalLike = SubtitleService.isNonVerbal(original) || SubtitleService.isBracketOnlyText(SubtitleService.normalizeSubtitleText(original))
@@ -300,6 +301,10 @@ async function translateChunkWithRetry(
             if (acceptedCount === 0) {
                 const sampleIds = results.slice(0, 3).map(entry => `#${entry.id} "${String(entry.text || '').substring(0, 30)}" → "${String(entry.translatedText || '').substring(0, 30)}"`)
                 writeTaskLog(taskId, 'translating', 'warn', `[解析内容] ${chunkLabel} 已匹配全部 ID 但翻译均未通过校验(有效 ${acceptedCount}/${expectedCount})，示例: ${sampleIds.join(' | ')}`)
+                const first = results[0]
+                if (first) {
+                    console.log(`[Validate Reject] task=${taskId} id=${first.id} orig="${String(first.text).substring(0, 60)}" trans="${String(first.translatedText).substring(0, 60)}" normOrig="${SubtitleService.normalizeComparisonText(first.text).substring(0, 60)}" normTrans="${SubtitleService.normalizeComparisonText(first.translatedText).substring(0, 60)}"`)
+                }
                 if (attempt >= 2) {
                     writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 连续 ' + (attempt + 1) + ' 次尝试均无有效翻译，停止整块重试并转入更细粒度补译')
                     break
@@ -344,6 +349,7 @@ async function translateChunkWithRetry(
 
         for (const entry of unresolvedEntries) {
             assertTaskNotCancelled(taskId)
+            console.log(`[Task ${taskId}] 补译 #${entry.id}/${unresolvedEntries.length}: "${String(entry.text).substring(0, 40)}"`)
             diagnostics.singleRetryAttempts++
             try {
                 const singleResults = await TranslationService.translateChunk(
