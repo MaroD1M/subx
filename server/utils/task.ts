@@ -240,12 +240,7 @@ async function translateChunkWithRetry(
             for (const entry of results) {
                 const id = String(entry.id)
                 const translatedText = String(entry.translatedText || '')
-                const accepted = translatedText && (
-                    translatedText !== String(entry.text || '')
-                    || SubtitleService.isNonVerbal(entry.text)
-                    || SubtitleService.isLikelySongLyric(entry.text)
-                    || SubtitleService.isLikelyMetadataOrProperNoun(entry.text)
-                )
+                const accepted = translatedText.length > 0
                 if (accepted) {
                     returnedIds.add(id)
                     finalResults.set(id, entry)
@@ -273,6 +268,7 @@ async function translateChunkWithRetry(
             }
 
             const acceptedCount = expectedCount - unresolvedEntries.length
+            const sameTextCount = results.filter(entry => String(entry.translatedText || '') === String(entry.text || '')).length
             const contaminatedIds = results
                 .filter(entry => SubtitleService.isLikelyContaminatedTranslation(String(entry.text || ''), String(entry.translatedText || '')))
                 .map(entry => String(entry.id))
@@ -280,12 +276,13 @@ async function translateChunkWithRetry(
             diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...missingIds])).slice(0, 20)
             diagnostics.contaminatedIds = Array.from(new Set([...diagnostics.contaminatedIds, ...contaminatedIds])).slice(0, 20)
             const missingSuffix = missingIds.length > 0 ? `，缺失 ID: ${missingIds.join(', ')}` : ''
+            const sameTextSuffix = sameTextCount > 0 ? `，未改动原文: ${sameTextCount} 条(将进入核对)` : ''
             const contaminationSuffix = contaminatedIds.length > 0 ? `，疑似串条 ID: ${contaminatedIds.join(', ')}` : ''
             writeTaskLog(
                 taskId,
                 'translating',
-                'warn',
-                '[校验] ' + chunkLabel + ' AI 返回 ' + results.length + '/' + expectedCount + '，有效 ' + acceptedCount + '/' + expectedCount + '，待处理 ' + unresolvedEntries.length + ' 条' + missingSuffix + contaminationSuffix
+                sameTextCount > 0 ? 'warn' : 'info',
+                '[校验] ' + chunkLabel + ' AI 返回 ' + results.length + '/' + expectedCount + '，有效 ' + acceptedCount + '/' + expectedCount + '，待处理 ' + unresolvedEntries.length + ' 条' + sameTextSuffix + missingSuffix + contaminationSuffix
             )
 
             if (acceptedCount === 0) {
@@ -327,13 +324,7 @@ async function translateChunkWithRetry(
             if (Array.isArray(e?.partialResults) && e.partialResults.length > 0) {
                 for (const entry of e.partialResults) {
                     const id = String(entry.id)
-                    const translatedText = String(entry.translatedText || '')
-                    if (translatedText && (
-                        translatedText !== String(entry.text || '')
-                        || SubtitleService.isNonVerbal(entry.text)
-                        || SubtitleService.isLikelySongLyric(entry.text)
-                        || SubtitleService.isLikelyMetadataOrProperNoun(entry.text)
-                    )) {
+                    if (entry?.translatedText) {
                         finalResults.set(id, entry)
                     }
                 }
