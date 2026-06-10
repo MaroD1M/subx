@@ -33,14 +33,14 @@
         </div>
         <div v-else-if="diagnosticsOverview" class="space-y-4">
           <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">完成</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.summary.doneTasks }}</p></div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">待核对</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.summary.reviewTasks }}</p></div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">失败</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.summary.errorTasks }}</p></div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">取消</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.summary.cancelledTasks }}</p></div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">缺条块</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.translation.missingIdChunks }}</p></div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">重试块</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.translation.retriedChunks }}</p></div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">单条补译</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.translation.singleRetriedChunks }}</p></div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 px-3 py-3"><p class="text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400">回退块</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ diagnosticsOverview.translation.fallbackChunks }}</p></div>
+            <div class="surface-card px-3 py-3"><p class="stat-label">完成</p><p class="stat-value text-green-600 dark:text-green-400">{{ diagnosticsOverview.summary.doneTasks }}</p></div>
+            <div class="surface-card px-3 py-3"><p class="stat-label">待核对</p><p class="stat-value text-amber-600 dark:text-amber-400">{{ diagnosticsOverview.summary.reviewTasks }}</p></div>
+            <div class="surface-card px-3 py-3"><p class="stat-label">失败</p><p class="stat-value text-red-600 dark:text-red-400">{{ diagnosticsOverview.summary.errorTasks }}</p></div>
+            <div class="surface-card px-3 py-3"><p class="stat-label">取消</p><p class="stat-value text-gray-600 dark:text-gray-400">{{ diagnosticsOverview.summary.cancelledTasks }}</p></div>
+            <div class="surface-card px-3 py-3"><p class="stat-label">缺条</p><p class="stat-value">{{ diagnosticsOverview.translation.missingIdChunks }}</p></div>
+            <div class="surface-card px-3 py-3"><p class="stat-label">重试</p><p class="stat-value">{{ diagnosticsOverview.translation.retriedChunks }}</p></div>
+            <div class="surface-card px-3 py-3"><p class="stat-label">补译</p><p class="stat-value">{{ diagnosticsOverview.translation.singleRetriedChunks }}</p></div>
+            <div class="surface-card px-3 py-3"><p class="stat-label">回退</p><p class="stat-value">{{ diagnosticsOverview.translation.fallbackChunks }}</p></div>
           </div>
 
           <div class="grid gap-4 xl:grid-cols-3">
@@ -54,7 +54,7 @@
             <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
               <p class="text-xs font-semibold text-gray-900 dark:text-white">响应异常</p>
               <div class="flex flex-wrap gap-2">
-                <UBadge v-for="issue in diagnosticsOverview.responseIssues.slice(0, 8)" :key="issue.issue" color="warning" variant="soft">{{ issue.issue }} × {{ issue.count }}</UBadge>
+                <UBadge v-for="issue in diagnosticsOverview.responseIssues.slice(0, 8)" :key="issue.issue" color="warning" variant="soft">{{ issueLabel(issue.issue) }} × {{ issue.count }}</UBadge>
                 <span v-if="!diagnosticsOverview.responseIssues.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
               </div>
             </div>
@@ -222,12 +222,24 @@ const reviewReasonLabels = {
   overlong_translation: '译文异常偏长'
 }
 
+const issueLabels = {
+  empty: '空响应',
+  refusal: '疑似拒答',
+  filtered: '已被过滤',
+  structured: '结构化输出',
+  plain: '文本输出(正常)'
+}
+
 function riskTagLabel(tag) {
   return riskTagLabels[tag] || tag
 }
 
 function reviewReasonLabel(reason) {
   return reviewReasonLabels[reason] || reason
+}
+
+function issueLabel(issue) {
+  return issueLabels[issue] || issue
 }
 
 

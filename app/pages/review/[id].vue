@@ -17,17 +17,21 @@
     </div>
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/40 p-4">
-        <p class="text-[10px] uppercase tracking-widest text-gray-400">总条数</p>
-        <p class="mt-1.5 text-2xl font-bold text-gray-900 dark:text-white">{{ summary.total }}</p>
+      <div class="surface-card p-4">
+        <p class="stat-label">总条数</p>
+        <p class="stat-value">{{ summary.total }}</p>
       </div>
-      <div class="rounded-2xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/70 dark:bg-amber-900/10 p-4">
-        <p class="text-[10px] uppercase tracking-widest text-amber-500">待核对</p>
-        <p class="mt-1.5 text-2xl font-bold text-amber-700 dark:text-amber-300">{{ summary.needsReview }}</p>
+      <div class="surface-card p-4 ring-1 ring-amber-200/50 dark:ring-amber-800/30">
+        <p class="stat-label text-amber-500">待核对</p>
+        <p class="stat-value text-amber-700 dark:text-amber-300">{{ summary.needsReview }}</p>
       </div>
-      <div class="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-900/10 p-4">
-        <p class="text-[10px] uppercase tracking-widest text-blue-500">已编辑</p>
-        <p class="mt-1.5 text-2xl font-bold text-blue-700 dark:text-blue-300">{{ summary.edited }}</p>
+      <div class="surface-card p-4 ring-1 ring-blue-200/50 dark:ring-blue-800/30">
+        <p class="stat-label text-blue-500">已编辑</p>
+        <p class="stat-value text-blue-700 dark:text-blue-300">{{ summary.edited }}</p>
+      </div>
+      <div class="surface-card p-4">
+        <p class="stat-label">当前可见</p>
+        <p class="stat-value">{{ filteredEntries.length }}</p>
       </div>
       <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/40 p-4">
         <p class="text-[10px] uppercase tracking-widest text-gray-400">当前可见</p>
