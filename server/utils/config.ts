@@ -113,5 +113,22 @@ export const ConfigService = {
                 }
             }
         })
+
+        const taskLogDir = join(process.cwd(), 'db', 'logs')
+        if (existsSync(taskLogDir)) {
+            const taskFiles = readdirSync(taskLogDir)
+            taskFiles.forEach(file => {
+                const filePath = join(taskLogDir, file)
+                const stats = statSync(filePath)
+                if (now - stats.mtimeMs > maxAge) {
+                    try {
+                        rmSync(filePath)
+                        console.log(`[Config] Cleaned up old task log: ${file}`)
+                    } catch (e) {
+                        console.error(`[Config] Failed to cleanup task log: ${file}`, e)
+                    }
+                }
+            })
+        }
     }
 }

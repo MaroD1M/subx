@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import pLimit from 'p-limit'
 import { join, dirname, basename } from 'path'
-import { existsSync, mkdirSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, appendFileSync } from 'fs'
 import { EventEmitter } from 'events'
 import { useDb } from './db'
 import { VideoService } from './video'
@@ -72,6 +72,14 @@ function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'erro
     const resolvedCategory = category || resolveLogCategory(step, level, message)
     db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
         .run(taskId, step, resolvedCategory, level, message)
+
+    try {
+        const logFile = join(process.cwd(), 'db', 'logs', `task_${taskId}.log`)
+        const dir = join(process.cwd(), 'db', 'logs')
+        if (!existsSync(dir)) { mkdirSync(dir, { recursive: true }) }
+        const ts = new Date().toISOString().replace('T', ' ').substring(0, 19)
+        appendFileSync(logFile, `[${ts}] [${level.toUpperCase()}] [${step || '-'}] ${message}\n`)
+    } catch {}
 }
 
 function isTerminalStatus(status?: string | null) {
