@@ -280,6 +280,20 @@ async function translateChunkWithRetry(
             if (acceptedCount === 0) {
                 const sampleIds = results.slice(0, 3).map(entry => `#${entry.id} "${String(entry.text || '').substring(0, 30)}" → "${String(entry.translatedText || '').substring(0, 30)}"`)
                 writeTaskLog(taskId, 'translating', 'warn', `[解析内容] ${chunkLabel} 已匹配全部 ID 但翻译均未通过校验(有效 ${acceptedCount}/${expectedCount})，示例: ${sampleIds.join(' | ')}`)
+
+                const diagLines: string[] = []
+                results.forEach(entry => {
+                    const orig = String(entry.text || '')
+                    const trans = String(entry.translatedText || '')
+                    const same = trans === orig ? 'SAME' : 'DIFF'
+                    const empty = !trans ? 'EMPTY' : ''
+                    const flag = empty || same
+                    if (flag) diagLines.push(`#${entry.id} ${flag} orig="${orig}" trans="${trans}"`)
+                })
+                if (diagLines.length > 0) {
+                    writeTaskLog(taskId, 'translating', 'error', `[诊断] ${chunkLabel} 全部被拒详情:\n${diagLines.join('\n')}`)
+                }
+
                 console.log(`[REJECTED ALL] taskId=${taskId} chunk=${chunkIndex} attempt=${attempt} entries=${results.length} accepted=0`)
                 results.slice(0, 5).forEach(entry => {
                     const eid = entry.id
