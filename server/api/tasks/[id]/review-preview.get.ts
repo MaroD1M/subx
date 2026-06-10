@@ -10,6 +10,8 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const format = String(query.format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt'
   const requestedBilingualLayout = String(query.bilingualLayout || '')
+  const requestedOutputMode = String(query.outputMode || '')
+  const requestedStylePreset = String(query.subtitleStylePreset || '')
   const db = useDb()
   const task = db.prepare('SELECT output_mode, subtitle_style_preset, bilingual_layout FROM tasks WHERE task_id = ?').get(id) as any
   const rows = db.prepare(`
@@ -34,8 +36,8 @@ export default defineEventHandler(async (event) => {
   if (format === 'ass') {
     const content = SubtitleService.buildAssContent(
       entries as any,
-      task?.subtitle_style_preset || 'bilingual_simple',
-      (task?.output_mode || 'translated') as any,
+      requestedStylePreset || task?.subtitle_style_preset || 'bilingual_simple',
+      (requestedOutputMode || task?.output_mode || 'translated') as any,
       (requestedBilingualLayout === 'translated_first' || requestedBilingualLayout === 'original_first') ? requestedBilingualLayout : (task?.bilingual_layout || 'translated_first')
     )
     return { content, count: rows.length, format }

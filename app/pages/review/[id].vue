@@ -49,8 +49,10 @@
                 <span v-if="dirtyCount > 0" class="text-primary-500">待保存 {{ dirtyCount }} 条</span>
               </div>
               <div class="flex items-center gap-2 flex-wrap">
-                <USelect v-model="statusFilter" :items="filterItems" class="w-28" />
-                <USelect v-model="reasonFilter" :items="reasonFilterItems" class="w-40" />
+                <span class="text-xs text-gray-400">状态筛选</span>
+                <USelect v-model="statusFilter" :items="filterItems" class="w-24" size="xs" />
+                <span class="text-xs text-gray-400">原因筛选</span>
+                <USelect v-model="reasonFilter" :items="reasonFilterItems" class="w-44" size="xs" />
                 <UButton label="全选可见" size="xs" color="neutral" variant="ghost" @click="selectVisible" />
                 <UButton label="待核对" size="xs" color="warning" variant="ghost" @click="selectNeedsReview" />
                 <UButton label="清空选择" size="xs" color="neutral" variant="ghost" @click="clearSelection" />
@@ -408,7 +410,7 @@ async function loadReview() {
 async function loadPreview() {
   previewLoading.value = true
   try {
-    const res: any = await $fetch(`/api/tasks/${taskId}/review-preview`, { query: { format: previewFormat.value, bilingualLayout: bilingualLayout.value } })
+    const res: any = await $fetch(`/api/tasks/${taskId}/review-preview`, { query: { format: previewFormat.value, bilingualLayout: bilingualLayout.value, outputMode: exportMode.value, subtitleStylePreset: exportStyle.value } })
     previewContent.value = res.content || ''
   } catch (error: any) {
     toast.add({ title: '预览生成失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
@@ -544,6 +546,10 @@ watch(bilingualLayout, async (value) => {
   } catch (error: any) {
     toast.add({ title: '布局保存失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
   }
+  loadPreview()
+})
+
+watch([exportMode, exportStyle], () => {
   loadPreview()
 })
 
