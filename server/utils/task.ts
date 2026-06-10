@@ -15,6 +15,7 @@ import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
 
 export const taskEvents = new EventEmitter()
 const cancelledTaskIds = new Set<string>()
+const taskAbortControllers = new Map<string, AbortController>()
 
 class TaskCancelledError extends Error {
     constructor(message = '任务已取消') {
@@ -91,6 +92,7 @@ class TaskQueue {
 
     cancel(taskId: string) {
         cancelledTaskIds.add(taskId)
+        taskAbortControllers.get(taskId)?.abort()
 
         let removed = false
         const remainingQueue: typeof this.queue = []
@@ -213,7 +215,8 @@ async function translateChunkWithRetry(
     callbacks?: { onEntryTranslated?: (entry: { id: string; translatedText: string }) => void },
     streamUsage: boolean = false,
     useStreaming: boolean = false,
-    logLabel?: string
+    logLabel?: string,
+    signal?: AbortSignal
 ): Promise<{ entries: SubtitleEntry[], diagnostics: ChunkDiagnostics }> {
     const finalResults = new Map<string, SubtitleEntry>()
     let unresolvedEntries = [...chunk]
@@ -246,7 +249,7 @@ async function translateChunkWithRetry(
 
         try {
             const results = await TranslationService.translateChunk(
-                openai, unresolvedEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming
+                openai, unresolvedEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming, signal
             )
             assertTaskNotCancelled(taskId)
 
@@ -356,7 +359,8 @@ async function translateChunkWithRetry(
                     callbacks,
                     false,
                     maxRetries + 1,
-                    false
+                    false,
+                    signal
                 )
                 assertTaskNotCancelled(taskId)
                 const singleTranslated = singleResults[0]
@@ -597,6 +601,9 @@ export const TaskService = {
     async process(taskId: string, openaiConfig: { apiKey: string, baseUrl?: string }) {
         await ConfigService.cleanupLogsIfNeeded()
         assertTaskNotCancelled(taskId)
+        const abortController = new AbortController()
+        taskAbortControllers.set(taskId, abortController)
+        const signal = abortController.signal
         const task = this.getTask(taskId)
         const root = await getMediaRoot(task.rootId)
         const videoDir = root.path
@@ -767,7 +774,8 @@ export const TaskService = {
                         undefined,
                         (config.translationMode === 'stream') && (config.streamUsage || false),
                         config.translationMode === 'stream',
-                        '块 #' + (index + 1)
+                        '块 #' + (index + 1),
+                        signal
                     )
 
                     diagnosticsCollection.push(chunkResult.diagnostics)
@@ -933,6 +941,7 @@ export const TaskService = {
             useDb().prepare('UPDATE tasks SET status = \'error\', error = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(`${classified.summary} (${message})`, taskId)
         } finally {
             cancelledTaskIds.delete(taskId)
+            taskAbortControllers.delete(taskId)
             if (task.sourceType === 'embedded' && existsSync(srtPath)) {
                 try {
                     rmSync(srtPath, { force: true })

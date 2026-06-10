@@ -293,7 +293,8 @@ export const TranslationService = {
         callbacks?: StreamCallbacks,
         streamUsage: boolean = false,
         attempt: number = 0,
-        useStreaming: boolean = false
+        useStreaming: boolean = false,
+        signal?: AbortSignal
     ): Promise<SubtitleEntry[]> {
         const glossaryText = Object.entries(glossary)
             .map(([key, value]) => `${key} -> ${value}`)
@@ -372,7 +373,7 @@ ${prompt}
                 ...requestOptions,
                 messages,
                 stream: useStreaming
-            }) as any
+            }, signal ? { signal } : {}) as any
 
             let lastLogTime = Date.now()
             let lastChunkTime = Date.now()
