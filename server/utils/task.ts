@@ -291,10 +291,11 @@ async function translateChunkWithRetry(
                 results.forEach(entry => {
                     const orig = String(entry.text || '')
                     const trans = String(entry.translatedText || '')
-                    const same = trans === orig ? 'SAME' : 'DIFF'
-                    const empty = !trans ? 'EMPTY' : ''
-                    const flag = empty || same
-                    if (flag) diagLines.push(`#${entry.id} ${flag} orig="${orig}" trans="${trans}"`)
+                    const empty = !trans
+                    const same = !empty && trans === orig
+                    if (empty || same) {
+                        diagLines.push(`#${entry.id} ${empty ? 'EMPTY' : 'SAME'} orig="${orig}" trans="${trans}"`)
+                    }
                 })
                 if (diagLines.length > 0) {
                     writeTaskLog(taskId, 'translating', 'error', `[诊断] ${chunkLabel} 全部被拒详情:\n${diagLines.join('\n')}`)
@@ -313,6 +314,7 @@ async function translateChunkWithRetry(
                 }
             }
         } catch (e: any) {
+            if (e instanceof TaskCancelledError) throw e
             console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
             const detail = String(e?.message || 'unknown')
             const reason = detail.includes('[条目缺失]') ? '返回缺条' : detail.includes('[解析为空]') ? '空响应/格式异常' : detail.includes('[疑似拒答]') ? '疑似拒答/过滤' : detail.includes('[无有效译文]') ? '无有效译文' : '请求失败'
