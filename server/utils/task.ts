@@ -344,45 +344,10 @@ async function translateChunkWithRetry(
 
     if (unresolvedEntries.length > 0) {
         const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
-        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 常规重试后仍有 ${unresolvedEntries.length} 条待处理，开始逐条补译。`)
-        writeTaskLog(taskId, 'translating', 'warn', `[补译] 块 #${chunkIndex + 1} 逐条补译 ${unresolvedEntries.length} 条：${ids}`)
-
+        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 重试后仍有 ${unresolvedEntries.length} 条待处理，将回退为原文待人工核对。`)
+        writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} ${unresolvedEntries.length} 条未成功翻译，已回退原文，可在核对页手动处理：${ids}`)
         for (const entry of unresolvedEntries) {
-            assertTaskNotCancelled(taskId)
-            console.log(`[Task ${taskId}] 补译 #${entry.id}/${unresolvedEntries.length}: "${String(entry.text).substring(0, 40)}"`)
-            diagnostics.singleRetryAttempts++
-            try {
-                const singleResults = await TranslationService.translateChunk(
-                    openai,
-                    [{ ...entry }],
-                    targetLanguage,
-                    glossary,
-                    previousContext,
-                    model,
-                    taskId,
-                    chunkIndex,
-                    stylePrompt,
-                    callbacks,
-                    false,
-                    maxRetries + 1,
-                    false,
-                    signal
-                )
-                assertTaskNotCancelled(taskId)
-                const singleTranslated = singleResults[0]
-                if (singleTranslated?.translatedText && isAcceptableTranslatedEntry({ ...entry, translatedText: singleTranslated.translatedText }, targetLanguage)) {
-                    finalResults.set(String(entry.id), { ...entry, translatedText: singleTranslated.translatedText })
-                    diagnostics.singleRetrySuccesses++
-                    writeTaskLog(taskId, 'translating', 'info', `[补译成功] 块 #${chunkIndex + 1} 条目 #${entry.id} 已单条补译成功`)
-                } else {
-                    diagnostics.singleRetryFailures++
-                    writeTaskLog(taskId, 'translating', 'warn', `[补译未命中] 块 #${chunkIndex + 1} 条目 #${entry.id} 返回为空、拒答，或结果仍需人工复核`)
-                }
-            } catch (singleError: any) {
-                if (singleError instanceof TaskCancelledError) throw singleError
-                diagnostics.singleRetryFailures++
-                writeTaskLog(taskId, 'translating', 'warn', `[补译失败] 块 #${chunkIndex + 1} 条目 #${entry.id} 单条补译失败：${singleError?.message || 'unknown'}`)
-            }
+            finalResults.set(String(entry.id), { ...entry, translatedText: entry.text })
         }
     }
 
@@ -390,15 +355,13 @@ async function translateChunkWithRetry(
     if (stillMissing.length > 0) {
         const ids = stillMissing.map(entry => `#${entry.id}`).join(', ')
         diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...stillMissing.map(entry => String(entry.id))])).slice(0, 20)
-        if (diagnostics.finalStatus === 'review') {
-            diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...stillMissing.map(entry => String(entry.id))])).slice(0, 50)
-            writeTaskLog(taskId, 'translating', 'warn', `[待核对] ${chunkLabel} 仍有 ${stillMissing.length} 条待人工核对：${ids}`)
-        } else {
-            diagnostics.fallbackCount = stillMissing.length
-            diagnostics.finalStatus = 'fallback'
-            console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 补译后仍有 ${stillMissing.length} 条缺失，将回退为原文。`)
-            writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} ${stillMissing.length} 条未成功翻译，已回退原文：${ids}`)
+        diagnostics.fallbackCount = stillMissing.length
+        diagnostics.finalStatus = 'fallback'
+        for (const entry of stillMissing) {
+            finalResults.set(String(entry.id), { ...entry, translatedText: entry.text })
         }
+        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 仍有 ${stillMissing.length} 条缺失，已回退为原文。`)
+        writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} ${stillMissing.length} 条未成功翻译，已回退原文：${ids}`)
     } else if (diagnostics.validationFailures > 0 || diagnostics.singleRetryAttempts > 0) {
         diagnostics.finalStatus = 'partial'
     }
@@ -407,9 +370,7 @@ async function translateChunkWithRetry(
         entries: chunk.map(entry => {
             const translated = finalResults.get(String(entry.id))
             if (translated) return translated
-            return diagnostics.finalStatus === 'review'
-                ? { ...entry, translatedText: '' }
-                : { ...entry, translatedText: entry.text }
+            return { ...entry, translatedText: entry.text }
         }),
         diagnostics
     }

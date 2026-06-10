@@ -397,7 +397,7 @@ export const SubtitleService = {
       })
     }
 
-    return this.splitMultiSpeakerEntries(entries)
+    return entries
   },
 
   assSecondsToSrtTime(assSeconds: number): string {
@@ -422,37 +422,6 @@ export const SubtitleService = {
 
   msToAssSeconds(totalMs: number): number {
     return Math.round(Math.max(0, totalMs) / 10) / 100
-  },
-
-  splitMultiSpeakerEntries(entries: SubtitleEntry[]): SubtitleEntry[] {
-    const result: SubtitleEntry[] = []
-
-    for (const entry of entries) {
-      const text = String(entry.text || '')
-      const lines = text.split('\n').map(s => s.trim()).filter(Boolean)
-      if (lines.length <= 1) { result.push(entry); continue }
-
-      const speakerDashLines = lines.filter(line => /^\s*[-—–]\s/.test(line))
-      if (speakerDashLines.length >= 2 && lines.length === speakerDashLines.length) {
-        const parentTokens = Array.isArray(entry.formattingTokens) ? entry.formattingTokens : []
-        for (const line of lines) {
-          const childTokens = parentTokens.filter(
-            token => line.includes(token.placeholder)
-          )
-          result.push({
-            ...entry,
-            text: line,
-            prefixTag: undefined,
-            formattingTokens: childTokens.length > 0 ? childTokens : undefined
-          })
-        }
-        continue
-      }
-
-      result.push(entry)
-    }
-
-    return result.map((entry, index) => ({ ...entry, id: String(index + 1) }))
   },
 
   getDisplayText(entry: SubtitleEntry, outputMode: OutputMode, bilingualLayout: BilingualLayout): string {
