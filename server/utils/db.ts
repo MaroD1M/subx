@@ -50,15 +50,6 @@ export function useDb() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS translation_cache (
-      hash TEXT PRIMARY KEY,
-      source_text TEXT NOT NULL,
-      translated TEXT NOT NULL,
-      model TEXT NOT NULL,
-      target_lang TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
     CREATE TABLE IF NOT EXISTS translations_cache (
       hash TEXT PRIMARY KEY,
       original_text TEXT NOT NULL,
@@ -184,8 +175,6 @@ export function useDb() {
     CREATE INDEX IF NOT EXISTS idx_task_review_entries_task_id ON task_review_entries(task_id);
     CREATE INDEX IF NOT EXISTS idx_task_review_entries_status ON task_review_entries(task_id, review_status);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-    CREATE INDEX IF NOT EXISTS idx_translation_cache_hash ON translation_cache(hash);
-    CREATE INDEX IF NOT EXISTS idx_translation_cache_model_lang ON translation_cache(model, target_lang);
   `)
 
   return _db

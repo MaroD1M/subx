@@ -1,4 +1,7 @@
 import { useDb } from '../../../utils/db'
+import { SubtitleService } from '../../../utils/subtitle'
+import { getMediaRoot, resolveMediaPath } from '../../../utils/mediaRoots'
+import { existsSync } from 'fs'
 
 function toUtcIsoString(value: string | null | undefined) {
   if (!value) return value || ''
@@ -17,12 +20,42 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'Task not found' })
   }
 
-  const entries = db.prepare(`
+  let entries = db.prepare(`
     SELECT id, task_id, subtitle_id, start_time, end_time, original_text, translated_text, final_text, review_status, review_reasons, selected, edited, created_at, updated_at
     FROM task_review_entries
     WHERE task_id = ?
     ORDER BY CAST(subtitle_id AS INTEGER) ASC, id ASC
   `).all(id) as any[]
+
+  if (!entries || entries.length === 0) {
+    try {
+      const root = await getMediaRoot(task.root_id)
+      const srtPath = await resolveMediaPath(task.file_path, task.root_id)
+      if (existsSync(srtPath)) {
+        const parsed = await SubtitleService.parseSubtitle(srtPath)
+        const insertStmt = db.prepare(`
+          INSERT INTO task_review_entries (task_id, subtitle_id, start_time, end_time, original_text, translated_text, final_text, review_status, review_reasons, selected, edited, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'needs_review', '[]', 0, 0, datetime('now'), datetime('now'))
+          ON CONFLICT(task_id, subtitle_id) DO UPDATE SET
+            original_text=excluded.original_text,
+            updated_at=datetime('now')
+        `)
+        for (const entry of parsed) {
+          insertStmt.run(
+            task.task_id, entry.id,
+            entry.startTime || '', entry.endTime || '',
+            entry.text || '', '', entry.text || ''
+          )
+        }
+        entries = db.prepare(`
+          SELECT id, task_id, subtitle_id, start_time, end_time, original_text, translated_text, final_text, review_status, review_reasons, selected, edited, created_at, updated_at
+          FROM task_review_entries
+          WHERE task_id = ?
+          ORDER BY CAST(subtitle_id AS INTEGER) ASC, id ASC
+        `).all(id) as any[]
+      }
+    } catch { /* fallback: return empty entries */ }
+  }
 
   return {
     task: {
@@ -38,10 +71,10 @@ export default defineEventHandler(async (event) => {
     },
     summary: {
       total: entries.length,
-      needsReview: entries.filter(entry => ['needs_review', 'fallback_original', 'missing'].includes(entry.review_status)).length,
-      edited: entries.filter(entry => entry.edited === 1).length
+      needsReview: entries.filter((entry: any) => ['needs_review', 'fallback_original', 'missing'].includes(entry.review_status)).length,
+      edited: entries.filter((entry: any) => entry.edited === 1).length
     },
-    entries: entries.map(entry => ({
+    entries: entries.map((entry: any) => ({
       id: entry.id,
       taskId: entry.task_id,
       subtitleId: entry.subtitle_id,

@@ -125,6 +125,15 @@
           <div class="flex items-center justify-center gap-0.5">
             <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" title="查看详情" :to="`/task/${row.original.taskId}`" />
             <UButton
+              v-if="['done', 'error', 'cancelled', 'review'].includes(row.original.status)"
+              icon="i-lucide-list-checks"
+              variant="ghost"
+              color="primary"
+              size="xs"
+              title="进入核对"
+              @click="openReview(row.original.taskId)"
+            />
+            <UButton
               v-if="['error', 'cancelled', 'review', 'done'].includes(row.original.status)"
               icon="i-lucide-refresh-cw"
               variant="ghost"
@@ -134,14 +143,13 @@
               title="重新翻译"
               @click="retryTask(row.original.taskId)"
             />
-            <UButton v-if="row.original.status === 'review'" icon="i-lucide-list-checks" variant="ghost" color="primary" size="xs" title="进入核对" @click="openReview(row.original.taskId)" />
-            <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors" title="下载字幕">
-              <UIcon name="i-lucide-download" class="w-4 h-4" />
+            <a v-if="row.original.status === 'done' && row.original.subtitle_format !== 'ass'" :href="`/api/tasks/${row.original.taskId}/download?format=srt`" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors" title="下载 SRT">
+              <UIcon name="i-lucide-file-text" class="w-4 h-4" />
+            </a>
+            <a v-if="row.original.status === 'done' && row.original.subtitle_format !== 'srt'" :href="`/api/tasks/${row.original.taskId}/download?format=ass`" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-success-500 hover:text-success-700 dark:hover:text-success-300 hover:bg-success-50 dark:hover:bg-success-900/20 transition-colors" title="下载 ASS">
+              <UIcon name="i-lucide-file-code" class="w-4 h-4" />
             </a>
             <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" :loading="deletingTaskId === row.original.taskId" title="删除记录" @click="deleteTask(row.original.taskId)" />
-            <UDropdownMenu :items="historyActionItems(row.original)">
-              <UButton icon="i-lucide-ellipsis" variant="ghost" color="neutral" size="xs" title="更多操作" />
-            </UDropdownMenu>
           </div>
         </template>
       </UTable>
@@ -328,21 +336,6 @@ const columns = [
   { accessorKey: 'createdAt', header: '创建时间' },
   { id: 'actions', header: '操作' }
 ]
-
-function historyActionItems(task) {
-  const items = []
-  if (task.status === 'review') {
-    items.push({ label: '进入核对', icon: 'i-lucide-list-checks', onSelect: () => openReview(task.taskId) })
-  }
-  if (['error', 'cancelled', 'review', 'done'].includes(String(task.status || ''))) {
-    items.push({ label: '重新翻译', icon: 'i-lucide-refresh-cw', onSelect: () => retryTask(task.taskId) })
-  }
-  if (task.status === 'done') {
-    items.push({ label: '下载字幕', icon: 'i-lucide-download', to: `/api/tasks/${task.taskId}/download` })
-  }
-  items.push({ label: '删除记录', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteTask(task.taskId) })
-  return items
-}
 
 function statusColor(status) {
   switch (status) {

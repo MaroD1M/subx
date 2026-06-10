@@ -38,7 +38,6 @@ type TaskLogCategory = 'system' | 'translation' | 'export' | 'error' | 'process'
 type ChunkRiskProfile = {
     riskLevel: 'normal' | 'high'
     tags: string[]
-    recommendedChunkSize?: number
     stylePromptSuffix?: string
 }
 
@@ -149,14 +148,17 @@ function isAcceptableTranslatedEntry(entry: SubtitleEntry, targetLanguage: strin
     const translated = String(entry.translatedText || '')
     const normalizedOriginal = SubtitleService.normalizeComparisonText(original)
     const normalizedTranslated = SubtitleService.normalizeComparisonText(translated)
-    const isNonVerbalLike = SubtitleService.isNonVerbal(original) || SubtitleService.isBracketOnlyText(SubtitleService.normalizeSubtitleText(original))
+
+    if (normalizedOriginal && normalizedTranslated && normalizedOriginal !== normalizedTranslated) {
+        return true
+    }
 
     if (!normalizedTranslated) {
+        const isNonVerbalLike = SubtitleService.isNonVerbal(original) || SubtitleService.isBracketOnlyText(SubtitleService.normalizeSubtitleText(original))
         return isNonVerbalLike && SubtitleService.normalizeSubtitleText(translated).length > 0
     }
 
     if (SubtitleService.isLikelyContaminatedTranslation(original, translated)) return false
-    if (normalizedOriginal !== normalizedTranslated) return true
     return SubtitleService.isAcceptableSameText(original, translated, targetLanguage)
 }
 
@@ -165,27 +167,6 @@ function buildStablePreviousContext(entries: SubtitleEntry[]) {
         ...entry,
         translatedText: undefined
     }))
-}
-
-function getConservativeBatchSize(tags: string[]) {
-    if (tags.some(tag => ['lyrics', 'formatting_tokens', 'non_dialogue', 'multi_line_dialogue'].includes(tag))) {
-        return 6
-    }
-    if (tags.includes('long_text')) {
-        return 4
-    }
-    return 8
-}
-
-function splitConservativeBatches(entries: SubtitleEntry[], tags: string[]) {
-    const batchSize = Math.max(1, getConservativeBatchSize(tags))
-    if (entries.length <= batchSize) return [entries]
-
-    const batches: SubtitleEntry[][] = []
-    for (let index = 0; index < entries.length; index += batchSize) {
-        batches.push(entries.slice(index, index + batchSize))
-    }
-    return batches
 }
 
 function expandRetryEntries(entries: SubtitleEntry[], targetIds: string[]) {
@@ -490,9 +471,8 @@ function persistReviewEntries(taskId: string, entries: SubtitleEntry[], issues: 
 }
 
 
-function analyzeChunkRisk(entries: SubtitleEntry[], baseChunkSize: number): ChunkRiskProfile {
+function analyzeChunkRisk(entries: SubtitleEntry[]): ChunkRiskProfile {
     const tags = new Set<string>()
-    let score = 0
 
     for (const entry of entries) {
         const text = String(entry.text || '')
@@ -501,35 +481,23 @@ function analyzeChunkRisk(entries: SubtitleEntry[], baseChunkSize: number): Chun
 
         if (SubtitleService.isLikelySongLyric(text)) {
             tags.add('lyrics')
-            score += 2
         }
-
         if (lines.length > 0 && lines.every(line => /^[\[(（【].*[\])）】]$/.test(line))) {
             tags.add('non_dialogue')
-            score += 1
         }
-
         if (normalized.includes('__SUBX_FMT_')) {
             tags.add('formatting_tokens')
         }
-
         if (lines.length >= 2 && lines.some(line => /[\u4e00-\u9fff]/.test(line)) && lines.some(line => /[A-Za-z]/.test(line))) {
             tags.add('bilingual_source')
-            score += 2
         }
-
         if (lines.length >= 3) {
             tags.add('multi_line_dialogue')
         }
-
         if (normalized.length >= 120) {
             tags.add('long_text')
-            score += 1
         }
     }
-
-    const riskLevel = score >= 3 ? 'high' : 'normal'
-    const recommendedChunkSize = riskLevel === 'high' ? Math.max(400, Math.floor(baseChunkSize * 0.55)) : baseChunkSize
 
     const styleHints: string[] = []
     if (tags.has('lyrics')) styleHints.push('当前块疑似歌词，请保留歌词节奏与换行，不要省略短句，不要把多行歌词合并成一行。')
@@ -538,9 +506,8 @@ function analyzeChunkRisk(entries: SubtitleEntry[], baseChunkSize: number): Chun
     if (tags.has('formatting_tokens')) styleHints.push('当前块包含格式占位符，必须严格保留所有 __SUBX_FMT_n__ 占位符及顺序。')
 
     return {
-        riskLevel,
+        riskLevel: 'normal',
         tags: Array.from(tags),
-        recommendedChunkSize,
         stylePromptSuffix: styleHints.length ? styleHints.join('\n') : undefined
     }
 }
@@ -646,7 +613,7 @@ export const TaskService = {
             : join(tempDir, `${taskId}.srt`)
         const baseName = task.filePath.replace(/\.[^.]+$/, '')
         const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
-        const outputExt = 'srt'
+        const outputExt = task.subtitleFormat === 'both' ? 'ass' : (task.subtitleFormat || 'srt')
         const outputSuffix = task.outputMode === 'original' ? 'original' : task.targetLanguage
         const inputPath = await resolveMediaPath(task.filePath, task.rootId)
         const outputBaseName = basename(cleanName)
@@ -675,15 +642,7 @@ export const TaskService = {
             console.log(`[Task] Using chunk size: ${chunkSize}`)
 
             const initialChunks = SubtitleService.chunkByTokens(allEntries, chunkSize)
-            const chunks = initialChunks.flatMap((chunk, index) => {
-                const risk = analyzeChunkRisk(chunk, chunkSize)
-                if (risk.riskLevel !== 'high' || !risk.recommendedChunkSize || risk.recommendedChunkSize >= chunkSize) return [chunk]
-                const subChunks = SubtitleService.chunkByTokens(chunk, risk.recommendedChunkSize)
-                if (subChunks.length > 1) {
-                    writeTaskLog(taskId, 'parsing', 'info', `[风险分块] 原块 #${index + 1} 命中 ${risk.tags.join(', ')}，已从 1 块细分为 ${subChunks.length} 块（chunkSize ${chunkSize} -> ${risk.recommendedChunkSize}）`)
-                }
-                return subChunks
-            })
+            const chunks = initialChunks
             const totalChunks = chunks.length
             await this.updateStatus(taskId, 'parsing', 25, { log: `解析完成，共划分为 ${totalChunks} 个文本块。` })
 
@@ -793,82 +752,52 @@ export const TaskService = {
                         return entry
                     })
                 } else {
-                    const chunkRisk = analyzeChunkRisk(uncachedEntries, chunkSize)
+                    const chunkRisk = analyzeChunkRisk(uncachedEntries)
                     const effectiveStylePrompt = [stylePrompt, chunkRisk.stylePromptSuffix].filter(Boolean).join('\n\n')
                     const stablePreviousContext: SubtitleEntry[] = []
-                    if (chunkRisk.riskLevel === 'high') {
-                        writeTaskLog(taskId, 'translating', 'info', `[风险块] 块 #${index + 1} 命中 ${chunkRisk.tags.join(', ')}，启用保守翻译策略`)
-                    }
 
-                    const conservativeBatches = chunkRisk.riskLevel === 'high'
-                        ? splitConservativeBatches(uncachedEntries, chunkRisk.tags)
-                        : [uncachedEntries]
+                    const idMapping = new Map<string, string>()
+                    const remappedChunk: SubtitleEntry[] = uncachedEntries.map((entry, i) => {
+                        const sequentialId = String(i + 1)
+                        idMapping.set(sequentialId, String(entry.id))
+                        return { ...entry, id: sequentialId }
+                    })
 
-                    if (conservativeBatches.length > 1) {
-                        writeTaskLog(taskId, 'translating', 'info', '[保守分批] 块 #' + (index + 1) + ' 已拆为 ' + conservativeBatches.length + ' 个子批次，降低串条与错配风险')
-                    }
+                    const chunkResult = await translateChunkWithRetry(
+                        openai, remappedChunk, task.targetLanguage, glossary,
+                        stablePreviousContext, task.model, taskId, index,
+                        effectiveStylePrompt, maxRetries,
+                        undefined,
+                        (config.translationMode === 'stream') && (config.streamUsage || false),
+                        config.translationMode === 'stream',
+                        '块 #' + (index + 1)
+                    )
+
+                    diagnosticsCollection.push(chunkResult.diagnostics)
+                    const allowCache = chunkResult.diagnostics.validationFailures === 0
+                        && chunkResult.diagnostics.singleRetryAttempts === 0
+                        && chunkResult.diagnostics.fallbackCount === 0
 
                     const aiResultByOriginalId = new Map<string, SubtitleEntry>()
+                    for (const entry of chunkResult.entries) {
+                        const originalId = idMapping.get(String(entry.id))
+                        if (!originalId) continue
+                        const originalEntry = uncachedEntries.find(e => String(e.id) === originalId)
+                        if (!originalEntry) continue
 
-                    for (const [batchIndex, batchEntries] of conservativeBatches.entries()) {
-                        assertTaskNotCancelled(taskId)
-                        const idMapping = new Map<string, string>()
-                        const remappedChunk: SubtitleEntry[] = batchEntries.map((entry, i) => {
-                            const sequentialId = String(i + 1)
-                            idMapping.set(sequentialId, String(entry.id))
-                            return { ...entry, id: sequentialId }
-                        })
+                        const restoredEntry: SubtitleEntry = {
+                            ...originalEntry,
+                            id: originalId,
+                            translatedText: entry.translatedText
+                        }
+                        aiResultByOriginalId.set(originalId, restoredEntry)
 
-                        const firstOriginalId = String(batchEntries[0]?.id || '')
-                        const lastOriginalId = String(batchEntries[batchEntries.length - 1]?.id || firstOriginalId)
-                        const batchLabel = conservativeBatches.length > 1
-                            ? '块 #' + (index + 1) + '.' + (batchIndex + 1) + '（原字幕 #' + firstOriginalId + (lastOriginalId && lastOriginalId !== firstOriginalId ? '-' + lastOriginalId : '') + '）'
-                            : '块 #' + (index + 1)
-                        const chunkResult = await translateChunkWithRetry(
-                            openai,
-                            remappedChunk,
-                            task.targetLanguage,
-                            glossary,
-                            stablePreviousContext,
-                            task.model,
-                            taskId,
-                            index,
-                            effectiveStylePrompt,
-                            maxRetries,
-                            undefined,
-                            (config.translationMode === 'stream') && (config.streamUsage || false),
-                            config.translationMode === 'stream',
-                            batchLabel
-                        )
-
-                        diagnosticsCollection.push(chunkResult.diagnostics)
-                        const allowCache = chunkRisk.riskLevel === 'normal'
-                            && chunkResult.diagnostics.validationFailures === 0
-                            && chunkResult.diagnostics.singleRetryAttempts === 0
-                            && chunkResult.diagnostics.fallbackCount === 0
-
-                        for (const entry of chunkResult.entries) {
-                            const originalId = idMapping.get(String(entry.id))
-                            if (!originalId) continue
-                            const originalEntry = batchEntries.find(e => String(e.id) === originalId)
-                            if (!originalEntry) continue
-
-                            const restoredEntry: SubtitleEntry = {
-                                ...originalEntry,
-                                id: originalId,
-                                translatedText: entry.translatedText
-                            }
-                            aiResultByOriginalId.set(originalId, restoredEntry)
-
-                            if (
-                                allowCache
-                                && entry.translatedText
-                                && isAcceptableTranslatedEntry({ ...originalEntry, translatedText: entry.translatedText }, task.targetLanguage)
-                                && !SubtitleService.isNonVerbal(originalEntry.text)
-                            ) {
-                                const cacheHash = SubtitleService.computeCacheHash(originalEntry.text, task.model, task.targetLanguage)
-                                SubtitleService.setCachedTranslation(cacheHash, originalEntry.text, entry.translatedText, task.model, task.targetLanguage)
-                            }
+                        if (allowCache && entry.translatedText
+                            && isAcceptableTranslatedEntry({ ...originalEntry, translatedText: entry.translatedText }, task.targetLanguage)
+                            && !SubtitleService.isNonVerbal(originalEntry.text)
+                        ) {
+                            const cacheHash = SubtitleService.computeCacheHash(originalEntry.text, task.model, task.targetLanguage)
+                            SubtitleService.setCachedTranslation(cacheHash, originalEntry.text, entry.translatedText, task.model, task.targetLanguage)
                         }
                     }
 
