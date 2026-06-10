@@ -254,6 +254,12 @@ async function translateChunkWithRetry(
             const unresolvedIds = unresolvedEntries
                 .map(entry => String(entry.id))
                 .filter(id => !finalResults.has(id))
+
+            if (unresolvedIds.length === 0) {
+                unresolvedEntries = []
+                break
+            }
+
             const retryIds = Array.from(new Set([...unresolvedIds, ...expandRetryEntries(unresolvedEntries, missingIds).map(entry => String(entry.id))]))
             unresolvedEntries = unresolvedEntries.filter(entry => retryIds.includes(String(entry.id)))
 
@@ -605,7 +611,7 @@ export const TaskService = {
             const allEntries = await SubtitleService.parseSubtitle(srtPath)
 
             const config = await ConfigService.getConfig()
-            const chunkSize = Math.min(config.chunkSize || 2000, 2000)
+            const chunkSize = Math.max(500, config.chunkSize || 5000)
             const subtitleFormat = task.subtitleFormat || config.subtitleFormat || 'srt'
             const subtitleStylePreset = task.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple'
             const bilingualLayout = task.bilingualLayout || config.bilingualLayout || 'translated_first'
