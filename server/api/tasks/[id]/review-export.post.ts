@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const db = useDb()
+  const body = await readBody(event)
   const task = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(id) as any
   if (!task) {
     throw createError({ statusCode: 404, message: 'Task not found' })
@@ -48,9 +49,9 @@ export default defineEventHandler(async (event) => {
   const savedPath = await SubtitleService.writeSubtitle(
     entries as any,
     outputPath,
-    task.output_mode || 'translated',
+    body.outputMode || task.output_mode || 'translated',
     subtitleFormat,
-    task.subtitle_style_preset || 'bilingual_simple',
+    body.subtitleStylePreset || task.subtitle_style_preset || 'bilingual_simple',
     task.bilingual_layout || 'translated_first',
     sourceSubtitlePath
   )

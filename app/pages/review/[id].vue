@@ -10,6 +10,8 @@
         <UButton label="返回任务" color="neutral" variant="ghost" :to="`/task/${taskId}`" />
         <UButton label="放弃成果" color="error" variant="soft" @click="discardReview" />
         <UButton label="导出结果" color="primary" :loading="exporting" @click="exportReviewed" />
+        <USelect v-model="exportMode" :items="exportModeItems" class="w-28" title="导出模式" />
+        <USelect v-model="exportStyle" :items="exportStyleItems" class="w-36" title="字幕样式" />
       </div>
     </div>
 
@@ -155,6 +157,8 @@ const previewLoading = ref(false)
 const previewContent = ref('')
 const previewFormat = ref<'srt' | 'ass'>('srt')
 const bilingualLayout = ref<'translated_first' | 'original_first'>('translated_first')
+const exportMode = ref<'translated' | 'bilingual' | 'original'>('translated')
+const exportStyle = ref<string>('bilingual_simple')
 const statusFilter = ref('all')
 const reasonFilter = ref('all')
 const summary = reactive({ total: 0, needsReview: 0, edited: 0 })
@@ -165,6 +169,20 @@ const entrySnapshots = ref<Record<string, { finalText: string, reviewStatus: str
 const previewFormatItems = [
   { label: 'SRT', value: 'srt' },
   { label: 'ASS', value: 'ass' }
+]
+
+const exportModeItems = [
+  { label: '仅译文', value: 'translated' },
+  { label: '双语', value: 'bilingual' },
+  { label: '仅原文', value: 'original' }
+]
+
+const exportStyleItems = [
+  { label: '简洁双语', value: 'bilingual_simple' },
+  { label: '影院风格', value: 'bilingual_cinema' },
+  { label: '学习模式', value: 'bilingual_study' },
+  { label: '紧凑模式', value: 'bilingual_compact' },
+  { label: '单色模式', value: 'bilingual_mono' }
 ]
 
 const bilingualLayoutItems = [
@@ -361,6 +379,8 @@ async function loadReview() {
   taskMeta.outputMode = res.task?.outputMode || 'translated'
   taskMeta.bilingualLayout = res.task?.bilingualLayout || 'translated_first'
   bilingualLayout.value = taskMeta.bilingualLayout
+  exportMode.value = taskMeta.outputMode as any
+  exportStyle.value = res.task?.subtitleStylePreset || 'bilingual_simple'
   entries.value = res.entries
   rebuildSnapshots(res.entries || [])
 
@@ -468,7 +488,10 @@ async function exportReviewed() {
   exporting.value = true
   try {
     await saveChanges(false)
-    await $fetch(`/api/tasks/${taskId}/review-export`, { method: 'POST' })
+    await $fetch(`/api/tasks/${taskId}/review-export`, {
+      method: 'POST',
+      body: { outputMode: exportMode.value, subtitleStylePreset: exportStyle.value }
+    })
     toast.add({ title: '已导出最终字幕', color: 'success' })
     await navigateTo(`/task/${taskId}`)
   } catch (error: any) {

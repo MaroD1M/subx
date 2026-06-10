@@ -665,7 +665,7 @@ export const SubtitleService = {
 
   buildSrtText(text: unknown, prefixTag = '', formattingTokens: FormattingToken[] = []): string {
     const restored = this.restoreFormattingTokens(text, formattingTokens, 'srt')
-    const normalized = this.sanitizeSrtText(restored)
+    const normalized = this.sanitizeSrtText(restored).replace(formattingPlaceholderPattern, '')
     return prefixTag ? `${prefixTag}${normalized}` : normalized
   },
 
@@ -841,7 +841,7 @@ export const SubtitleService = {
     }))
 
     const basePath = outputPath.replace(/\.[^.]+$/, '')
-    const srtContent = srtParser.toSrt(srtEntries as any)
+    const srtContent = srtParser.toSrt(srtEntries as any).replace(formattingPlaceholderPattern, '')
 
     if (subtitleFormat === 'srt') {
       const srtPath = `${basePath}.srt`
@@ -852,9 +852,10 @@ export const SubtitleService = {
 
     const sourceExt = sourceSubtitlePath?.split('.').pop()?.toLowerCase()
     const hasOriginalAss = !!sourceSubtitlePath && (sourceExt === 'ass' || sourceExt === 'ssa') && existsSync(sourceSubtitlePath)
-    const assContent = hasOriginalAss
+    const assContent = (hasOriginalAss
       ? this.rewriteExistingAss(readFileSync(sourceSubtitlePath, 'utf-8'), entries, outputMode, bilingualLayout, subtitleStylePreset)
       : this.buildAssContent(entries, subtitleStylePreset, outputMode, bilingualLayout)
+    ).replace(formattingPlaceholderPattern, '')
 
     const assPath = `${basePath}.ass`
 
