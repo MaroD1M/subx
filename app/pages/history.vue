@@ -279,7 +279,7 @@ async function deleteTask(taskId) {
 }
 
 function openReview(taskId) {
-  navigateTo(`/task/${taskId}/review`)
+  navigateTo(`/review/${taskId}`)
 }
 
 function shouldShowExpand(filePath) {

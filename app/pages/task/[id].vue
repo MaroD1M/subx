@@ -472,7 +472,7 @@ function downloadSrt() {
 
 function openReviewPage(subtitleId?: string) {
   const query = subtitleId ? `?focus=${encodeURIComponent(String(subtitleId))}` : ''
-  navigateTo(`/task/${taskId}/review${query}`)
+  navigateTo(`/review/${taskId}${query}`)
 }
 
 async function cancelTask() {
