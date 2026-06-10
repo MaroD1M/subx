@@ -26,16 +26,17 @@ function buildTranslationPrompt(
     return `你是专业影视字幕翻译。将以下字幕逐条翻译为地道的${targetLanguage}。
 ${styleBlock}
 输出格式（严格遵守！）：
-- 默认使用纯文本逐条输出：每条翻译占两行，第一行是序号，第二行是翻译文本，条目之间用一个空行分隔
-- 例如：1
+- 必须使用纯文本逐条输出，绝对不要输出 JSON 或代码块
+- 每条翻译占两行：第一行是序号，第二行是翻译文本，条目之间用一个空行分隔
+- 例如：
+1
 你好
 
 2
 世界
-- 如果你非常确定可以稳定输出结构化结果，才允许返回 JSON：{"items":[{"id":"1","translatedText":"..."},{"id":"2","translatedText":"..."}]}
-- 无论是纯文本还是 JSON，每个 id 必须与输入序号完全一致，且所有条目都必须返回，不能增减任何条目
-- 不要输出任何其他内容（不要 markdown、不要解释、不要编号前缀）
-- 不要输出任何字幕格式控制标签，例如 {\an8}、\N、<i>、</i>、<font> 等
+- 每个 id 必须与输入序号完全一致，且所有条目都必须返回，不能增减任何条目
+- 不要输出任何其他内容（不要 markdown、不要解释、不要编号前缀、不要用代码块反引号包裹）
+- 不要输出任何字幕格式控制标签，例如 {\an8}、\\N、<i>、</i>、<font> 等
 - 如果原文中出现形如 __SUBX_FMT_1__ 的占位符，必须在译文中原样保留，不可翻译、不可删除、不可改序
 - 即使某条原文很短、像歌词、像专有名词、像年份/括号说明，也必须输出对应序号和结果
 - 如果目标语言与原文语言接近（如繁体转简体、同语种字形转换），允许个别条目与原文相同，但仍必须逐条输出，不可省略
@@ -68,8 +69,12 @@ function normalizeAiOutput(raw: string): string {
 }
 
 function extractIdFromLine(line: string): string | null {
-    const normalized = line.trim().replace(/^[（(【\[]?(?:id|ID)[:：#\s]*/, '').replace(/[）)】\]]$/, '')
-    const match = normalized.match(/^(\d+)(?:[.:：)、\]\s-].*)?$/)
+    const normalized = line.trim()
+        .replace(/^(?:line|entry|item|词条|条目|序号)[\s:：]*/i, '')
+        .replace(/^[（(【\[]?(?:id|ID)[:：#\s]*/, '')
+        .replace(/^[#№]/, '')
+        .replace(/[）)】\]]$/, '')
+    const match = normalized.match(/^(\d+)(?:[.:：)、\]\s\-\u2013\u2014\u2015\u3001].*)?$/)
     return match?.[1] || null
 }
 
@@ -113,26 +118,46 @@ function extractJsonCandidate(fullContent: string): string | null {
     return null
 }
 
+function repairJsonText(raw: string): string {
+    let text = String(raw || '').trim()
+    if (!text) return text
+
+    text = text.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+    text = text.replace(/,\s*([}\]])/g, '$1')
+    text = text.replace(/([{,]\s*)([a-zA-Z_$][\w$]*)\s*:/g, '$1"$2":')
+    text = text.replace(/'/g, '"')
+    text = text.replace(/\\'/g, "'")
+
+    return text
+}
+
+function tryParseJson(text: string): any | null {
+    try { return JSON.parse(text) } catch {}
+    const repaired = repairJsonText(text)
+    if (repaired !== text) {
+        try { return JSON.parse(repaired) } catch {}
+    }
+    return null
+}
+
 function parseJsonTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
     const result = new Map<string, string>()
     const expectedSet = new Set(expectedIds)
     const candidate = extractJsonCandidate(fullContent)
     if (!candidate) return result
 
-    try {
-        const parsed = JSON.parse(candidate)
-        const items = Array.isArray(parsed)
-            ? parsed
-            : (Array.isArray(parsed?.items) ? parsed.items : [])
+    const parsed = tryParseJson(candidate)
+    if (!parsed) return result
 
-        for (const item of items) {
-            const id = String(item?.id ?? '').trim()
-            const translatedText = String(item?.translatedText ?? item?.text ?? '').trim()
-            if (!id || (!expectedSet.size ? false : !expectedSet.has(id))) continue
-            result.set(id, translatedText)
-        }
-    } catch {
-        return new Map<string, string>()
+    const items = Array.isArray(parsed)
+        ? parsed
+        : (Array.isArray(parsed?.items) ? parsed.items : [])
+
+    for (const item of items) {
+        const id = String(item?.id ?? '').trim()
+        const translatedText = String(item?.translatedText ?? item?.text ?? '').trim()
+        if (!id || (!expectedSet.size ? false : !expectedSet.has(id))) continue
+        result.set(id, translatedText)
     }
 
     return result
@@ -210,12 +235,44 @@ function summarizeResponseMeta(fullContent: string, expectedIds: string[]) {
     }
 }
 
+function parsePositionalTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
+    const result = new Map<string, string>()
+    if (!expectedIds.length) return result
+
+    const normalized = normalizeAiOutput(fullContent)
+    const lines = normalized
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => {
+            if (!line) return false
+            if (/^\s*[\[{]\s*"?items"?\s*:/i.test(line)) return false
+            if (/^\s*\{\s*"/.test(line)) return false
+            if (/^\s*[}\]]\s*$/.test(line)) return false
+            return true
+        })
+
+    if (lines.length === 0) return result
+
+    if (lines.length === expectedIds.length || (lines.length >= expectedIds.length * 0.5 && lines.length <= expectedIds.length * 2)) {
+        const useLines = lines.slice(0, expectedIds.length)
+        for (let i = 0; i < expectedIds.length; i++) {
+            result.set(expectedIds[i], useLines[i] || '')
+        }
+        return result
+    }
+
+    return result
+}
+
 export function parseAiTranslations(fullContent: string, expectedIds: string[] = []): Map<string, string> {
     const textParsed = parseTextTranslations(fullContent, expectedIds)
     if (textParsed.size > 0) return textParsed
 
     const jsonParsed = parseJsonTranslations(fullContent, expectedIds)
     if (jsonParsed.size > 0) return jsonParsed
+
+    const positionalParsed = parsePositionalTranslations(fullContent, expectedIds)
+    if (positionalParsed.size > 0) return positionalParsed
 
     return new Map<string, string>()
 }

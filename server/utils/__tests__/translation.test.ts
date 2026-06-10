@@ -44,4 +44,29 @@ describe('TranslationService parser', () => {
       ['1', '你好']
     ])
   })
+
+  it('falls back to positional matching when text and json both fail', () => {
+    const parsed = parseAiTranslations('你好\n世界\n测试', ['1', '2', '3'])
+    expect(Array.from(parsed.entries())).toEqual([
+      ['1', '你好'],
+      ['2', '世界'],
+      ['3', '测试']
+    ])
+  })
+
+  it('handles json with unquoted keys via repair', () => {
+    const parsed = parseAiTranslations('{items:[{id:"1",translatedText:"你好"},{id:"2",translatedText:"世界"}]}', ['1', '2'])
+    expect(Array.from(parsed.entries())).toEqual([
+      ['1', '你好'],
+      ['2', '世界']
+    ])
+  })
+
+  it('handles json with trailing commas via repair', () => {
+    const parsed = parseAiTranslations('{"items":[{"id":"1","translatedText":"你好",},{"id":"2","translatedText":"世界",}]}', ['1', '2'])
+    expect(Array.from(parsed.entries())).toEqual([
+      ['1', '你好'],
+      ['2', '世界']
+    ])
+  })
 })

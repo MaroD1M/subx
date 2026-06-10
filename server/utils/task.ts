@@ -271,14 +271,20 @@ async function translateChunkWithRetry(
             const results = await TranslationService.translateChunk(
                 openai, unresolvedEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming
             )
+            assertTaskNotCancelled(taskId)
 
             const expectedCount = unresolvedEntries.length
             const returnedIds = new Set<string>()
+            const acceptedIds = new Set<string>()
             for (const entry of results) {
                 const id = String(entry.id)
-                returnedIds.add(id)
+                const translatedText = String(entry.translatedText || '')
+                if (translatedText && translatedText !== String(entry.text || '')) {
+                    returnedIds.add(id)
+                }
                 if (isAcceptableTranslatedEntry(entry, targetLanguage)) {
                     finalResults.set(id, entry)
+                    acceptedIds.add(id)
                 }
             }
 
@@ -318,9 +324,13 @@ async function translateChunkWithRetry(
                 break
             }
 
-            if (acceptedCount === 0 && returnedIds.size === expectedCount && attempt >= 1) {
-                writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 连续返回完整条数但有效结果为 0，停止整块重试并转入更细粒度补译')
-                break
+            if (acceptedCount === 0) {
+                const sampleIds = results.slice(0, 3).map(entry => `#${entry.id} "${String(entry.text || '').substring(0, 30)}" → "${String(entry.translatedText || '').substring(0, 30)}"`)
+                writeTaskLog(taskId, 'translating', 'warn', `[解析内容] ${chunkLabel} 已匹配全部 ID 但翻译均未通过校验(有效 ${acceptedCount}/${expectedCount})，示例: ${sampleIds.join(' | ')}`)
+                if (attempt >= 2) {
+                    writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 连续 ' + (attempt + 1) + ' 次尝试均无有效翻译，停止整块重试并转入更细粒度补译')
+                    break
+                }
             }
         } catch (e: any) {
             console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
@@ -379,8 +389,8 @@ async function translateChunkWithRetry(
         writeTaskLog(taskId, 'translating', 'warn', `[补译] 块 #${chunkIndex + 1} 逐条补译 ${unresolvedEntries.length} 条：${ids}`)
 
         for (const entry of unresolvedEntries) {
-            diagnostics.singleRetryAttempts++
             assertTaskNotCancelled(taskId)
+            diagnostics.singleRetryAttempts++
             try {
                 const singleResults = await TranslationService.translateChunk(
                     openai,
@@ -408,6 +418,7 @@ async function translateChunkWithRetry(
                     writeTaskLog(taskId, 'translating', 'warn', `[补译未命中] 块 #${chunkIndex + 1} 条目 #${entry.id} 返回为空、拒答，或结果仍需人工复核`)
                 }
             } catch (singleError: any) {
+                if (singleError instanceof TaskCancelledError) throw singleError
                 diagnostics.singleRetryFailures++
                 writeTaskLog(taskId, 'translating', 'warn', `[补译失败] 块 #${chunkIndex + 1} 条目 #${entry.id} 单条补译失败：${singleError?.message || 'unknown'}`)
             }
