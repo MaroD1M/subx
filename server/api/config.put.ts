@@ -15,7 +15,6 @@ const ALLOWED_KEYS = new Set([
   'concurrency',
   'maxRetries',
   'translationMode',
-  'translationStrategy',
   'glossary',
   'streamUsage',
   'logRetentionDays',

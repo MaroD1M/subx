@@ -66,9 +66,6 @@
         <UFormField label="翻译模式">
           <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
         </UFormField>
-        <UFormField label="翻译策略">
-          <USelect v-model="config.translationStrategy" :items="translationStrategyItems" class="w-full" />
-        </UFormField>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
@@ -157,17 +154,12 @@ const translationModeItems = [
   { label: '非流式（推荐）', value: 'non_stream' },
   { label: '流式（兼容性较弱）', value: 'stream' }
 ]
-const translationStrategyItems = [
-  { label: '平衡模式', value: 'balanced' },
-  { label: '省配额 / 稳妥模式', value: 'efficient' }
-]
 if (config.value) {
   if (config.value.chunkSize) config.value.chunkSize = Number(config.value.chunkSize)
   if (config.value.concurrency) config.value.concurrency = Number(config.value.concurrency)
   if (config.value.maxRetries) config.value.maxRetries = Number(config.value.maxRetries)
   if (config.value.logRetentionDays) config.value.logRetentionDays = Number(config.value.logRetentionDays)
   if (!config.value.translationMode) config.value.translationMode = 'non_stream'
-  if (!config.value.translationStrategy) config.value.translationStrategy = 'balanced'
   if (config.value.streamUsage === undefined) config.value.streamUsage = false
 }
 
@@ -197,7 +189,6 @@ function buildConfigSnapshot(value: any) {
     maxRetries: Number(value?.maxRetries || 0),
     logRetentionDays: Number(value?.logRetentionDays || 0),
     translationMode: String(value?.translationMode || 'non_stream'),
-    translationStrategy: String(value?.translationStrategy || 'balanced'),
     streamUsage: !!value?.streamUsage,
     glossary: value?.glossary || {}
   })

@@ -31,7 +31,6 @@ export const ConfigService = {
             concurrency: 3,
             maxRetries: 3,
             translationMode: 'non_stream',
-            translationStrategy: 'balanced',
             streamUsage: false,
             logRetentionDays: 7,
             glossary: {},
@@ -50,8 +49,6 @@ export const ConfigService = {
                 config.streamUsage = row.value === 'true' || row.value === '1'
             } else if (row.key === 'translationMode') {
                 config.translationMode = row.value === 'stream' ? 'stream' : 'non_stream'
-            } else if (row.key === 'translationStrategy') {
-                config.translationStrategy = row.value === 'efficient' ? 'efficient' : 'balanced'
             } else {
                 (config as any)[row.key] = row.value
             }

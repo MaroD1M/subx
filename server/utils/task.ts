@@ -233,8 +233,7 @@ async function translateChunkWithRetry(
     callbacks?: { onEntryTranslated?: (entry: { id: string; translatedText: string }) => void },
     streamUsage: boolean = false,
     useStreaming: boolean = false,
-    logLabel?: string,
-    allowSingleRetry: boolean = true
+    logLabel?: string
 ): Promise<{ entries: SubtitleEntry[], diagnostics: ChunkDiagnostics }> {
     const finalResults = new Map<string, SubtitleEntry>()
     let unresolvedEntries = [...chunk]
@@ -253,8 +252,6 @@ async function translateChunkWithRetry(
         reviewIds: [],
         finalStatus: 'ok'
     }
-
-    const forceReviewMode = !allowSingleRetry
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         assertTaskNotCancelled(taskId)
@@ -317,13 +314,6 @@ async function translateChunkWithRetry(
                 '[校验] ' + chunkLabel + ' AI 返回 ' + results.length + '/' + expectedCount + '，有效 ' + acceptedCount + '/' + expectedCount + '，待处理 ' + unresolvedEntries.length + ' 条' + missingSuffix + contaminationSuffix
             )
 
-            if (forceReviewMode) {
-                diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...unresolvedEntries.map(entry => String(entry.id))])).slice(0, 50)
-                diagnostics.finalStatus = 'review'
-                writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 命中高风险块首轮失败，停止自动重试并直接转入人工核对')
-                break
-            }
-
             if (acceptedCount === 0) {
                 const sampleIds = results.slice(0, 3).map(entry => `#${entry.id} "${String(entry.text || '').substring(0, 30)}" → "${String(entry.translatedText || '').substring(0, 30)}"`)
                 writeTaskLog(taskId, 'translating', 'warn', `[解析内容] ${chunkLabel} 已匹配全部 ID 但翻译均未通过校验(有效 ${acceptedCount}/${expectedCount})，示例: ${sampleIds.join(' | ')}`)
@@ -351,13 +341,6 @@ async function translateChunkWithRetry(
                 diagnostics.validationFailures++
                 diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...missingIds])).slice(0, 20)
 
-                if (forceReviewMode) {
-                    diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...unresolvedEntries.map(entry => String(entry.id))])).slice(0, 50)
-                    diagnostics.finalStatus = 'review'
-                    writeTaskLog(taskId, 'translating', 'warn', `[止损] ${chunkLabel} 首轮请求异常，已停止自动重试并转入人工核对：${detail}`)
-                    break
-                }
-
                 writeTaskLog(
                     taskId,
                     'translating',
@@ -367,23 +350,11 @@ async function translateChunkWithRetry(
                 continue
             }
 
-            if (forceReviewMode) {
-                diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...unresolvedEntries.map(entry => String(entry.id))])).slice(0, 50)
-                diagnostics.finalStatus = 'review'
-                writeTaskLog(taskId, 'translating', 'warn', `[止损] ${chunkLabel} 首轮请求失败，已停止自动重试并转入人工核对：${detail}`)
-                break
-            }
-
             writeTaskLog(taskId, 'translating', 'warn', `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}`)
         }
     }
 
-    if (unresolvedEntries.length > 0 && forceReviewMode) {
-        const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
-        diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...unresolvedEntries.map(entry => String(entry.id))])).slice(0, 50)
-        diagnostics.finalStatus = 'review'
-        writeTaskLog(taskId, 'translating', 'warn', '[转核对] ' + chunkLabel + ' 剩余 ' + unresolvedEntries.length + ' 条未自动补译，已升级为任务级人工核对：' + ids)
-    } else if (unresolvedEntries.length > 0) {
+    if (unresolvedEntries.length > 0) {
         const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
         console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 常规重试后仍有 ${unresolvedEntries.length} 条待处理，开始逐条补译。`)
         writeTaskLog(taskId, 'translating', 'warn', `[补译] 块 #${chunkIndex + 1} 逐条补译 ${unresolvedEntries.length} 条：${ids}`)
@@ -429,9 +400,8 @@ async function translateChunkWithRetry(
     if (stillMissing.length > 0) {
         const ids = stillMissing.map(entry => `#${entry.id}`).join(', ')
         diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...stillMissing.map(entry => String(entry.id))])).slice(0, 20)
-        if (forceReviewMode || diagnostics.finalStatus === 'review') {
+        if (diagnostics.finalStatus === 'review') {
             diagnostics.reviewIds = Array.from(new Set([...diagnostics.reviewIds, ...stillMissing.map(entry => String(entry.id))])).slice(0, 50)
-            diagnostics.finalStatus = 'review'
             writeTaskLog(taskId, 'translating', 'warn', `[待核对] ${chunkLabel} 仍有 ${stillMissing.length} 条待人工核对：${ids}`)
         } else {
             diagnostics.fallbackCount = stillMissing.length
@@ -541,7 +511,6 @@ function analyzeChunkRisk(entries: SubtitleEntry[], baseChunkSize: number): Chun
 
         if (normalized.includes('__SUBX_FMT_')) {
             tags.add('formatting_tokens')
-            score += 1
         }
 
         if (lines.length >= 2 && lines.some(line => /[\u4e00-\u9fff]/.test(line)) && lines.some(line => /[A-Za-z]/.test(line))) {
@@ -551,7 +520,6 @@ function analyzeChunkRisk(entries: SubtitleEntry[], baseChunkSize: number): Chun
 
         if (lines.length >= 3) {
             tags.add('multi_line_dialogue')
-            score += 1
         }
 
         if (normalized.length >= 120) {
@@ -575,26 +543,6 @@ function analyzeChunkRisk(entries: SubtitleEntry[], baseChunkSize: number): Chun
         recommendedChunkSize,
         stylePromptSuffix: styleHints.length ? styleHints.join('\n') : undefined
     }
-}
-
-function shouldBlockExport(issues: Array<{ severity?: 'soft' | 'hard', reason?: string }>, totalEntries: number, toleranceMode: 'strict' | 'balanced' | 'lenient' = 'balanced') {
-    const hardIssues = issues.filter(issue => issue.severity !== 'soft')
-    const softIssues = issues.filter(issue => issue.severity === 'soft')
-    const issueRatio = issues.length / Math.max(totalEntries, 1)
-    const hardRatio = hardIssues.length / Math.max(totalEntries, 1)
-    const criticalIssues = issues.filter(issue => issue.reason === 'missing')
-
-    if (toleranceMode === 'strict') {
-        return { block: issues.length > 0, hardIssues, softIssues, criticalIssues }
-    }
-
-    if (toleranceMode === 'lenient') {
-        const block = criticalIssues.length >= 3 || hardIssues.length >= 8 || hardRatio > 0.08 || issueRatio > 0.15
-        return { block, hardIssues, softIssues, criticalIssues }
-    }
-
-    const block = criticalIssues.length >= 2 || hardIssues.length >= 5 || hardRatio > 0.04 || issueRatio > 0.10
-    return { block, hardIssues, softIssues, criticalIssues }
 }
 
 export const TaskService = {
@@ -720,9 +668,7 @@ export const TaskService = {
             const allEntries = await SubtitleService.parseSubtitle(srtPath)
 
             const config = await ConfigService.getConfig()
-            const translationStrategy = config.translationStrategy === 'efficient' ? 'efficient' : 'balanced'
-            const rawChunkSize = config.chunkSize || 2000
-            const chunkSize = translationStrategy === 'efficient' ? Math.min(rawChunkSize, 1200) : Math.min(rawChunkSize, 2000)
+            const chunkSize = Math.min(config.chunkSize || 2000, 2000)
             const subtitleFormat = task.subtitleFormat || config.subtitleFormat || 'srt'
             const subtitleStylePreset = task.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple'
             const bilingualLayout = task.bilingualLayout || config.bilingualLayout || 'translated_first'
@@ -778,8 +724,6 @@ export const TaskService = {
 
             const translatedMap = new Map<string, SubtitleEntry>()
             const completedChunksPerChunk = new Map<number, number>()
-            const forcedReviewIssues = new Map<string, Array<{ id: string, reason: string, severity: 'hard' | 'soft' }>>()
-            let hasForcedReview = false
             let globalCompletedChunks = 0
 
             const updateGlobalProgress = () => {
@@ -834,21 +778,9 @@ export const TaskService = {
                 }
 
                 let translatedChunk: SubtitleEntry[]
+                const diagnosticsCollection: ChunkDiagnostics[] = []
 
                 if (uncachedEntries.length === 0) {
-                    if (diagnosticsCollection.some(item => item?.finalStatus === 'review')) {
-                        hasForcedReview = true
-                        for (const item of diagnosticsCollection) {
-                            for (const reviewId of item?.reviewIds || []) {
-                                const originalEntry = chunk.find(entry => String(entry.id) === String(reviewId))
-                                if (!originalEntry) continue
-                                const existing = forcedReviewIssues.get(String(reviewId)) || []
-                                existing.push({ id: String(reviewId), reason: 'high_risk_failed', severity: 'hard' })
-                                forcedReviewIssues.set(String(reviewId), existing)
-                            }
-                        }
-                    }
-
                     translatedChunk = chunk.map(entry => {
                         const cachedText = cachedResults.get(String(entry.id))
                         if (cachedText) {
@@ -871,17 +803,12 @@ export const TaskService = {
                     const conservativeBatches = chunkRisk.riskLevel === 'high'
                         ? splitConservativeBatches(uncachedEntries, chunkRisk.tags)
                         : [uncachedEntries]
-                    const shouldSkipSingleRetry = chunkRisk.riskLevel === 'high' || translationStrategy === 'efficient'
 
                     if (conservativeBatches.length > 1) {
                         writeTaskLog(taskId, 'translating', 'info', '[保守分批] 块 #' + (index + 1) + ' 已拆为 ' + conservativeBatches.length + ' 个子批次，降低串条与错配风险')
                     }
-                    if (shouldSkipSingleRetry) {
-                        writeTaskLog(taskId, 'translating', 'info', '[省 token] 块 #' + (index + 1) + ' 命中高风险或稳妥模式，剩余异常将直接进入核对，不再自动逐条补译')
-                    }
 
                     const aiResultByOriginalId = new Map<string, SubtitleEntry>()
-                    const diagnosticsCollection: ChunkDiagnostics[] = []
 
                     for (const [batchIndex, batchEntries] of conservativeBatches.entries()) {
                         assertTaskNotCancelled(taskId)
@@ -911,8 +838,7 @@ export const TaskService = {
                             undefined,
                             (config.translationMode === 'stream') && (config.streamUsage || false),
                             config.translationMode === 'stream',
-                            batchLabel,
-                            !shouldSkipSingleRetry && conservativeBatches.length === 1
+                            batchLabel
                         )
 
                         diagnosticsCollection.push(chunkResult.diagnostics)
@@ -976,19 +902,6 @@ export const TaskService = {
                         }
                     } catch { /* ignore diagnostics patch failure */ }
 
-                    if (diagnosticsCollection.some(item => item?.finalStatus === 'review')) {
-                        hasForcedReview = true
-                        for (const item of diagnosticsCollection) {
-                            for (const reviewId of item?.reviewIds || []) {
-                                const originalEntry = chunk.find(entry => String(entry.id) === String(reviewId))
-                                if (!originalEntry) continue
-                                const existing = forcedReviewIssues.get(String(reviewId)) || []
-                                existing.push({ id: String(reviewId), reason: 'high_risk_failed', severity: 'hard' })
-                                forcedReviewIssues.set(String(reviewId), existing)
-                            }
-                        }
-                    }
-
                     translatedChunk = chunk.map(entry => {
                         const cachedText = cachedResults.get(String(entry.id))
                         if (cachedText) {
@@ -1010,13 +923,10 @@ export const TaskService = {
 
                 updateGlobalProgress()
 
-                const chunkCompletedWithReview = Array.from(forcedReviewIssues.keys()).some(id => chunk.some(entry => String(entry.id) === id))
                 this.updateStatus(taskId, 'translating', 30 + Math.floor((globalCompletedChunks / totalChunks) * 60), {
                     totalChunks,
                     completedChunks: globalCompletedChunks,
-                    log: chunkCompletedWithReview
-                        ? `[AI] 块 #${index + 1} 处理完成，含待人工核对条目 (${globalCompletedChunks}/${totalChunks})`
-                        : `[AI] 块 #${index + 1} 翻译完成 (${globalCompletedChunks}/${totalChunks})`
+                    log: `[AI] 块 #${index + 1} 翻译完成 (${globalCompletedChunks}/${totalChunks})`
                 })
             }))
 
@@ -1043,43 +953,11 @@ export const TaskService = {
                 }
 
                 const issues = SubtitleService.validateTranslatedEntries(translatedEntries, task.targetLanguage)
-                const mergedIssues = [...issues]
-                for (const [reviewId, list] of forcedReviewIssues.entries()) {
-                    for (const issue of list) {
-                        if (!mergedIssues.some(existing => String(existing.id) === String(reviewId) && existing.reason === issue.reason)) {
-                            const targetEntry = translatedEntries.find(entry => String(entry.id) === String(reviewId))
-                            mergedIssues.push({
-                                id: String(reviewId),
-                                reason: issue.reason,
-                                severity: issue.severity,
-                                original: targetEntry?.text || '',
-                                translated: targetEntry?.translatedText || ''
-                            } as any)
-                        }
-                    }
-                }
 
-                if (mergedIssues.length > 0) {
-                    const decision = shouldBlockExport(mergedIssues, translatedEntries.length, 'balanced')
-                    const preview = mergedIssues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
-
-                    if (hasForcedReview || decision.block) {
-                        persistReviewEntries(taskId, translatedEntries, mergedIssues)
-                        db.prepare("UPDATE tasks SET status = 'review', progress = 96, error = ?, updated_at = datetime('now') WHERE task_id = ?")
-                            .run(`待字幕核对：${mergedIssues.length} 条需要人工确认`, taskId)
-                        await this.updateStatus(taskId, 'review' as any, 96, {
-                            totalChunks,
-                            completedChunks: totalChunks,
-                            log: hasForcedReview
-                                ? `[核对] 已命中高风险强制核对，当前有 ${mergedIssues.length} 条字幕需要人工确认：${preview}`
-                                : `[核对] 检测到 ${mergedIssues.length} 条字幕需要人工核对（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}）：${preview}`,
-                            category: 'translation'
-                        })
-                        return
-                    }
-
-                    writeTaskLog(taskId, 'exporting', 'warn', `[继续导出] 检测到 ${mergedIssues.length} 条需注意字幕（硬性 ${decision.hardIssues.length} / 软性 ${decision.softIssues.length}），已继续导出：${preview}`)
-                    persistReviewEntries(taskId, translatedEntries, mergedIssues)
+                if (issues.length > 0) {
+                    const preview = issues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
+                    persistReviewEntries(taskId, translatedEntries, issues)
+                    writeTaskLog(taskId, 'exporting', 'warn', `[核对] 检测到 ${issues.length} 条字幕需注意：${preview}`)
                 } else {
                     persistReviewEntries(taskId, translatedEntries, [])
                 }

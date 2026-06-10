@@ -122,32 +122,26 @@
         </template>
 
         <template #actions-cell="{ row }">
-          <div class="w-full min-w-[212px] flex items-center justify-center py-1">
-            <div class="grid grid-cols-5 min-w-[196px] items-center gap-1 rounded-xl border border-gray-100 dark:border-gray-800 bg-white/90 dark:bg-gray-900/70 px-2 py-1.5 shadow-sm">
-              <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" class="justify-center" :to="`/task/${row.original.taskId}`" />
-              <UButton
-                v-if="['error', 'cancelled', 'review', 'done'].includes(row.original.status)"
-                icon="i-lucide-refresh-cw"
-                variant="ghost"
-                color="warning"
-                size="xs"
-                class="justify-center"
-                :loading="retryingTaskId === row.original.taskId"
-                title="重新翻译"
-                @click="retryTask(row.original.taskId)"
-              />
-              <span v-else class="h-7" />
-              <UButton v-if="row.original.status === 'review'" icon="i-lucide-list-checks" variant="ghost" color="primary" size="xs" class="justify-center" @click="openReview(row.original.taskId)" />
-              <span v-else class="h-7" />
-              <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex h-7 items-center justify-center rounded-lg p-1.5 text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
-                <UIcon name="i-lucide-download" class="w-4 h-4" />
-              </a>
-              <span v-else class="h-7" />
-              <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" class="justify-center" :loading="deletingTaskId === row.original.taskId" @click="deleteTask(row.original.taskId)" />
-              <UDropdownMenu :items="historyActionItems(row.original)">
-                <UButton icon="i-lucide-ellipsis" variant="ghost" color="neutral" size="xs" class="justify-center" />
-              </UDropdownMenu>
-            </div>
+          <div class="flex items-center justify-center gap-0.5">
+            <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" title="查看详情" :to="`/task/${row.original.taskId}`" />
+            <UButton
+              v-if="['error', 'cancelled', 'review', 'done'].includes(row.original.status)"
+              icon="i-lucide-refresh-cw"
+              variant="ghost"
+              color="warning"
+              size="xs"
+              :loading="retryingTaskId === row.original.taskId"
+              title="重新翻译"
+              @click="retryTask(row.original.taskId)"
+            />
+            <UButton v-if="row.original.status === 'review'" icon="i-lucide-list-checks" variant="ghost" color="primary" size="xs" title="进入核对" @click="openReview(row.original.taskId)" />
+            <a v-if="row.original.status === 'done'" :href="`/api/tasks/${row.original.taskId}/download`" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-primary-500 hover:text-primary-700 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors" title="下载字幕">
+              <UIcon name="i-lucide-download" class="w-4 h-4" />
+            </a>
+            <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" :loading="deletingTaskId === row.original.taskId" title="删除记录" @click="deleteTask(row.original.taskId)" />
+            <UDropdownMenu :items="historyActionItems(row.original)">
+              <UButton icon="i-lucide-ellipsis" variant="ghost" color="neutral" size="xs" title="更多操作" />
+            </UDropdownMenu>
           </div>
         </template>
       </UTable>
@@ -383,6 +377,6 @@ function statusColor(status) {
 
 .history-table :deep(th:nth-child(5)),
 .history-table :deep(td:nth-child(5)) {
-  width: 236px;
+  width: 200px;
 }
 </style>

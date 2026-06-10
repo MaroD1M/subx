@@ -53,6 +53,8 @@
             <div class="flex items-center gap-2 flex-wrap">
               <UButton label="批量重译" size="xs" color="primary" variant="soft" :loading="retranslating" @click="retranslateSelected" />
               <UButton label="设为原文" size="xs" color="warning" variant="ghost" @click="applyBulkOriginal" />
+              <UButton label="所选上移" size="xs" color="neutral" variant="ghost" @click="moveSelectedUp" />
+              <UButton label="所选下移" size="xs" color="neutral" variant="ghost" @click="moveSelectedDown" />
               <UButton label="保存修改" size="xs" color="neutral" :loading="saving" :disabled="dirtyCount === 0" @click="saveChanges" />
               <span class="text-xs text-gray-400">筛选仅影响当前列表，不影响最终导出范围</span>
             </div>
@@ -64,6 +66,8 @@
                 <div class="min-w-0 space-y-2">
                   <div class="flex items-center gap-2 flex-wrap">
                     <UCheckbox v-model="entry.selected" />
+                    <UButton icon="i-lucide-arrow-up" variant="ghost" size="xs" color="neutral" title="上移" @click="moveUp(entry)" />
+                    <UButton icon="i-lucide-arrow-down" variant="ghost" size="xs" color="neutral" title="下移" @click="moveDown(entry)" />
                     <UBadge size="sm" color="neutral" variant="soft">#{{ entry.subtitleId }}</UBadge>
                     <UBadge size="sm" :color="statusColor(entry.reviewStatus)" variant="soft">{{ statusLabel(entry.reviewStatus) }}</UBadge>
                     <span class="text-[11px] text-gray-400">{{ entry.startTime }} → {{ entry.endTime }}</span>
@@ -306,6 +310,46 @@ function clearSelection() {
 function applyBulkOriginal() {
   for (const entry of selectedEntries.value) {
     useOriginal(entry)
+  }
+}
+
+function moveUp(entry: any) {
+  const idx = entries.value.indexOf(entry)
+  if (idx <= 0) return
+  const prev = entries.value[idx - 1]
+  entries.value.splice(idx - 1, 2, entries.value[idx], prev)
+  markEdited(entry)
+  markEdited(prev)
+}
+
+function moveDown(entry: any) {
+  const idx = entries.value.indexOf(entry)
+  if (idx < 0 || idx >= entries.value.length - 1) return
+  const next = entries.value[idx + 1]
+  entries.value.splice(idx, 2, entries.value[idx + 1], entries.value[idx])
+  markEdited(entry)
+  markEdited(next)
+}
+
+function moveSelectedUp() {
+  const selected = selectedEntries.value.map(e => entries.value.indexOf(e)).filter(idx => idx > 0)
+  selected.sort((a, b) => a - b)
+  for (const idx of selected) {
+    const prev = entries.value[idx - 1]
+    entries.value.splice(idx - 1, 2, entries.value[idx], prev)
+    markEdited(entries.value[idx - 1])
+    markEdited(prev)
+  }
+}
+
+function moveSelectedDown() {
+  const selected = selectedEntries.value.map(e => entries.value.indexOf(e)).filter(idx => idx >= 0 && idx < entries.value.length - 1)
+  selected.sort((a, b) => b - a)
+  for (const idx of selected) {
+    const next = entries.value[idx + 1]
+    entries.value.splice(idx, 2, entries.value[idx + 1], entries.value[idx])
+    markEdited(entries.value[idx])
+    markEdited(next)
   }
 }
 

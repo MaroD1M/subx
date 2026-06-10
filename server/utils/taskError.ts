@@ -30,6 +30,9 @@ export function classifyTaskError(message: string): TaskErrorInfo {
   if (text.includes('[无有效译文]') || text.includes('[疑似拒答]') || text.includes('翻译结果为空')) {
     return { type: 'content', summary: '返回内容异常：模型未给出可用译文，可能被拒答或内容被过滤' }
   }
+  if (text.includes('referenceerror') || text.includes('is not defined')) {
+    return { type: 'parse', summary: '代码逻辑异常：存在未声明变量，请更新至最新版本' }
+  }
 
   return { type: 'unknown', summary: '未知错误：请查看任务详情日志' }
 }
