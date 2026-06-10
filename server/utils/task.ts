@@ -240,7 +240,12 @@ async function translateChunkWithRetry(
             for (const entry of results) {
                 const id = String(entry.id)
                 const translatedText = String(entry.translatedText || '')
-                const accepted = translatedText && translatedText !== String(entry.text || '')
+                const accepted = translatedText && (
+                    translatedText !== String(entry.text || '')
+                    || SubtitleService.isNonVerbal(entry.text)
+                    || SubtitleService.isLikelySongLyric(entry.text)
+                    || SubtitleService.isLikelyMetadataOrProperNoun(entry.text)
+                )
                 if (accepted) {
                     returnedIds.add(id)
                     finalResults.set(id, entry)
@@ -323,7 +328,12 @@ async function translateChunkWithRetry(
                 for (const entry of e.partialResults) {
                     const id = String(entry.id)
                     const translatedText = String(entry.translatedText || '')
-                    if (translatedText && translatedText !== String(entry.text || '')) {
+                    if (translatedText && (
+                        translatedText !== String(entry.text || '')
+                        || SubtitleService.isNonVerbal(entry.text)
+                        || SubtitleService.isLikelySongLyric(entry.text)
+                        || SubtitleService.isLikelyMetadataOrProperNoun(entry.text)
+                    )) {
                         finalResults.set(id, entry)
                     }
                 }
