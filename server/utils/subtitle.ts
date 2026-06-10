@@ -665,7 +665,7 @@ export const SubtitleService = {
 
   buildSrtText(text: unknown, prefixTag = '', formattingTokens: FormattingToken[] = []): string {
     const restored = this.restoreFormattingTokens(text, formattingTokens, 'srt')
-    const normalized = this.sanitizeSrtText(restored).replace(formattingPlaceholderPattern, '')
+    const normalized = this.sanitizeSrtText(restored)
     return prefixTag ? `${prefixTag}${normalized}` : normalized
   },
 
@@ -852,22 +852,21 @@ export const SubtitleService = {
 
     const sourceExt = sourceSubtitlePath?.split('.').pop()?.toLowerCase()
     const hasOriginalAss = !!sourceSubtitlePath && (sourceExt === 'ass' || sourceExt === 'ssa') && existsSync(sourceSubtitlePath)
-    const assContent = (hasOriginalAss
+    const assContent = hasOriginalAss
       ? this.rewriteExistingAss(readFileSync(sourceSubtitlePath, 'utf-8'), entries, outputMode, bilingualLayout, subtitleStylePreset)
       : this.buildAssContent(entries, subtitleStylePreset, outputMode, bilingualLayout)
-    ).replace(formattingPlaceholderPattern, '')
 
     const assPath = `${basePath}.ass`
 
     if (subtitleFormat === 'ass') {
-      writeFileSync(assPath, assContent, 'utf-8')
+      writeFileSync(assPath, assContent.replace(formattingPlaceholderPattern, ''), 'utf-8')
       console.log(`[Subtitle] 输出 ASS: ${assPath} (${srtEntries.length} 条)`)
       return assPath
     }
 
     const srtPath = `${basePath}.srt`
     writeFileSync(srtPath, srtContent, 'utf-8')
-    writeFileSync(assPath, assContent, 'utf-8')
+    writeFileSync(assPath, assContent.replace(formattingPlaceholderPattern, ''), 'utf-8')
     console.log(`[Subtitle] 输出 SRT+ASS: ${srtPath} + ${assPath} (${srtEntries.length} 条)`)
     return assPath
   },
@@ -881,7 +880,10 @@ export const SubtitleService = {
       const text = entry.text || ''
       const lineCount = text.split('\n').filter(Boolean).length
       const placeholderCount = (text.match(/__SUBX_FMT_\d+__/g) || []).length
-      const estimatedTokens = Math.ceil(text.length / 3.2) + Math.ceil(lineCount * 1.5) + placeholderCount * 2
+      const cjkCount = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/g) || []).length
+      const latinCount = (text.match(/[a-zA-Z0-9]/g) || []).length
+      const otherCount = Math.max(0, Array.from(text).length - cjkCount - latinCount)
+      const estimatedTokens = Math.ceil(cjkCount * 1.2 + latinCount / 3.5 + otherCount / 10) + Math.ceil(lineCount * 1.5) + placeholderCount * 2
 
       if (currentTokens + estimatedTokens > maxTokens && currentChunk.length > 0) {
         chunks.push(currentChunk)
