@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
       outputMode: task.output_mode,
       subtitleFormat: task.subtitle_format,
       subtitleStylePreset: task.subtitle_style_preset,
-      bilingualLayout: task.bilingual_layout,
+      bilingualLayout: task.bilingual_layout || 'translated_first',
       targetLanguage: task.target_lang,
       filePath: task.file_path,
       rootId: task.root_id

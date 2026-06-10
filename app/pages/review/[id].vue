@@ -12,6 +12,7 @@
         <UButton label="导出结果" color="primary" :loading="exporting" @click="exportReviewed" />
         <USelect v-model="exportMode" :items="exportModeItems" class="w-28" title="导出模式" />
         <USelect v-model="exportStyle" :items="exportStyleItems" class="w-36" title="字幕样式" />
+        <USelect v-model="exportFormat" :items="exportFormatItems" class="w-20" title="导出格式" />
       </div>
     </div>
 
@@ -159,6 +160,7 @@ const previewFormat = ref<'srt' | 'ass'>('srt')
 const bilingualLayout = ref<'translated_first' | 'original_first'>('translated_first')
 const exportMode = ref<'translated' | 'bilingual' | 'original'>('translated')
 const exportStyle = ref<string>('bilingual_simple')
+const exportFormat = ref<'srt' | 'ass'>('srt')
 const statusFilter = ref('all')
 const reasonFilter = ref('all')
 const summary = reactive({ total: 0, needsReview: 0, edited: 0 })
@@ -183,6 +185,11 @@ const exportStyleItems = [
   { label: '学习模式', value: 'bilingual_study' },
   { label: '紧凑模式', value: 'bilingual_compact' },
   { label: '单色模式', value: 'bilingual_mono' }
+]
+
+const exportFormatItems = [
+  { label: 'SRT', value: 'srt' },
+  { label: 'ASS', value: 'ass' }
 ]
 
 const bilingualLayoutItems = [
@@ -381,6 +388,7 @@ async function loadReview() {
   bilingualLayout.value = taskMeta.bilingualLayout
   exportMode.value = taskMeta.outputMode as any
   exportStyle.value = res.task?.subtitleStylePreset || 'bilingual_simple'
+  exportFormat.value = (res.task?.subtitleFormat === 'ass' ? 'ass' : 'srt')
   entries.value = res.entries
   rebuildSnapshots(res.entries || [])
 
@@ -490,7 +498,7 @@ async function exportReviewed() {
     await saveChanges(false)
     await $fetch(`/api/tasks/${taskId}/review-export`, {
       method: 'POST',
-      body: { outputMode: exportMode.value, subtitleStylePreset: exportStyle.value }
+      body: { outputMode: exportMode.value, subtitleStylePreset: exportStyle.value, subtitleFormat: exportFormat.value }
     })
     toast.add({ title: '已导出最终字幕', color: 'success' })
     await navigateTo(`/task/${taskId}`)

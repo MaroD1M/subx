@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
   const inputPath = await resolveMediaPath(task.file_path, task.root_id)
   const baseName = task.file_path.replace(/\.[^.]+$/, '')
   const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
-  const subtitleFormat = String(task.subtitle_format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt'
+  const subtitleFormat = body.subtitleFormat || (String(task.subtitle_format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt')
   const outputSuffix = task.output_mode === 'original' ? 'original' : task.target_lang
   const outputBaseName = basename(cleanName)
   const outputPath = join(dirname(inputPath), `${outputBaseName}.${outputSuffix}.${subtitleFormat}`)
