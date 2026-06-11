@@ -68,7 +68,7 @@
           </div>
 
           <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-[72vh] overflow-y-auto">
-            <div v-for="entry in filteredEntries" :key="entry.subtitleId" :id="`review-entry-${entry.subtitleId}`" class="p-3 space-y-3" :class="focusedSubtitleId === String(entry.subtitleId) ? 'ring-2 ring-warning-400/70 rounded-2xl bg-warning-50/40 dark:bg-warning-900/10' : ''">
+            <div v-for="entry in filteredEntries" :key="entry.subtitleId" v-memo="[entry.selected, entry.edited, entry.finalText, entry.translatedText, entry.reviewStatus, entry.reviewReasons]" :id="`review-entry-${entry.subtitleId}`" class="p-3 space-y-3" :class="focusedSubtitleId === String(entry.subtitleId) ? 'ring-2 ring-warning-400/70 rounded-2xl bg-warning-50/40 dark:bg-warning-900/10' : ''">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 space-y-2">
                   <div class="flex items-center gap-2 flex-wrap">
