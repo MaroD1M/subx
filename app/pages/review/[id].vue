@@ -64,6 +64,8 @@
               <UButton label="设为原文" size="xs" color="warning" variant="ghost" @click="applyBulkOriginal" />
               <UButton label="所选上移" size="xs" color="neutral" variant="ghost" @click="moveSelectedUp" />
               <UButton label="所选下移" size="xs" color="neutral" variant="ghost" @click="moveSelectedDown" />
+              <UButton label="译文下移" size="xs" color="neutral" variant="ghost" title="从选中条目起译文整体下移一行" @click="shiftAllTranslations(1)" />
+              <UButton label="译文上移" size="xs" color="neutral" variant="ghost" title="从选中条目起译文整体上移一行" @click="shiftAllTranslations(-1)" />
               <UButton label="保存修改" size="xs" color="neutral" :loading="saving" :disabled="dirtyCount === 0" @click="saveChanges" />
               <span class="text-xs text-gray-400">筛选仅影响当前列表，不影响最终导出范围</span>
             </div>
@@ -94,13 +96,21 @@
                   <p class="text-sm leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
                 </div>
                 <div class="rounded-2xl bg-gray-50 dark:bg-gray-900/60 p-3 space-y-1.5">
-                  <p class="text-[10px] uppercase tracking-widest text-gray-400">当前译文</p>
+                  <div class="flex items-center justify-between gap-1">
+                    <p class="text-[10px] uppercase tracking-widest text-gray-400">当前译文</p>
+                    <div class="flex items-center gap-0.5">
+                      <UButton icon="i-lucide-chevron-up" variant="ghost" size="xs" color="neutral" title="译文上移" @click="shiftTranslation(entry, -1)" />
+                      <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="neutral" title="译文下移" @click="shiftTranslation(entry, 1)" />
+                    </div>
+                  </div>
                   <p class="text-sm leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
                 </div>
                 <div class="rounded-2xl bg-white dark:bg-gray-950/60 border border-primary-100 dark:border-primary-900/40 p-3 space-y-2">
                   <div class="flex items-center justify-between gap-2 flex-wrap">
                     <p class="text-[10px] uppercase tracking-widest text-primary-500">最终导出</p>
-                    <div class="flex items-center gap-1.5 flex-wrap justify-end">
+                    <div class="flex items-center gap-0.5">
+                      <UButton icon="i-lucide-chevron-up" variant="ghost" size="xs" color="primary" title="最终导出上移" @click="shiftFinal(entry, -1)" />
+                      <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="primary" title="最终导出下移" @click="shiftFinal(entry, 1)" />
                       <UButton label="恢复译文" size="xs" color="primary" variant="ghost" @click="restoreTranslated(entry)" />
                       <UButton label="使用原文" size="xs" color="neutral" variant="ghost" @click="useOriginal(entry)" />
                     </div>
@@ -381,6 +391,56 @@ function moveSelectedDown() {
     entries.value.splice(idx, 2, entries.value[idx + 1], entries.value[idx])
     markEdited(entries.value[idx])
     markEdited(next)
+  }
+}
+
+function shiftTranslation(entry: any, direction: number) {
+  const idx = entries.value.indexOf(entry)
+  const targetIdx = idx + direction
+  if (targetIdx < 0 || targetIdx >= entries.value.length) return
+  const target = entries.value[targetIdx]
+  const tmp = entry.translatedText
+  entry.translatedText = target.translatedText || ''
+  target.translatedText = tmp || ''
+  markEdited(entry)
+  markEdited(target)
+}
+
+function shiftFinal(entry: any, direction: number) {
+  const idx = entries.value.indexOf(entry)
+  const targetIdx = idx + direction
+  if (targetIdx < 0 || targetIdx >= entries.value.length) return
+  const target = entries.value[targetIdx]
+  const tmp = entry.finalText
+  entry.finalText = target.finalText || ''
+  target.finalText = tmp || ''
+  markEdited(entry)
+  markEdited(target)
+}
+
+function shiftAllTranslations(direction: number) {
+  const firstIdx = entries.value.findIndex(e => e.selected)
+  if (firstIdx < 0) { toast.add({ title: '请先选择起始条目', color: 'warning' }); return }
+  if (direction === 1) {
+    for (let i = entries.value.length - 1; i >= firstIdx; i--) {
+      if (i < entries.value.length - 1) {
+        const tmp = entries.value[i].translatedText
+        entries.value[i].translatedText = entries.value[i + 1].translatedText || ''
+        entries.value[i + 1].translatedText = tmp || ''
+        markEdited(entries.value[i])
+        markEdited(entries.value[i + 1])
+      }
+    }
+  } else {
+    for (let i = firstIdx; i < entries.value.length; i++) {
+      if (i > firstIdx) {
+        const tmp = entries.value[i].translatedText
+        entries.value[i].translatedText = entries.value[i - 1].translatedText || ''
+        entries.value[i - 1].translatedText = tmp || ''
+        markEdited(entries.value[i])
+        markEdited(entries.value[i - 1])
+      }
+    }
   }
 }
 
