@@ -33,10 +33,6 @@
         <p class="stat-label">当前可见</p>
         <p class="stat-value">{{ filteredEntries.length }}</p>
       </div>
-      <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-900/40 p-4">
-        <p class="text-[10px] uppercase tracking-widest text-gray-400">当前可见</p>
-        <p class="mt-1.5 text-2xl font-bold text-gray-900 dark:text-white">{{ filteredEntries.length }}</p>
-      </div>
     </div>
 
     <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
@@ -93,7 +89,7 @@
               <div class="grid grid-cols-1 xl:grid-cols-[minmax(180px,0.9fr)_minmax(180px,0.9fr)_minmax(240px,1.2fr)] gap-3">
                 <div class="rounded-2xl bg-gray-50 dark:bg-gray-900/60 p-3 space-y-1.5">
                   <p class="text-[10px] uppercase tracking-widest text-gray-400">原文</p>
-                  <p class="text-sm leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
+                  <p class="text-[13px] leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
                 </div>
                 <div class="rounded-2xl bg-gray-50 dark:bg-gray-900/60 p-3 space-y-1.5">
                   <div class="flex items-center justify-between gap-1">
@@ -103,7 +99,7 @@
                       <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="neutral" title="译文下移" @click="shiftTranslation(entry, 1)" />
                     </div>
                   </div>
-                  <p class="text-sm leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
+                  <p class="text-[13px] leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
                 </div>
                 <div class="rounded-2xl bg-white dark:bg-gray-950/60 border border-primary-100 dark:border-primary-900/40 p-3 space-y-2">
                   <div class="flex items-center justify-between gap-2 flex-wrap">

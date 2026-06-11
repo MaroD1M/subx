@@ -75,15 +75,19 @@ body {
    Typography Convention
    ============================================ */
 .section-title {
-    @apply text-[11px] font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase;
+    @apply text-xs font-semibold tracking-wide text-gray-400 dark:text-gray-500 uppercase;
 }
 
 .stat-label {
-    @apply text-[10px] font-medium uppercase tracking-widest text-gray-400 dark:text-gray-500;
+    @apply text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500;
 }
 
 .stat-value {
     @apply text-2xl font-bold text-gray-900 dark:text-white;
+}
+
+.page-title {
+    @apply text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white;
 }
 
 /* ============================================

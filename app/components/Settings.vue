@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-5">
+  <div class="space-y-4">
     <div v-if="isInsecure" class="p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-500/5 border border-amber-100 dark:border-amber-500/20 flex items-start gap-3">
       <UIcon name="i-lucide-shield-alert" class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
       <div class="space-y-1">
@@ -8,11 +8,11 @@
       </div>
     </div>
 
-    <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 p-4 sm:p-5 space-y-5">
+    <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 p-3.5 sm:p-4 space-y-3.5">
       <div class="flex items-center justify-between gap-3">
         <div>
           <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">AI 连接</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">填写密钥、接口地址与默认模型。</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">填写密钥、接口地址与默认模型。</p>
         </div>
         <UButton label="接口说明" variant="link" color="primary" size="xs" class="p-0 font-bold" @click="isGuideOpen = true" />
       </div>
@@ -47,13 +47,13 @@
       </UFormField>
     </div>
 
-    <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 p-4 sm:p-5 space-y-5">
+    <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 p-3.5 sm:p-4 space-y-3.5">
       <div>
         <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">默认翻译行为</p>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">这些设置会作为新任务的默认值。</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">这些设置会作为新任务的默认值。</p>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <UFormField label="目标语言">
           <USelect v-model="config.targetLanguage" :items="['zh-CN', 'zh-TW', 'en', 'ja', 'ko']" class="w-full" />
         </UFormField>
@@ -62,23 +62,23 @@
         </UFormField>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <UFormField label="翻译模式">
           <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
         </UFormField>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-        <UFormField label="分块大小" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
+        <UFormField label="分块大小" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-2.5 flex flex-col" :ui="{ container: 'mt-auto' }">
           <UInputNumber v-model="config.chunkSize" :min="100" :max="6000" :step="100" class="w-full mt-auto" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
         </UFormField>
-        <UFormField label="并发任务数" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
+        <UFormField label="并发任务数" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-2.5 flex flex-col" :ui="{ container: 'mt-auto' }">
           <UInputNumber v-model="config.concurrency" :min="1" :max="10" class="w-full mt-auto" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
         </UFormField>
-        <UFormField label="最大重试次数" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
+        <UFormField label="最大重试次数" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-2.5 flex flex-col" :ui="{ container: 'mt-auto' }">
           <UInputNumber v-model="config.maxRetries" :min="0" :max="5" class="w-full mt-auto" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
         </UFormField>
-        <UFormField label="日志保留天数" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 flex flex-col" :ui="{ container: 'mt-auto' }">
+        <UFormField label="日志保留天数" class="h-full rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-2.5 flex flex-col" :ui="{ container: 'mt-auto' }">
           <UInputNumber v-model="config.logRetentionDays" :min="1" :max="30" class="w-full mt-auto" :ui="{ base: 'w-full', wrapper: 'w-full', increment: 'shrink-0', decrement: 'shrink-0' }" />
         </UFormField>
       </div>
