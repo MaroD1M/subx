@@ -75,24 +75,8 @@
       <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group' }">
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
-            <div class="flex items-start gap-2">
-              <div class="min-w-0 flex-1 space-y-1">
-                <p class="text-sm font-medium text-gray-800 dark:text-gray-100 break-all">{{ fileName(row.original.filePath) }}</p>
-                <div class="flex items-center gap-2 flex-wrap text-[11px] text-gray-500 dark:text-gray-400">
-                  <span>{{ row.original.rootName || '默认媒体库' }}</span>
-                  <span class="text-[10px] text-gray-300 dark:text-gray-600">•</span>
-                  <span class="break-all" :class="isExpanded(row.original.taskId) ? '' : 'line-clamp-1'">{{ row.original.filePath }}</span>
-                  <UButton
-                    v-if="shouldShowExpand(row.original.filePath)"
-                    :label="isExpanded(row.original.taskId) ? '收起路径' : '展开路径'"
-                    size="xs"
-                    color="neutral"
-                    variant="ghost"
-                    class="h-5 px-1.5"
-                    @click="toggleExpanded(row.original.taskId)"
-                  />
-                </div>
-              </div>
+            <div class="flex items-center gap-2">
+              <p class="text-sm font-medium text-gray-800 dark:text-gray-100 break-all">{{ fileName(row.original.filePath) }}</p>
               <UButton
                 icon="i-lucide-copy"
                 size="xs"
@@ -185,7 +169,6 @@ const isClearModalOpen = ref(false)
 const isClearing = ref(false)
 const retryingTaskId = ref('')
 const deletingTaskId = ref('')
-const expandedTaskIds = ref(new Set())
 const toast = useToast()
 
 const { data, pending, refresh } = await useFetch('/api/tasks')
@@ -291,21 +274,6 @@ async function deleteTask(taskId) {
 
 function openReview(taskId) {
   navigateTo(`/review/${taskId}`)
-}
-
-function shouldShowExpand(filePath) {
-  return String(filePath || '').length > 72
-}
-
-function isExpanded(taskId) {
-  return expandedTaskIds.value.has(taskId)
-}
-
-function toggleExpanded(taskId) {
-  const next = new Set(expandedTaskIds.value)
-  if (next.has(taskId)) next.delete(taskId)
-  else next.add(taskId)
-  expandedTaskIds.value = next
 }
 
 async function copyPath(filePath) {
