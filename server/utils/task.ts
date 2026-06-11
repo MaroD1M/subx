@@ -264,7 +264,7 @@ async function translateChunkWithRetry(
             unresolvedEntries = unresolvedEntries.filter(entry => retryIds.has(String(entry.id)) && !finalResults.has(String(entry.id)))
 
             if (unresolvedEntries.length === 0) {
-                break
+                break   // safety guard: should not be reachable since unresolvedIds.length===0 check above breaks first
             }
 
             const acceptedCount = expectedCount - unresolvedEntries.length
@@ -646,6 +646,9 @@ export const TaskService = {
             await this.updateStatus(taskId, 'translating', 30, { totalChunks, completedChunks: 0 })
 
             const openai = new OpenAI({ apiKey: openaiConfig.apiKey, baseURL: openaiConfig.baseUrl })
+            // WARNING: Chunks execute serially (pLimit(1)) — previousContext at line 687 reads
+            // from translatedMap which is populated by the previous chunk's completion.
+            // Do NOT increase concurrency without redesigning context propagation.
             const limit = pLimit(1)
             const maxRetries = config.maxRetries || 3
 

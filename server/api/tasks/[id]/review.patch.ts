@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     const finalText = String(entry.finalText || '')
     const reviewStatus = String(entry.reviewStatus || 'edited')
     const selected = entry.selected ? 1 : 0
-    const edited = entry.edited === false ? 0 : 1
+    const edited = entry.edited ? 1 : 0
     stmt.run(translatedText, finalText, reviewStatus, selected, edited, id, String(entry.subtitleId))
   }
 

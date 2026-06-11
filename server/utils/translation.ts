@@ -209,10 +209,14 @@ function parseTextTranslations(fullContent: string, expectedIds: string[] = []):
     for (const block of blocks) {
         const trimmed = block.trim()
         if (!trimmed) continue
-        const singleLineMatch = trimmed.match(/^(\d+)[.:：\s]+(.+)$/)
-        if (singleLineMatch && singleLineMatch[1] && singleLineMatch[2]) {
-            if (!expectedSet.size || expectedSet.has(singleLineMatch[1])) {
-                result.set(singleLineMatch[1], singleLineMatch[2].trim())
+        const lines = trimmed.split('\n')
+        const firstLine = lines[0] || ''
+        const idM = firstLine.match(/^(\d+)[.:：\s]+(.*)$/)
+        if (idM && idM[1]) {
+            if (!expectedSet.size || expectedSet.has(idM[1])) {
+                const rest = lines.slice(1).map(l => l.trim()).filter(Boolean)
+                const text = idM[2] ? [idM[2].trim(), ...rest].filter(Boolean).join('\n') : rest.join('\n')
+                result.set(idM[1], text)
             }
         }
     }

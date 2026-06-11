@@ -34,6 +34,9 @@ export default defineEventHandler(async (event) => {
   const outputSuffix = task.output_mode === 'original' ? 'original' : task.target_lang
   const outputBaseName = basename(cleanName)
   const outputPath = join(dirname(inputPath), `${outputBaseName}.${outputSuffix}.${subtitleFormat}`)
+  if (outputPath === inputPath) {
+    throw createError({ statusCode: 400, message: '输出路径与源文件冲突，请更改输出设置' })
+  }
   const sourceSubtitlePath = task.source_type === 'external'
     ? await resolveMediaPath(task.file_path, task.root_id)
     : join(process.cwd(), 'temp', `${id}.srt`)

@@ -321,7 +321,13 @@ function statusColor(status) {
     case 'done': return 'success'
     case 'cancelled': return 'warning'
     case 'error': return 'error'
-    case 'translating': return 'primary'
+    case 'review': return 'info'
+    case 'translating':
+    case 'extracting':
+    case 'parsing':
+    case 'exporting':
+      return 'primary'
+    case 'queued': return 'neutral'
     default: return 'neutral'
   }
 }

@@ -232,8 +232,9 @@ async function tryFetchModels() {
   try {
     const res = await $fetch('/api/model-list', { method: 'POST', body: { apiKey, baseURL } })
     modelItems.value = res.models.map((m: any) => ({ label: m.id.startsWith('models/') ? m.id.replace('models/', '') : m.id, value: m.id }))
-  } catch {
-    modelError.value = '无法获取模型列表，请检查密钥和地址是否正确'
+  } catch (e: any) {
+    const detail = e?.data?.message || e?.message || ''
+    modelError.value = '无法获取模型列表' + (detail ? '：' + detail : '，请检查密钥和地址是否正确')
     modelItems.value = []
   } finally {
     fetchingModels.value = false

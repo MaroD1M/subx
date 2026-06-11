@@ -276,6 +276,7 @@ function reasonLabel(reason: string) {
 
 function makeSnapshot(entry: any) {
   return {
+    translatedText: String(entry.translatedText || ''),
     finalText: String(entry.finalText || ''),
     reviewStatus: String(entry.reviewStatus || ''),
     selected: !!entry.selected,
@@ -292,7 +293,8 @@ function rebuildSnapshots(list: any[]) {
 function isEntryDirty(entry: any) {
   const snapshot = entrySnapshots.value[String(entry.subtitleId)]
   if (!snapshot) return true
-  return snapshot.finalText !== String(entry.finalText || '')
+  return snapshot.translatedText !== String(entry.translatedText || '')
+    || snapshot.finalText !== String(entry.finalText || '')
     || snapshot.reviewStatus !== String(entry.reviewStatus || '')
     || snapshot.selected !== !!entry.selected
     || snapshot.edited !== !!entry.edited
@@ -507,20 +509,10 @@ async function saveChanges(showToast = true) {
 
 async function retranslateIds(subtitleIds: string[]) {
   if (!subtitleIds.length) return
-  const res: any = await $fetch(`/api/tasks/${taskId}/review-retranslate`, {
+  await $fetch(`/api/tasks/${taskId}/review-retranslate`, {
     method: 'POST',
     body: { subtitleIds }
   })
-  const updatedMap = new Map((res.entries || []).map((entry: any) => [String(entry.subtitleId), entry]))
-  for (const entry of entries.value) {
-    const next = updatedMap.get(String(entry.subtitleId))
-    if (!next) continue
-    entry.translatedText = next.translatedText
-    entry.finalText = next.finalText
-    entry.reviewStatus = next.reviewStatus
-    entry.reviewReasons = next.reviewReasons
-    entry.edited = false
-  }
   await Promise.all([loadReview(), loadPreview()])
   toast.add({ title: `已重新翻译 ${subtitleIds.length} 条字幕`, color: 'success' })
 }
