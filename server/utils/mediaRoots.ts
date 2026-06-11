@@ -1,6 +1,6 @@
 import { normalize, resolve, relative } from 'path'
 import { access, stat } from 'fs/promises'
-import { constants } from 'fs'
+import { constants, realpathSync } from 'fs'
 import type { MediaRoot } from '../../types'
 import { ConfigService } from './config'
 
@@ -99,9 +99,20 @@ export async function getMediaRoot(rootId?: string | null): Promise<MediaRoot> {
 export async function resolveMediaPath(userPath: string, rootId?: string | null): Promise<string> {
   const root = await getMediaRoot(rootId)
   const resolved = normalize(resolve(root.path, userPath || '.'))
-  if (!resolved.startsWith(root.path + '/') && !resolved.startsWith(root.path + '\\') && resolved !== root.path) {
-    throw createError({ statusCode: 403, message: '路径越权' })
+
+  try {
+    const realRoot = realpathSync(root.path)
+    const realResolved = realpathSync(resolved)
+    if (!realResolved.startsWith(realRoot + '/') && !realResolved.startsWith(realRoot + '\\') && realResolved !== realRoot) {
+      throw createError({ statusCode: 403, message: '路径越权' })
+    }
+  } catch (e: any) {
+    if (e.statusCode === 403) throw e
+    if (!resolved.startsWith(root.path + '/') && !resolved.startsWith(root.path + '\\') && resolved !== root.path) {
+      throw createError({ statusCode: 403, message: '路径越权' })
+    }
   }
+
   return resolved
 }
 

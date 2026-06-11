@@ -385,8 +385,8 @@ function moveSelectedDown() {
   for (const idx of selected) {
     const next = entries.value[idx + 1]
     entries.value.splice(idx, 2, entries.value[idx + 1], entries.value[idx])
+    markEdited(entries.value[idx + 1])
     markEdited(entries.value[idx])
-    markEdited(next)
   }
 }
 
@@ -415,6 +415,10 @@ function shiftFinal(entry: any, direction: number) {
 }
 
 function shiftAllTranslations(direction: number) {
+  const visibleIds = new Set(filteredEntries.value.map(e => e.subtitleId))
+  for (const e of entries.value) {
+    if (e.selected && !visibleIds.has(e.subtitleId)) e.selected = false
+  }
   const firstIdx = entries.value.findIndex(e => e.selected)
   if (firstIdx < 0) { toast.add({ title: '请先选择起始条目', color: 'warning' }); return }
   if (direction === 1) {
@@ -556,7 +560,7 @@ async function exportReviewed() {
     await saveChanges(false)
     await $fetch(`/api/tasks/${taskId}/review-export`, {
       method: 'POST',
-      body: { outputMode: exportMode.value, subtitleStylePreset: exportStyle.value, subtitleFormat: exportFormat.value }
+      body: { outputMode: exportMode.value, subtitleStylePreset: exportStyle.value, subtitleFormat: exportFormat.value, bilingualLayout: bilingualLayout.value }
     })
     toast.add({ title: '已导出最终字幕', color: 'success' })
     await navigateTo(`/task/${taskId}`)

@@ -31,6 +31,14 @@ export default defineEventHandler(async (event) => {
       await ConfigService.updateConfig(key, validateMediaRoots(value))
       continue
     }
+    if (key === 'chunkSize') {
+      await ConfigService.updateConfig(key, Math.min(50000, Math.max(100, Number(value) || 5000)))
+      continue
+    }
+    if (key === 'logRetentionDays') {
+      await ConfigService.updateConfig(key, Math.max(1, Math.min(365, Number(value) || 7)))
+      continue
+    }
     await ConfigService.updateConfig(key, value)
   }
 

@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
     body.outputMode || task.output_mode || 'translated',
     subtitleFormat,
     body.subtitleStylePreset || task.subtitle_style_preset || 'bilingual_simple',
-    task.bilingual_layout || 'translated_first',
+    body.bilingualLayout || task.bilingual_layout || 'translated_first',
     sourceSubtitlePath
   )
 
