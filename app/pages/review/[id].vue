@@ -423,20 +423,43 @@ function shiftAllTranslations(direction: number) {
   }
   const firstIdx = entries.value.findIndex(e => e.selected)
   if (firstIdx < 0) { toast.add({ title: '请先选择起始条目', color: 'warning' }); return }
+
   if (direction === 1) {
-    for (let i = entries.value.length - 1; i > firstIdx; i--) {
-      entries.value[i].translatedText = entries.value[i - 1].translatedText || ''
+    for (let i = entries.value.length - 1; i >= firstIdx; i--) {
+      if (i > firstIdx) {
+        entries.value[i].translatedText = entries.value[i - 1].translatedText || ''
+        entries.value[i].finalText = entries.value[i - 1].finalText || ''
+      } else {
+        entries.value[i].translatedText = ''
+        entries.value[i].finalText = ''
+      }
       markEdited(entries.value[i])
     }
-    entries.value[firstIdx].translatedText = ''
-    markEdited(entries.value[firstIdx])
   } else {
-    for (let i = firstIdx; i < entries.value.length - 1; i++) {
-      entries.value[i].translatedText = entries.value[i + 1].translatedText || ''
+    for (let i = firstIdx; i < entries.value.length; i++) {
+      if (i < entries.value.length - 1) {
+        entries.value[i].translatedText = entries.value[i + 1].translatedText || ''
+        entries.value[i].finalText = entries.value[i + 1].finalText || ''
+      } else {
+        entries.value[i].translatedText = ''
+        entries.value[i].finalText = ''
+      }
       markEdited(entries.value[i])
     }
-    entries.value[entries.value.length - 1].translatedText = ''
-    markEdited(entries.value[entries.value.length - 1])
+  }
+      markEdited(entries.value[i])
+    }
+  } else {
+    for (let i = firstIdx; i < entries.value.length; i++) {
+      if (i < entries.value.length - 1) {
+        entries.value[i].translatedText = entries.value[i + 1].translatedText || ''
+        entries.value[i].finalText = entries.value[i + 1].finalText || ''
+      } else {
+        entries.value[i].translatedText = ''
+        entries.value[i].finalText = ''
+      }
+      markEdited(entries.value[i])
+    }
   }
   toast.add({ title: `译文已整体${direction === 1 ? '下' : '上'}移`, color: 'success' })
 }
