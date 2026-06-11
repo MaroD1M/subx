@@ -370,7 +370,7 @@ function moveDown(entry: any) {
 
 function moveSelectedUp() {
   const selected = selectedEntries.value.map(e => entries.value.indexOf(e)).filter(idx => idx > 0)
-  selected.sort((a, b) => a - b)
+  selected.sort((a, b) => b - a)
   for (const idx of selected) {
     const prev = entries.value[idx - 1]
     entries.value.splice(idx - 1, 2, entries.value[idx], prev)
@@ -473,6 +473,7 @@ async function loadPreview() {
 async function saveChanges(showToast = true) {
   const changedEntries = dirtyEntries.value.map(entry => ({
     subtitleId: entry.subtitleId,
+    translatedText: entry.translatedText,
     finalText: entry.finalText,
     reviewStatus: entry.reviewStatus,
     selected: entry.selected,
