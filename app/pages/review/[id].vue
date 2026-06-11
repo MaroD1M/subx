@@ -436,7 +436,9 @@ function shiftAllTranslations(direction: number) {
       markEdited(entries.value[i])
     }
   } else {
-    for (let i = firstIdx; i < entries.value.length; i++) {
+    const startIdx = firstIdx > 0 ? firstIdx - 1 : firstIdx
+    if (startIdx < firstIdx) markEdited(entries.value[startIdx])
+    for (let i = startIdx; i < entries.value.length; i++) {
       if (i < entries.value.length - 1) {
         entries.value[i].translatedText = entries.value[i + 1].translatedText || ''
         entries.value[i].finalText = entries.value[i + 1].finalText || ''
