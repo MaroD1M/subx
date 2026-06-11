@@ -33,19 +33,24 @@ export default defineEventHandler(async (event) => {
     translatedText: row.final_text || row.translated_text || row.original_text
   }))
 
+  const outputMode = (requestedOutputMode || task?.output_mode || 'translated') as any
+  const bilingualLayout = (requestedBilingualLayout === 'translated_first' || requestedBilingualLayout === 'original_first') ? requestedBilingualLayout : (task?.bilingual_layout || 'translated_first')
+
   if (format === 'ass') {
     const content = SubtitleService.buildAssContent(
       entries as any,
       requestedStylePreset || task?.subtitle_style_preset || 'bilingual_simple',
-      (requestedOutputMode || task?.output_mode || 'translated') as any,
-      (requestedBilingualLayout === 'translated_first' || requestedBilingualLayout === 'original_first') ? requestedBilingualLayout : (task?.bilingual_layout || 'translated_first')
+      outputMode,
+      bilingualLayout
     )
     return { content, count: rows.length, format }
   }
 
   const content = rows.map((row, index) => {
-    const text = String(row.final_text || row.translated_text || row.original_text || '')
-    return `${index + 1}\n${row.start_time} --> ${row.end_time}\n${text.replace(/__SUBX_FMT_\d+__/g, '')}\n`
+    const entry = entries[index]
+    const displayText = SubtitleService.getDisplayText(entry, outputMode, bilingualLayout)
+      .replace(/__SUBX_FMT_\d+__/g, '')
+    return `${index + 1}\n${row.start_time} --> ${row.end_time}\n${displayText}\n`
   }).join('\n')
 
   return {
