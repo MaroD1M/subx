@@ -449,20 +449,6 @@ function shiftAllTranslations(direction: number) {
       markEdited(entries.value[i])
     }
   }
-      markEdited(entries.value[i])
-    }
-  } else {
-    for (let i = firstIdx; i < entries.value.length; i++) {
-      if (i < entries.value.length - 1) {
-        entries.value[i].translatedText = entries.value[i + 1].translatedText || ''
-        entries.value[i].finalText = entries.value[i + 1].finalText || ''
-      } else {
-        entries.value[i].translatedText = ''
-        entries.value[i].finalText = ''
-      }
-      markEdited(entries.value[i])
-    }
-  }
   toast.add({ title: `译文已整体${direction === 1 ? '下' : '上'}移`, color: 'success' })
 }
 
