@@ -6,9 +6,7 @@
           <div class="flex items-center gap-1 sm:gap-3 min-w-0">
             <img src="/favicon.ico" alt="SubX Logo" class="w-8 h-8 rounded-lg shadow-sm shrink-0" />
             <NuxtLink to="/" class="text-xl font-black text-primary-600 dark:text-primary-400 hover:opacity-80 transition-opacity shrink-0">SubX</NuxtLink>
-            <span v-if="versionInfo.isUpToDate" class="version-badge version-ok hidden md:inline-flex" title="已是最新版">v{{ versionInfo.current }} ✓</span>
-            <span v-else-if="versionInfo.latest" class="version-badge version-stale hidden md:inline-flex" title="有新版本可用">v{{ versionInfo.current }} &#8593; {{ versionInfo.latest }}</span>
-            <span v-else class="version-badge version-err hidden md:inline-flex" title="版本检测中...">{{ versionInfo.current || '—' }}</span>
+            <span class="version-badge version-err hidden md:inline-flex">v{{ appVersion }}</span>
             <div class="hidden md:flex items-center gap-0.5 ml-4">
               <UButton
                 label="首页"
@@ -78,23 +76,8 @@ const { logout, authenticated } = useAuth()
 const route = useRoute()
 
 const isLoginPage = computed(() => route.path === '/login' || route.path === '/login/')
-
-const versionInfo = ref({ current: '', latest: '', isUpToDate: false })
-onMounted(async () => {
-  try {
-    const v = await $fetch('/api/version/latest')
-    if (v && v.isUpToDate != null) {
-      versionInfo.value = { current: v.current || '', latest: v.latest || '', isUpToDate: v.isUpToDate }
-    } else {
-      versionInfo.value = { current: (v && v.current) || '', latest: '', isUpToDate: false }
-    }
-  } catch {
-    try {
-      const v = await $fetch('/api/version')
-      versionInfo.value = { current: (v && v.version) || '', latest: '', isUpToDate: false }
-    } catch { /* ignore */ }
-  }
-})
+const runtimeConfig = useRuntimeConfig()
+const appVersion = runtimeConfig.public.appVersion
 
 const fallbackTitle = computed(() => {
   const path = route.path.replace(/\/$/, '') || '/'

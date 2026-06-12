@@ -78,7 +78,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      // Public vars
+      appVersion: JSON.parse(require('fs').readFileSync('./package.json', 'utf-8')).version || '0.0.0'
     }
   }
 })
