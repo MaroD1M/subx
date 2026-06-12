@@ -6,9 +6,9 @@
           <div class="flex items-center gap-1 sm:gap-3 min-w-0">
             <img src="/favicon.ico" alt="SubX Logo" class="w-8 h-8 rounded-lg shadow-sm shrink-0" />
             <NuxtLink to="/" class="text-xl font-black text-primary-600 dark:text-primary-400 hover:opacity-80 transition-opacity shrink-0">SubX</NuxtLink>
-            <span v-if="versionInfo?.isUpToDate === true" class="version-badge version-ok hidden md:inline-flex" title="已是最新版">v{{ versionInfo.current }} ✓</span>
-            <span v-else-if="versionInfo?.isUpToDate === false" class="version-badge version-stale hidden md:inline-flex" title="有新版本可用">v{{ versionInfo.current }} &#8593; {{ versionInfo.latest }}</span>
-            <span v-else class="version-badge version-err hidden md:inline-flex" title="版本检测失败">{{ versionInfo?.current || '—' }}</span>
+            <span v-if="versionInfo.isUpToDate" class="version-badge version-ok hidden md:inline-flex" title="已是最新版">v{{ versionInfo.current }} ✓</span>
+            <span v-else-if="versionInfo.latest" class="version-badge version-stale hidden md:inline-flex" title="有新版本可用">v{{ versionInfo.current }} &#8593; {{ versionInfo.latest }}</span>
+            <span v-else class="version-badge version-err hidden md:inline-flex" title="版本检测中...">{{ versionInfo.current || '—' }}</span>
             <div class="hidden md:flex items-center gap-0.5 ml-4">
               <UButton
                 label="首页"
@@ -79,16 +79,20 @@ const route = useRoute()
 
 const isLoginPage = computed(() => route.path === '/login' || route.path === '/login/')
 
-const versionInfo = ref({ current: '', latest: '', isUpToDate: null as boolean | null })
+const versionInfo = ref({ current: '', latest: '', isUpToDate: false as boolean })
 onMounted(async () => {
   try {
     const v: any = await $fetch('/api/version/latest')
-    versionInfo.value = { current: v.current || '', latest: v.latest || '', isUpToDate: v.isUpToDate }
+    if (v.isUpToDate != null) {
+      versionInfo.value = { current: v.current || '', latest: v.latest || '', isUpToDate: v.isUpToDate }
+    } else {
+      versionInfo.value = { current: v.current || '', latest: '', isUpToDate: v.current ? true : false }
+    }
   } catch {
     try {
       const v: any = await $fetch('/api/version')
-      versionInfo.value = { current: v.version || '', latest: '', isUpToDate: null }
-    } catch { /* ignore */ }
+      versionInfo.value = { current: v.version || '', latest: '', isUpToDate: false }
+    } catch { versionInfo.value = { current: '', latest: '', isUpToDate: false } }
   }
 })
 
