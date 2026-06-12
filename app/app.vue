@@ -85,14 +85,16 @@ onMounted(async () => {
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 5000)
-    const res = await fetch('https://api.github.com/repos/MaroD1M/subx/releases/latest', {
+    const res = await fetch('https://api.github.com/repos/MaroD1M/subx/tags?per_page=1', {
       headers: { Accept: 'application/vnd.github+json' },
       signal: controller.signal
     })
     clearTimeout(timer)
     if (res.ok) {
       const data = await res.json()
-      latestVersion.value = String(data.tag_name || '').replace(/^v/, '')
+      if (Array.isArray(data) && data.length) {
+        latestVersion.value = String(data[0].name || '').replace(/^v/, '')
+      }
     }
   } catch { /* ignore — network unavailable */ }
 })
