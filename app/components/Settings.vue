@@ -8,6 +8,7 @@
       </div>
     </div>
 
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
     <div class="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 p-3.5 sm:p-4 space-y-3.5">
       <div class="flex items-center justify-between gap-3">
         <div>
@@ -108,6 +109,7 @@
           </div>
         </div>
       </div>
+    </div>
     </div>
 
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">

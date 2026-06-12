@@ -1,5 +1,5 @@
 <template>
-  <div ref="layoutRef" class="relative flex min-h-[720px] h-[calc(100vh-11.5rem)] max-h-[1120px] gap-3.5 glass-panel rounded-3xl p-5 overflow-hidden">
+  <div ref="layoutRef" class="relative flex flex-1 min-h-0 gap-3.5 glass-panel rounded-3xl p-5 overflow-hidden">
     <div v-if="resizeMode" class="absolute top-3 left-1/2 -translate-x-1/2 z-20 px-2.5 py-1 rounded-full bg-gray-900/85 text-white text-[11px] font-medium shadow-lg">
       {{ resizeHint }}
     </div>

@@ -35,7 +35,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
+    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px] gap-5 items-start">
       <div class="space-y-4 min-w-0">
         <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 overflow-hidden">
           <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 space-y-3">
@@ -68,7 +68,7 @@
           </div>
 
           <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-[72vh] overflow-y-auto">
-            <div v-for="entry in filteredEntries" :key="entry.subtitleId" v-memo="[entry.selected, entry.edited, entry.finalText, entry.translatedText, entry.reviewStatus, entry.reviewReasons]" :id="`review-entry-${entry.subtitleId}`" class="p-3 space-y-3" :class="focusedSubtitleId === String(entry.subtitleId) ? 'ring-2 ring-warning-400/70 rounded-2xl bg-warning-50/40 dark:bg-warning-900/10' : ''">
+            <div v-for="entry in filteredEntries" :key="entry.subtitleId" v-memo="[entry.selected, entry.edited, entry.finalText, entry.translatedText, entry.reviewStatus, entry.reviewReasons.length]" :id="`review-entry-${entry.subtitleId}`" class="p-2.5 space-y-2" :class="focusedSubtitleId === String(entry.subtitleId) ? 'ring-2 ring-warning-400/70 rounded-2xl bg-warning-50/40 dark:bg-warning-900/10' : ''">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 space-y-2">
                   <div class="flex items-center gap-2 flex-wrap">
@@ -89,7 +89,7 @@
               <div class="grid grid-cols-1 xl:grid-cols-[minmax(180px,0.9fr)_minmax(180px,0.9fr)_minmax(240px,1.2fr)] gap-3">
                 <div class="rounded-2xl bg-gray-50 dark:bg-gray-900/60 p-3 space-y-1.5">
                   <p class="text-[10px] uppercase tracking-widest text-gray-400">原文</p>
-                  <p class="text-[13px] leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
+                  <p class="text-xs leading-5 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
                 </div>
                 <div class="rounded-2xl bg-gray-50 dark:bg-gray-900/60 p-3 space-y-1.5">
                   <div class="flex items-center justify-between gap-1">
@@ -99,7 +99,7 @@
                       <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="neutral" title="译文下移" @click="shiftTranslation(entry, 1)" />
                     </div>
                   </div>
-                  <p class="text-[13px] leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
+                  <p class="text-xs leading-5 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
                 </div>
                 <div class="rounded-2xl bg-white dark:bg-gray-950/60 border border-primary-100 dark:border-primary-900/40 p-3 space-y-2">
                   <div class="flex items-center justify-between gap-2 flex-wrap">

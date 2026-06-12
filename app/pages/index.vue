@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 max-w-[1500px] mx-auto stagger-fade-in">
+  <div class="content-fluid sect-gap stagger-fade-in flex flex-col flex-1 min-h-0">
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-5 pb-6 mt-8 border-b border-gray-100 dark:border-gray-800">
       <div class="space-y-2">
         <UBreadcrumb :links="[{ label: '首页', icon: 'i-lucide-home' }]" />
