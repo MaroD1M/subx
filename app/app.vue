@@ -79,20 +79,20 @@ const route = useRoute()
 
 const isLoginPage = computed(() => route.path === '/login' || route.path === '/login/')
 
-const versionInfo = ref({ current: '', latest: '', isUpToDate: false as boolean })
+const versionInfo = ref({ current: '', latest: '', isUpToDate: false })
 onMounted(async () => {
   try {
-    const v: any = await $fetch('/api/version/latest')
-    if (v.isUpToDate != null) {
+    const v = await $fetch('/api/version/latest')
+    if (v && v.isUpToDate != null) {
       versionInfo.value = { current: v.current || '', latest: v.latest || '', isUpToDate: v.isUpToDate }
     } else {
-      versionInfo.value = { current: v.current || '', latest: '', isUpToDate: v.current ? true : false }
+      versionInfo.value = { current: (v && v.current) || '', latest: '', isUpToDate: false }
     }
   } catch {
     try {
-      const v: any = await $fetch('/api/version')
-      versionInfo.value = { current: v.version || '', latest: '', isUpToDate: false }
-    } catch { versionInfo.value = { current: '', latest: '', isUpToDate: false } }
+      const v = await $fetch('/api/version')
+      versionInfo.value = { current: (v && v.version) || '', latest: '', isUpToDate: false }
+    } catch { /* ignore */ }
   }
 })
 
