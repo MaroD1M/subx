@@ -1,6 +1,6 @@
 <template>
   <UApp>
-    <div class="flex flex-col min-h-screen">
+    <div class="min-h-screen bg-gray-50/50 dark:bg-gray-950">
       <header v-if="!isLoginPage" class="glass-panel sticky top-4 z-50 rounded-2xl mx-4 sm:mx-6 lg:mx-8 max-w-7xl lg:inset-x-0 lg:mx-auto">
         <div class="h-16 px-4 sm:px-6 flex items-center justify-between">
           <div class="flex items-center gap-1 sm:gap-3 min-w-0">
@@ -54,7 +54,7 @@
         </div>
       </header>
 
-      <main :class="[isLoginPage ? 'w-full h-screen' : 'content-fluid flex flex-col flex-1 min-h-0 py-6 px-4 sm:px-6 lg:px-8']">
+      <main :class="[isLoginPage ? 'w-full h-screen' : 'max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8']">
         <NuxtPage />
       </main>
 
