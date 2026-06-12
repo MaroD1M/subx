@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-4xl mx-auto space-y-8 py-10">
+  <div class="max-w-4xl mx-auto space-y-6 py-6">
     <div class="flex flex-col sm:flex-row sm:items-start gap-4 mb-8">
       <UButton icon="i-lucide-arrow-left" variant="ghost" color="neutral" to="/history" />
       <div class="flex flex-col min-w-0 flex-1 gap-1.5">
@@ -10,7 +10,7 @@
     </div>
 
     <div class="glass-panel rounded-3xl overflow-hidden mb-6 p-2">
-      <div class="p-8 space-y-8">
+      <div class="p-6 space-y-6">
         <div class="space-y-4">
           <div class="flex justify-between items-end mb-2">
             <div class="flex flex-col">
