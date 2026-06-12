@@ -846,6 +846,7 @@ onMounted(async () => {
   }
 
   if (task.value.step === 'done' || task.value.step === 'error' || task.value.step === 'review' || task.value.step === 'cancelled') {
+    task.value.currentText = null
     connectionState.value = 'history-only'
     return
   }
