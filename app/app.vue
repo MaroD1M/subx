@@ -6,7 +6,9 @@
           <div class="flex items-center gap-1 sm:gap-3 min-w-0">
             <img src="/favicon.ico" alt="SubX Logo" class="w-8 h-8 rounded-lg shadow-sm shrink-0" />
             <NuxtLink to="/" class="text-xl font-black text-primary-600 dark:text-primary-400 hover:opacity-80 transition-opacity shrink-0">SubX</NuxtLink>
-            <span class="version-badge version-err hidden md:inline-flex">v{{ appVersion }}</span>
+            <span v-if="latestVersion && appVersion !== latestVersion" class="version-badge version-stale hidden md:inline-flex" title="有新版本可用">v{{ appVersion }} &#8593; v{{ latestVersion }}</span>
+            <span v-else-if="latestVersion" class="version-badge version-ok hidden md:inline-flex" title="已是最新版">v{{ appVersion }} ✓</span>
+            <span v-else class="version-badge version-err hidden md:inline-flex">v{{ appVersion }}</span>
             <div class="hidden md:flex items-center gap-0.5 ml-4">
               <UButton
                 label="首页"
@@ -78,6 +80,22 @@ const route = useRoute()
 const isLoginPage = computed(() => route.path === '/login' || route.path === '/login/')
 const runtimeConfig = useRuntimeConfig()
 const appVersion = runtimeConfig.public.appVersion
+const latestVersion = ref('')
+onMounted(async () => {
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    const res = await fetch('https://api.github.com/repos/MaroD1M/subx/releases/latest', {
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: controller.signal
+    })
+    clearTimeout(timer)
+    if (res.ok) {
+      const data = await res.json()
+      latestVersion.value = String(data.tag_name || '').replace(/^v/, '')
+    }
+  } catch { /* ignore — network unavailable */ }
+})
 
 const fallbackTitle = computed(() => {
   const path = route.path.replace(/\/$/, '') || '/'
