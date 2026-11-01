@@ -1,0 +1,540 @@
+# ============================================================
+# SubX v2.6.1 - 单镜像开箱即用
+# ============================================================
+# 默认只启动一个 subx 容器，内部包含：
+#   - Web / 翻译主应用
+#   - 本地 ASR（faster-whisper / whisper.cpp）
+#   - 图像字幕 OCR（Tesseract / RapidOCR）
+#
+# 使用前：
+# 1. 把 /path/to/your/media 改成宿主机真实媒体目录
+# 2. 确认 PUID/PGID 与媒体文件所有者一致
+# 3. 建议设置 SUBX_SECRET_KEY
+# 4. 执行：docker compose up -d
+#
+# Whisper 模型不打进镜像。启动后进入
+# 「设置 → 语音识别 → 本地模型管理」手动开始下载，
+# 支持进度、速度、剩余时间、暂停、续传、取消、重试、卸载和代理。
+#
+# 镜像体积（v2.6.1，不含模型）：
+#   amd64 下载约 586 MiB，解压后约 1.57 GiB
+#   arm64 下载约 520 MiB
+#   ASR 模型另算，建议 /models 预留 10–20GB
+#
+# 升级：
+# 1. 修改 image 版本号，或改成 :latest
+# 2. docker compose pull
+# 3. docker compose up -d --force-recreate
+# ============================================================
+
+services:
+  subx:
+    # 固定版本，避免 latest 自动升级带来意外。
+    # 想跟随最新版可改成 ghcr.io/marod1m/subx:latest
+    image: ghcr.io/marod1m/subx:v2.6.1
+
+    # 容器名称，便于 docker logs / docker exec 使用。
+    container_name: subx
+
+    # 除非手动停止，否则异常退出后自动重启。
+    restart: unless-stopped
+
+    ports:
+      # 左边是宿主机端口，右边是容器内 Web 端口。
+      # 访问 http://NAS_IP:3000
+      # 如果只让本机反代访问，可改成 "127.0.0.1:3000:3000"
+      # 内置 ASR/OCR 监听 127.0.0.1，不需要也不建议映射端口。
+      - "3000:3000"
+
+    volumes:
+      # 媒体目录：必须填宿主机路径，容器内固定为 /media。
+      # 如需只读保护可改成 /path/to/your/media:/media:ro；
+      # 但只读时无法向媒体目录输出字幕。
+      - /path/to/your/media:/media
+
+      # SQLite 数据库、密钥文件和任务日志，必须持久化。
+      - ./data/db:/app/db
+
+      # 临时字幕和 AI 日志，建议保留方便排查。
+      - ./data/temp:/app/temp
+
+      # ASR 模型缓存。容器重建不会丢模型；建议预留 10–20GB。
+      # 对应 ASR_MODEL_DIR=/models。
+      - ./data/models:/models
+
+    environment:
+      # ---------------- 基础 ----------------
+      # 容器时区，影响日志和任务时间显示。
+      TZ: ${TZ:-Asia/Shanghai}
+
+      # 默认媒体目录。未在「媒体库」中配置时作为回退。
+      VIDEO_DIR: /media
+
+      # SQLite 数据库路径，必须位于可写目录。
+      # 使用 DATABASE_URL 时此值不再生效。
+      DB_PATH: /app/db/subx.db
+
+      # 容器运行用户。建议与媒体文件所有者一致。
+      # 查看 NAS 上媒体所有者：ls -ln /path/to/your/media
+      PUID: ${PUID:-1001}
+      PGID: ${PGID:-1001}
+
+      # 启动时递归修复媒体目录权限。
+      # 大媒体库会比较慢，建议只临时开启。
+      CHOWN_MEDIA: ${CHOWN_MEDIA:-false}
+
+      # 启动时递归修复 /models 权限。
+      # 从旧 sidecar 切换、或模型目录属主异常时临时开启。
+      CHOWN_MODELS: ${CHOWN_MODELS:-false}
+
+      # 跳过降权，直接以 root 运行。仅用于极端排障，不推荐。
+      # RUN_AS_ROOT: "false"
+
+      # API Key 加密主密钥。强烈建议设置。
+      # 生成方式：openssl rand -hex 32
+      # 注意：更换后旧 API Key 需要重新填写。
+      # SUBX_SECRET_KEY: change-me-to-a-long-random-secret
+
+      # ---------------- 单镜像内置服务 ----------------
+      # 单镜像标记：让主应用默认连接容器内的 ASR/OCR。
+      SUBX_ALL_IN_ONE: "true"
+
+      # 如需继续连接旧的 subx-asr / subx-ocr 外部 sidecar，取消注释。
+      # SUBX_KEEP_LEGACY_SIDECAR_URLS: "true"
+
+      # 内置 ASR/OCR 监听端口（只绑定 127.0.0.1，不对外暴露）。
+      # 修改端口后，启动脚本会自动生成对应的内部 URL。
+      ASR_INTERNAL_PORT: ${ASR_INTERNAL_PORT:-8000}
+      OCR_INTERNAL_PORT: ${OCR_INTERNAL_PORT:-8001}
+
+      # 可选：显式覆盖主应用默认连接的内置服务地址。
+      # 一般不需要设置；修改 *_INTERNAL_PORT 即可。
+      # ASR_INTERNAL_URL: http://127.0.0.1:8000
+      # OCR_INTERNAL_URL: http://127.0.0.1:8001
+
+      # 可选：内置服务鉴权。仅本机回环，通常不需要。
+      # 设置后必须在「设置 → 语音识别」填写相同 Key。
+      # 留空表示不鉴权；从 .env 读取，拆分 sidecar 时也可复用。
+      ASR_API_KEY: ${ASR_API_KEY:-}
+      OCR_API_KEY: ${OCR_API_KEY:-}
+
+      # ---------------- 内置 ASR ----------------
+      # 模型缓存目录和 whisper.cpp 子目录；需与 /models 卷对应。
+      # ASR_MODEL_DIR: /models
+      # ASR_WHISPER_CPP_MODEL_DIR: /models/whisper-cpp
+
+      # 是否允许首次识别时静默下载模型。
+      # 单镜像建议 false，统一在设置页手动下载并查看进度。
+      ASR_AUTO_DOWNLOAD: "false"
+
+      # 模型下载默认代理，仅支持 http:// / https://。
+      # 设置页也可以临时填写；不设置时读取容器 HTTP_PROXY/HTTPS_PROXY。
+      # ASR_DOWNLOAD_PROXY: http://192.168.1.2:7890
+
+      # Hugging Face 镜像站，例如国内网络可用 https://hf-mirror.com。
+      # ASR_HF_ENDPOINT: https://hf-mirror.com
+
+      # 默认模型；设置页可覆盖。
+      ASR_MODEL: ${ASR_MODEL:-small}
+
+      # 运行设备。单镜像为 CPU 版，建议 auto/cpu。
+      # 需要 cuda 时请使用 asr-gpu sidecar，并修改设置页地址。
+      ASR_DEVICE: ${ASR_DEVICE:-auto}
+
+      # 计算精度。CPU 推荐 int8，GPU 推荐 float16。
+      ASR_COMPUTE_TYPE: ${ASR_COMPUTE_TYPE:-int8}
+
+      # 识别引擎：auto / faster-whisper / whisper-cpp / cloud。
+      # auto 在 ARM 上优先 whisper.cpp，x86 优先 faster-whisper。
+      ASR_ENGINE: ${ASR_ENGINE:-auto}
+
+      # 音频预处理：off / demucs / deepfilternet。
+      # Demucs/DeepFilterNet 需要 asr-enhanced sidecar；单镜像会回退原始音频。
+      ASR_PREPROCESS: ${ASR_PREPROCESS:-off}
+
+      # 设置页可下载的模型列表，逗号分隔。
+      ASR_AVAILABLE_MODELS: ${ASR_AVAILABLE_MODELS:-tiny,base,small,medium,large-v3,large-v3-turbo}
+
+      # whisper.cpp 可选模型列表；一般与 ASR_AVAILABLE_MODELS 一致。
+      # ASR_WHISPER_CPP_MODELS: tiny,base,small,medium,large-v3,large-v3-turbo
+
+      # whisper.cpp 推理线程数；默认使用 CPU 核心数，低配可调小。
+      # ASR_THREADS: 2
+
+      # 说话人分离模型；仅 asr-enhanced sidecar 有效。
+      # ASR_DIARIZATION_MODEL: pyannote/speaker-diarization-3.1
+
+      # ---------------- 内置 OCR ----------------
+      # OCR 可访问的媒体根目录，必须与 /media 卷一致。
+      OCR_MEDIA_ROOT: /media
+
+      # 默认 OCR 语言，例如 en / zh-CN / ja。
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-en}
+
+      # OCR 引擎：auto / rapidocr / tesseract。
+      OCR_ENGINE: ${OCR_ENGINE:-auto}
+
+      # 抽帧 OCR 帧率。低配 NAS 可降到 1。
+      OCR_FPS: ${OCR_FPS:-2}
+
+      # 抽帧 OCR 并行线程数。低配可降到 2。
+      OCR_WORKERS: ${OCR_WORKERS:-4}
+
+      # 低置信度过滤阈值（0–100），低于该值的结果会被丢弃。
+      OCR_MIN_CONFIDENCE: ${OCR_MIN_CONFIDENCE:-25}
+
+      # 单个视频最大 OCR 时长（秒），超过直接报错。
+      OCR_MAX_SECONDS: ${OCR_MAX_SECONDS:-7200}
+
+      # 主应用轮询 OCR 任务状态的间隔（毫秒）。高级参数，一般不需要改。
+      # OCR_POLL_MS: 1500
+
+      # ---------------- 数据库 / 多 Worker ----------------
+      # 设置后优先使用 PostgreSQL，DB_PATH 不再生效。
+      # DATABASE_URL: postgres://subx:password@postgres:5432/subx
+      # PostgreSQL 连接池大小；同步桥为低并发设计。
+      # PG_POOL_SIZE: 5
+
+      # 多 Worker / 单主机多实例标识；默认使用进程 PID。
+      # SUBX_WORKER_ID: worker-1
+      # 回收陈旧任务的超时时间（秒）。
+      # SUBX_WORKER_STALE_SECONDS: 120
+
+      # ---------------- 通知出站 / 下载代理 ----------------
+      # 标准代理变量；Telegram、Webhook、ntfy 和模型下载都会用。
+      # 容器里的 127.0.0.1 指向容器自己；代理在宿主机时写局域网 IP。
+      # HTTP_PROXY: http://192.168.1.10:7890
+      # HTTPS_PROXY: http://192.168.1.10:7890
+      # ALL_PROXY: http://192.168.1.10:7890
+      # NO_PROXY: localhost,127.0.0.1
+
+      # ---------------- 反向代理 ----------------
+      # 仅在可信反向代理后开启。
+      # TRUST_PROXY: "true"
+      # 反向代理修改 Host 时，把外部域名加到这里。
+      # SUBX_ALLOWED_ORIGINS: https://subx.example.com
+
+    healthcheck:
+      # 健康检查会访问公开的 /api/health。
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+    # 单镜像同时跑 Web + ASR + OCR，建议至少 4GB 内存。
+    # 使用 medium/large 模型时按机器配置上调。
+    mem_limit: 4g
+    cpus: "4.0"
+
+    logging:
+      # 防止容器日志无限增长。
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # 群晖/Unraid 目录权限异常时，可临时启用以下其一排查：
+    # user: "0:0"
+    # user: "1000:1000"
+
+  # ==========================================================
+  # 可选：PostgreSQL（实测/多 Worker）
+  # ==========================================================
+  # 启动：docker compose --profile postgres up -d postgres
+  # 然后在 subx 环境变量设置：
+  #   DATABASE_URL=postgres://subx:subx@postgres:5432/subx
+  postgres:
+    # 只有显式使用 --profile postgres 时才启动。
+    profiles: ["postgres"]
+
+    # PostgreSQL 17 Alpine 镜像。
+    image: postgres:17-alpine
+
+    container_name: subx-postgres
+    restart: unless-stopped
+
+    environment:
+      # 数据库用户名；需与 DATABASE_URL 中的用户名一致。
+      POSTGRES_USER: ${POSTGRES_USER:-subx}
+      # 数据库密码；生产环境请修改，并同步 DATABASE_URL。
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-subx}
+      # 数据库名；需与 DATABASE_URL 中的库名一致。
+      POSTGRES_DB: ${POSTGRES_DB:-subx}
+
+    volumes:
+      # PostgreSQL 数据目录，必须持久化。
+      - ./data/postgres:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-subx} -d ${POSTGRES_DB:-subx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================
+  # 可选：拆分部署的 ASR sidecar
+  # ==========================================================
+  # 单镜像已经内置 ASR，一般不需要启用。
+  # 仅在你希望把 ASR 单独扩容、放到另一台机器，或使用旧版拆分架构时启用：
+  #   docker compose --profile asr up -d asr
+  # 然后在 SubX 设置 → 语音识别把地址改为 http://subx-asr:8000
+  #
+  # 模型会下载到 ./data/models/asr，不会打进镜像。
+  asr:
+    # 只有显式使用 --profile asr 时才启动。
+    profiles: ["asr"]
+
+    # 优先使用预构建镜像；本地没有时会按 asr-service 构建。
+    image: ghcr.io/marod1m/subx-asr:v2.6.1
+    build:
+      context: ./asr-service
+
+    container_name: subx-asr
+    restart: unless-stopped
+
+    environment:
+      # 默认模型；低配 NAS 建议 small。
+      ASR_MODEL: ${ASR_MODEL:-small}
+      # auto / cpu / cuda；GPU 请使用 asr-gpu profile。
+      ASR_DEVICE: ${ASR_DEVICE:-auto}
+      # CPU 推荐 int8，GPU 推荐 float16。
+      ASR_COMPUTE_TYPE: ${ASR_COMPUTE_TYPE:-int8}
+      # auto / faster-whisper / whisper-cpp。
+      ASR_ENGINE: ${ASR_ENGINE:-auto}
+      # off / demucs / deepfilternet；增强预处理需要 enhanced 镜像。
+      ASR_PREPROCESS: ${ASR_PREPROCESS:-off}
+      # sidecar 默认允许首次识别时自动下载；设置为 false 后需在设置页手动下载。
+      ASR_AUTO_DOWNLOAD: ${ASR_AUTO_DOWNLOAD:-true}
+      # Hugging Face 镜像站，例如 https://hf-mirror.com。
+      ASR_HF_ENDPOINT: ${ASR_HF_ENDPOINT:-}
+      # 模型下载代理，仅支持 http:// / https://。
+      ASR_DOWNLOAD_PROXY: ${ASR_DOWNLOAD_PROXY:-}
+      # 可选 sidecar 鉴权；设置后需在 SubX 设置页填写相同 Key。
+      ASR_API_KEY: ${ASR_API_KEY:-}
+      # 设置页可下载的模型列表。
+      ASR_AVAILABLE_MODELS: ${ASR_AVAILABLE_MODELS:-tiny,base,small,medium,large-v3,large-v3-turbo}
+      # whisper.cpp 可选模型列表。
+      ASR_WHISPER_CPP_MODELS: ${ASR_WHISPER_CPP_MODELS:-tiny,base,small,medium,large-v3,large-v3-turbo}
+      # whisper.cpp 推理线程数；默认使用 CPU 核心数。
+      ASR_THREADS: ${ASR_THREADS:-0}
+
+    volumes:
+      # ASR 模型缓存，必须持久化；建议预留 10–20GB。
+      - ./data/models/asr:/models
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    # 低配 NAS 可限制资源，避免和 Web 抢内存。
+    # mem_limit: 4g
+    # cpus: "4.0"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================
+  # 可选：增强 ASR（Demucs / DeepFilterNet / pyannote PoC）
+  # ==========================================================
+  # 镜像较大，首次构建/下载模型较慢。默认关闭，按需启用。
+  #   docker compose --profile asr-enhanced up -d asr-enhanced
+  # 设置页 ASR 地址改为 http://subx-asr-enhanced:8000
+  # 需要说话人分离时设置 HF_TOKEN，并接受 pyannote 模型许可。
+  asr-enhanced:
+    profiles: ["asr-enhanced"]
+    build:
+      context: ./asr-service
+      dockerfile: Dockerfile.enhanced
+
+    container_name: subx-asr-enhanced
+    restart: unless-stopped
+
+    environment:
+      # 默认模型；增强镜像也可以跑 small/medium/large。
+      ASR_MODEL: ${ASR_MODEL:-small}
+      # auto / cpu / cuda。
+      ASR_DEVICE: ${ASR_DEVICE:-auto}
+      # CPU 推荐 int8，GPU 推荐 float16。
+      ASR_COMPUTE_TYPE: ${ASR_COMPUTE_TYPE:-int8}
+      # auto / faster-whisper / whisper-cpp。
+      ASR_ENGINE: ${ASR_ENGINE:-auto}
+      # off / demucs / deepfilternet；增强镜像包含 Demucs/DeepFilterNet。
+      ASR_PREPROCESS: ${ASR_PREPROCESS:-off}
+      # sidecar 默认允许自动下载；设置为 false 后需在设置页手动下载。
+      ASR_AUTO_DOWNLOAD: ${ASR_AUTO_DOWNLOAD:-true}
+      # Hugging Face 镜像站。
+      ASR_HF_ENDPOINT: ${ASR_HF_ENDPOINT:-}
+      # 模型下载代理。
+      ASR_DOWNLOAD_PROXY: ${ASR_DOWNLOAD_PROXY:-}
+      # 可选 sidecar 鉴权；设置后需在设置页填写相同 Key。
+      ASR_API_KEY: ${ASR_API_KEY:-}
+      # 模型列表。
+      ASR_AVAILABLE_MODELS: ${ASR_AVAILABLE_MODELS:-tiny,base,small,medium,large-v3,large-v3-turbo}
+      ASR_WHISPER_CPP_MODELS: ${ASR_WHISPER_CPP_MODELS:-tiny,base,small,medium,large-v3,large-v3-turbo}
+      # whisper.cpp 推理线程数；默认使用 CPU 核心数。
+      ASR_THREADS: ${ASR_THREADS:-0}
+      # 说话人分离模型；需要 HF_TOKEN 并接受模型许可。
+      ASR_DIARIZATION_MODEL: ${ASR_DIARIZATION_MODEL:-pyannote/speaker-diarization-3.1}
+      # Hugging Face Token，仅说话人分离/受许可模型需要。
+      HF_TOKEN: ${HF_TOKEN:-}
+
+    volumes:
+      - ./data/models/asr:/models
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+
+    # 增强镜像和 pyannote 内存占用较高，按机器配置调整。
+    # mem_limit: 8g
+    # cpus: "6.0"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================
+  # 可选：拆分部署的 OCR sidecar
+  # ==========================================================
+  # 单镜像已经内置 OCR，一般不需要启用。
+  # 仅在拆分部署时使用：
+  #   docker compose --profile ocr up -d ocr
+  # 然后在 SubX 设置 → 语音识别把 OCR 地址改为 http://subx-ocr:8000
+  # OCR 容器必须挂载与主应用相同的媒体目录，路径也要一致。
+  ocr:
+    profiles: ["ocr"]
+
+    # 优先使用预构建镜像；本地没有时会按 ocr-service 构建。
+    image: ghcr.io/marod1m/subx-ocr:v2.6.1
+    build:
+      context: ./ocr-service
+
+    container_name: subx-ocr
+    restart: unless-stopped
+
+    environment:
+      # OCR 可访问的媒体根目录，必须与主应用挂载路径一致。
+      OCR_MEDIA_ROOT: /media
+      # 默认 OCR 语言，例如 en / zh-CN / ja。
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-en}
+      # 可选 OCR 鉴权；设置后需在 SubX 设置页填写相同 Key。
+      OCR_API_KEY: ${OCR_API_KEY:-}
+      # 单个视频最大 OCR 时长（秒）。
+      OCR_MAX_SECONDS: ${OCR_MAX_SECONDS:-7200}
+      # 低置信度过滤阈值（0–100）。
+      OCR_MIN_CONFIDENCE: ${OCR_MIN_CONFIDENCE:-25}
+      # 抽帧 OCR 帧率，低配可降到 1。
+      OCR_FPS: ${OCR_FPS:-2}
+      # 并行 OCR 线程数，低配可降到 2。
+      OCR_WORKERS: ${OCR_WORKERS:-4}
+      # auto / rapidocr / tesseract。
+      OCR_ENGINE: ${OCR_ENGINE:-auto}
+
+    volumes:
+      # 必须与主应用媒体路径一致；只读即可。
+      - /path/to/your/media:/media:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    # 低配 NAS 可限制资源，避免和 Web/ASR 抢 CPU。
+    # mem_limit: 2g
+    # cpus: "2.0"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================
+  # 可选：NVIDIA GPU 版 ASR sidecar
+  # ==========================================================
+  # 单镜像使用 CPU。需要 GPU 时启用独立 sidecar：
+  #   docker compose --profile asr-gpu up -d asr-gpu
+  # 然后在设置页把 ASR 地址改成 http://subx-asr-gpu:8000
+  asr-gpu:
+    profiles: ["asr-gpu"]
+    build:
+      context: ./asr-service
+      dockerfile: Dockerfile.gpu
+
+    container_name: subx-asr-gpu
+    restart: unless-stopped
+
+    environment:
+      # GPU 推荐 large-v3-turbo；显存不足时改用 small/medium。
+      ASR_MODEL: ${ASR_MODEL:-large-v3-turbo}
+      # 固定使用 CUDA；需要 NVIDIA 驱动和 Container Toolkit。
+      ASR_DEVICE: cuda
+      # GPU 推荐 float16。
+      ASR_COMPUTE_TYPE: ${ASR_COMPUTE_TYPE:-float16}
+      # auto / faster-whisper / whisper-cpp。
+      ASR_ENGINE: ${ASR_ENGINE:-auto}
+      # off / demucs / deepfilternet；GPU 镜像默认不含增强预处理。
+      ASR_PREPROCESS: ${ASR_PREPROCESS:-off}
+      # 默认允许自动下载；设置为 false 后可在设置页手动下载。
+      ASR_AUTO_DOWNLOAD: ${ASR_AUTO_DOWNLOAD:-true}
+      # Hugging Face 镜像站。
+      ASR_HF_ENDPOINT: ${ASR_HF_ENDPOINT:-}
+      # 模型下载代理。
+      ASR_DOWNLOAD_PROXY: ${ASR_DOWNLOAD_PROXY:-}
+      # 可选鉴权；设置后需在设置页填写相同 Key。
+      ASR_API_KEY: ${ASR_API_KEY:-}
+      # 模型列表。
+      ASR_AVAILABLE_MODELS: ${ASR_AVAILABLE_MODELS:-tiny,base,small,medium,large-v3,large-v3-turbo}
+      ASR_WHISPER_CPP_MODELS: ${ASR_WHISPER_CPP_MODELS:-tiny,base,small,medium,large-v3,large-v3-turbo}
+      # whisper.cpp 推理线程数；GPU 场景一般无关。
+      ASR_THREADS: ${ASR_THREADS:-0}
+
+    volumes:
+      # GPU 模型缓存，必须持久化；large-v3-turbo 约 1.6GB+。
+      - ./data/models/asr:/models
+
+    # 将 NVIDIA GPU 暴露给容器；需要 NVIDIA Container Toolkit。
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+    # 按显卡显存和主机内存调整。
+    # mem_limit: 12g
+    # cpus: "8.0"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

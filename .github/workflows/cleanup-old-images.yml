@@ -1,0 +1,59 @@
+name: Cleanup Old Container Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_version:
+        description: '保留的版本 tag，逗号分隔'
+        required: false
+        default: 'v2.6.1,2.6.1,latest'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old tagged package versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          KEEP: ${{ github.event.inputs.keep_version }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          OWNER_LOWER="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          SHORT_SHA="$(echo "$SHA" | cut -c1-7)"
+          KEEP_LIST="$(printf '%s\n%s\n' "$KEEP" "sha-$SHORT_SHA" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')"
+          echo "Preserving tags:"
+          echo "$KEEP_LIST"
+
+          for pkg in subx subx-asr subx-ocr; do
+            echo "::group::Package $pkg"
+            if ! gh api --paginate "users/$OWNER_LOWER/packages/container/$pkg/versions?per_page=100" \
+              --jq '.[] | [.id, ((.metadata.container.tags // []) | join(","))] | @tsv' > /tmp/versions.tsv 2>/tmp/versions.err; then
+              echo "Skip $pkg: $(cat /tmp/versions.err)"
+              echo "::endgroup::"
+              continue
+            fi
+
+            while IFS=$'\t' read -r id tags; do
+              [ -z "$id" ] && continue
+              [ -z "$tags" ] && continue
+              keep=0
+              IFS=',' read -ra TAG_ARRAY <<< "$tags"
+              for tag in "${TAG_ARRAY[@]}"; do
+                if printf '%s\n' "$KEEP_LIST" | grep -Fxq "$tag"; then
+                  keep=1
+                  break
+                fi
+              done
+              if [ "$keep" -eq 0 ]; then
+                echo "Deleting $pkg:$tags (version $id)"
+                gh api --method DELETE "users/$OWNER_LOWER/packages/container/$pkg/versions/$id" >/dev/null 2>&1 || echo "  delete skipped"
+              fi
+            done < /tmp/versions.tsv
+            echo "::endgroup::"
+          done

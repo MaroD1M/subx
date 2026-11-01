@@ -1,0 +1,38 @@
+name: PostgreSQL Smoke
+
+on:
+  push:
+    branches: [ "master" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: subx
+          POSTGRES_PASSWORD: subx
+          POSTGRES_DB: subx
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U subx -d subx"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG_TEST_DATABASE_URL: postgres://subx:subx@127.0.0.1:5432/subx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:pg

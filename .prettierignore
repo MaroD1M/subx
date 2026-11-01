@@ -1,0 +1,8 @@
+.nuxt
+.output
+node_modules
+package-lock.json
+.agent
+docs/diagnostic-samples
+public
+coverage

@@ -1,0 +1,6 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2,<3
+pgsrip[rapidocr]==0.3.0
+pysrt>=1.1,<2
+pytesseract>=0.3,<1
