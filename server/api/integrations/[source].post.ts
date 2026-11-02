@@ -1,7 +1,7 @@
 import { ConfigService } from '../../utils/config'
 import { IntegrationService, parseIntegrationPayload, type IntegrationSource } from '../../utils/integrations'
 
-const SOURCES = new Set(['sonarr', 'radarr', 'jellyfin', 'plex'])
+const SOURCES = new Set(['sonarr', 'radarr', 'jellyfin', 'plex', 'emby', 'bazarr'])
 
 async function readPayload(event: any): Promise<any> {
   const contentType = String(getHeader(event, 'content-type') || '')

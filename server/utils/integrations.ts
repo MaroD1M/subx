@@ -132,11 +132,18 @@ export const IntegrationService = {
       bilingualLayout: (config.bilingualLayout || 'translated_first') as any,
       origin: 'automation'
     })
-    await globalTaskQueue.add(taskId, { apiKey: config.apiKey, baseUrl: config.apiBaseUrl })
-    integrationDb().prepare(`
+    const event = integrationDb().prepare(`
       INSERT INTO integration_events (source, event, path, task_id, status, payload_json)
       VALUES (?, ?, ?, ?, 'queued', ?)
     `).run(source, payload.event, resolved.relativePath, taskId, JSON.stringify(payload))
+    try {
+      await globalTaskQueue.add(taskId, { apiKey: config.apiKey, baseUrl: config.apiBaseUrl })
+    } catch (error) {
+      integrationDb().prepare(`
+        UPDATE integration_events SET status = 'failed', error = ? WHERE id = ?
+      `).run(String((error as any)?.message || error), event.lastInsertRowid)
+      throw error
+    }
     return { taskId, rootId: resolved.rootId, relativePath: resolved.relativePath }
   },
 

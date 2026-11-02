@@ -16,6 +16,10 @@ export default defineEventHandler(async (event) => {
   const root = await getMediaRoot(rootId)
   const videoDir = normalize(resolve(root.path))
   const fullPath = await resolvePathEntry(videoDir, relPath)
+  if (resolve(fullPath) === videoDir) {
+    throw createError({ statusCode: 400, message: '不能删除媒体库根目录' })
+  }
+
   let targetStat: Awaited<ReturnType<typeof lstat>>
 
   try {

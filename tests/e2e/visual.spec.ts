@@ -136,6 +136,7 @@ test('settings ASR tab is accessible', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
   await expect(page.getByText('快速预设')).toBeVisible()
   await expect(page.getByText('启用语音识别')).toBeVisible()
+  await expect(page.getByText('长任务超时')).toBeVisible()
   await expectNoSeriousA11y(page)
 })
 
@@ -239,6 +240,45 @@ test('ASR card stays visible when toggled off without subtitle tracks', async ({
 
   await expect.poll(() => taskBody?.sourceType, { timeout: 5000 }).toBe('asr')
   expect(taskBody.trackIndex).toBe(2)
+})
+
+test('settings storage tab is accessible', async ({ page }) => {
+  await page.goto('/settings?tab=storage')
+  await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
+  await expect(page.getByText('存储与缓存').first()).toBeVisible()
+  await expect(page.getByText('磁盘总量')).toBeVisible()
+  await expect(page.getByText('缓存合计')).toBeVisible()
+  await expectNoSeriousA11y(page)
+})
+
+test('storage summary and targeted cleanup endpoints work', async ({ page }) => {
+  const summary = await page.request.get('/api/storage')
+  expect(summary.ok()).toBeTruthy()
+  const payload = await summary.json()
+  expect(Array.isArray(payload.categories)).toBeTruthy()
+  expect(payload.categories.some((item: any) => item.key === 'asrAudio')).toBeTruthy()
+  const cleaned = await page.request.post('/api/storage/cleanup', {
+    data: { targets: ['translationCache'], all: true }
+  })
+  expect(cleaned.ok()).toBeTruthy()
+  const result = await cleaned.json()
+  expect(result.success).toBe(true)
+  expect(result.categories).toContain('translationCache')
+})
+
+test('Emby and Bazarr webhook endpoints accept valid tokens', async ({ page }) => {
+  const token = 'subx-e2e-integration-token'
+  const saved = await page.request.put('/api/config', { data: { integrationWebhookToken: token } })
+  expect(saved.ok()).toBeTruthy()
+  for (const source of ['emby', 'bazarr']) {
+    const response = await page.request.post(`/api/integrations/${source}?token=${encodeURIComponent(token)}`, {
+      data: { eventType: 'Test' }
+    })
+    expect(response.ok()).toBeTruthy()
+    const payload = await response.json()
+    expect(payload.test).toBe(true)
+    expect(payload.source).toBe(source)
+  }
 })
 
 test('authenticated users are redirected away from login', async ({ page }) => {

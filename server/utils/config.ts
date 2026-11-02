@@ -49,6 +49,10 @@ export const ConfigService = {
             asrLanguage: 'auto',
             asrDevice: String(process.env.ASR_DEVICE || 'auto'),
             asrComputeType: String(process.env.ASR_COMPUTE_TYPE || 'int8'),
+            asrUploadTimeoutMs: Number(process.env.ASR_UPLOAD_TIMEOUT_MS || 30 * 60 * 1000),
+            asrPollTimeoutMs: Number(process.env.ASR_POLL_TIMEOUT_MS || 30 * 1000),
+            asrJobIdleTimeoutMs: Number(process.env.ASR_JOB_IDLE_TIMEOUT_MS || 30 * 60 * 1000),
+            asrJobAbsoluteTimeoutMs: Number(process.env.ASR_JOB_ABSOLUTE_TIMEOUT_MS || 6 * 60 * 60 * 1000),
             asrVad: true,
             asrWordTimestamps: true,
             asrKeepAudio: false,
@@ -79,7 +83,7 @@ export const ConfigService = {
                 config.mediaRoots = JSON.parse(row.value) as MediaRoot[]
             } else if (row.key === 'customStylePresets') {
                 config.customStylePresets = JSON.parse(row.value)
-            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence'].includes(row.key)) {
+            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'

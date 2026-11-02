@@ -38,6 +38,10 @@ const ALLOWED_KEYS = new Set([
   'asrLanguage',
   'asrDevice',
   'asrComputeType',
+  'asrUploadTimeoutMs',
+  'asrPollTimeoutMs',
+  'asrJobIdleTimeoutMs',
+  'asrJobAbsoluteTimeoutMs',
   'asrVad',
   'asrWordTimestamps',
   'asrKeepAudio',
@@ -119,6 +123,22 @@ export default defineEventHandler(async (event) => {
     }
     if (key === 'ocrEngine') {
       await ConfigService.updateConfig(key, ['auto', 'rapidocr', 'tesseract'].includes(String(value)) ? String(value) : 'auto')
+      continue
+    }
+    if (key === 'asrUploadTimeoutMs') {
+      await ConfigService.updateConfig(key, Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(value) || 30 * 60 * 1000)))
+      continue
+    }
+    if (key === 'asrPollTimeoutMs') {
+      await ConfigService.updateConfig(key, Math.max(1_000, Math.min(60_000, Number(value) || 30_000)))
+      continue
+    }
+    if (key === 'asrJobIdleTimeoutMs') {
+      await ConfigService.updateConfig(key, Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(value) || 30 * 60 * 1000)))
+      continue
+    }
+    if (key === 'asrJobAbsoluteTimeoutMs') {
+      await ConfigService.updateConfig(key, Math.max(10 * 60 * 1000, Math.min(7 * 24 * 60 * 60 * 1000, Number(value) || 6 * 60 * 60 * 1000)))
       continue
     }
     await ConfigService.updateConfig(key, value)

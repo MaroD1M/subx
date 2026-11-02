@@ -27,6 +27,9 @@ export default defineEventHandler(async (event) => {
   const root = await getMediaRoot(rootId)
   const videoDir = normalize(resolve(root.path))
   const sourceFullPath = await resolvePathEntry(videoDir, fromPath)
+  if (resolve(sourceFullPath) === videoDir) {
+    throw createError({ statusCode: 400, message: '不能重命名媒体库根目录' })
+  }
   const sourceDir = dirname(sourceFullPath)
   const targetFullPath = join(sourceDir, newName)
   const normalizedTarget = await resolveInsideRoot(

@@ -48,7 +48,12 @@ export default defineEventHandler(async (event) => {
   }
 
   if (body.retryTaskId) {
-    const oldTask = TaskService.getTask(String(body.retryTaskId))
+    let oldTask: ReturnType<typeof TaskService.getTask>
+    try {
+      oldTask = TaskService.getTask(String(body.retryTaskId))
+    } catch {
+      throw createError({ statusCode: 404, message: '要重试的任务不存在' })
+    }
     const newTaskId = uuidv4()
     await TaskService.createTask({
       taskId: newTaskId,

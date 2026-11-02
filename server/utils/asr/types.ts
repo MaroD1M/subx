@@ -44,6 +44,10 @@ export interface AsrOptions {
   model?: string
   device?: string
   computeType?: string
+  uploadTimeoutMs?: number
+  pollTimeoutMs?: number
+  jobIdleTimeoutMs?: number
+  jobAbsoluteTimeoutMs?: number
   language?: string
   vad?: boolean
   wordTimestamps?: boolean

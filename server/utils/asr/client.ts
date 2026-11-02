@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, statSync } from 'fs'
+import { existsSync, openAsBlob, readFileSync, rmSync, statSync } from 'fs'
 import { basename, dirname, join } from 'path'
 import { Agent } from 'undici'
 import type { SubtitleEntry } from '../../../types'
@@ -7,16 +7,42 @@ import { SubtitleService } from '../subtitle'
 import { VideoService } from '../video'
 import type { AsrOptions, AsrPersistedResult, AsrResult, AsrSegment, AsrWord } from './types'
 
-const REQUEST_TIMEOUT_MS = 60 * 60 * 1000
+function envDuration(name: string, fallback: number) {
+  const value = Number(process.env[name])
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
+}
+
+const DEFAULT_UPLOAD_TIMEOUT_MS = envDuration('ASR_UPLOAD_TIMEOUT_MS', 30 * 60 * 1000)
+const DEFAULT_POLL_TIMEOUT_MS = envDuration('ASR_POLL_TIMEOUT_MS', 30 * 1000)
+const DEFAULT_JOB_IDLE_TIMEOUT_MS = envDuration('ASR_JOB_IDLE_TIMEOUT_MS', 30 * 60 * 1000)
+const DEFAULT_JOB_ABSOLUTE_TIMEOUT_MS = envDuration('ASR_JOB_ABSOLUTE_TIMEOUT_MS', 6 * 60 * 60 * 1000)
 const CLOUD_TIMEOUT_MS = 30 * 60 * 1000
 const CLOUD_MAX_BYTES = 24 * 1024 * 1024
 const JOB_POLL_MS = 1500
-// Node 内置 fetch 默认 headersTimeout 只有 300 秒，长音频转写会在 5 分钟时被
-// 误判为网络超时。ASR 请求统一使用放宽到任务超时时间的 dispatcher。
+const MAX_DISPATCH_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000
+// Node 内置 fetch 默认 headersTimeout 只有 300 秒，长音频同步转写会在 5 分钟时被
+// 误判为网络超时。状态轮询另有更短的 per-request 超时，不依赖这个全局 dispatcher。
 const asrDispatcher = new Agent({
-  headersTimeout: REQUEST_TIMEOUT_MS,
-  bodyTimeout: REQUEST_TIMEOUT_MS
+  headersTimeout: MAX_DISPATCH_TIMEOUT_MS,
+  bodyTimeout: MAX_DISPATCH_TIMEOUT_MS
 })
+
+export function resolveAsrTimeouts(options: AsrOptions) {
+  return {
+    upload: Math.max(60_000, Number(options.uploadTimeoutMs) || DEFAULT_UPLOAD_TIMEOUT_MS),
+    poll: Math.max(1_000, Number(options.pollTimeoutMs) || DEFAULT_POLL_TIMEOUT_MS),
+    idle: Math.max(60_000, Number(options.jobIdleTimeoutMs) || DEFAULT_JOB_IDLE_TIMEOUT_MS),
+    absolute: Math.max(10 * 60 * 1000, Number(options.jobAbsoluteTimeoutMs) || DEFAULT_JOB_ABSOLUTE_TIMEOUT_MS)
+  }
+}
+
+async function audioBlob(filePath: string): Promise<Blob> {
+  try {
+    return await openAsBlob(filePath, { type: 'audio/wav' })
+  } catch {
+    return new Blob([readFileSync(filePath)], { type: 'audio/wav' })
+  }
+}
 
 function asrFetch(input: string, init: RequestInit = {}) {
   return fetch(input, { ...init, dispatcher: asrDispatcher } as any)
@@ -47,9 +73,15 @@ function describeAsrError(error: any) {
   return String(cause?.code || cause?.message || error?.message || error || '未知错误')
 }
 
-function buildAsrForm(fileName: string, audio: Buffer, options: AsrOptions, engine: string) {
+function nonRetryableError(message: string) {
+  const error: any = new Error(message)
+  error.noRetry = true
+  return error
+}
+
+function buildAsrForm(fileName: string, audio: Blob, options: AsrOptions, engine: string) {
   const form = new FormData()
-  form.append('file', new Blob([audio as any], { type: 'audio/wav' }), fileName)
+  form.append('file', audio, fileName)
   form.append('model', options.model || 'small')
   form.append('language', options.language || 'auto')
   if (options.device) form.append('device', options.device)
@@ -75,9 +107,10 @@ function normalizeLocalResult(data: any): AsrResult {
   }
 }
 
-async function transcribeLocal(baseUrl: string, fileName: string, audio: Buffer, options: AsrOptions, engine: string, signal?: AbortSignal): Promise<AsrResult> {
+async function transcribeLocal(baseUrl: string, fileName: string, audio: Blob, options: AsrOptions, engine: string, signal?: AbortSignal): Promise<AsrResult> {
+  const timeouts = resolveAsrTimeouts(options)
   const timeout = new AbortController()
-  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS)
+  const timer = setTimeout(() => timeout.abort(), timeouts.absolute)
   const headers: Record<string, string> = {}
   if (options.apiKey) headers.Authorization = `Bearer ${options.apiKey}`
   try {
@@ -92,7 +125,27 @@ async function transcribeLocal(baseUrl: string, fileName: string, audio: Buffer,
       throw new Error(`ASR 请求失败 (${response.status}): ${detail.slice(0, 500)}`)
     }
     return normalizeLocalResult(await response.json())
+  } catch (error: any) {
+    if (signal?.aborted) throw new Error('任务已取消')
+    if (timeout.signal.aborted) {
+      throw new Error(`ASR 同步识别超过最长执行时间（${Math.round(timeouts.absolute / 3600000)} 小时），已中止`)
+    }
+    throw error
   } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function cancelRemoteJob(baseUrl: string, jobId: string, headers: Record<string, string>) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10_000)
+  try {
+    await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs/${jobId}/cancel`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal
+    })
+  } catch { /* best effort */ } finally {
     clearTimeout(timer)
   }
 }
@@ -100,63 +153,118 @@ async function transcribeLocal(baseUrl: string, fileName: string, audio: Buffer,
 async function transcribeLocalJob(
   baseUrl: string,
   fileName: string,
-  audio: Buffer,
+  audio: Blob,
   options: AsrOptions,
   engine: string,
   signal?: AbortSignal
 ): Promise<AsrResult | null> {
-  const timeout = new AbortController()
-  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS)
-  const combinedSignal = combineSignal(signal, timeout)
   const headers: Record<string, string> = {}
   if (options.apiKey) headers.Authorization = `Bearer ${options.apiKey}`
+  const timeouts = resolveAsrTimeouts(options)
+
+  const uploadTimeout = new AbortController()
+  const uploadTimer = setTimeout(() => uploadTimeout.abort(), timeouts.upload)
+  let create: Response
   try {
-    const create = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs`, {
+    create = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs`, {
       method: 'POST',
       headers,
       body: buildAsrForm(fileName, audio, options, engine),
-      signal: combinedSignal
+      signal: combineSignal(signal, uploadTimeout)
     })
-    if (create.status === 404 || create.status === 405) return null
-    if (!create.ok) {
-      const detail = await create.text().catch(() => '')
-      throw new Error(`ASR 任务创建失败 (${create.status}): ${detail.slice(0, 500)}`)
-    }
-    const created = await create.json() as any
-    const jobId = String(created?.jobId || '')
-    if (!jobId) return null
-    options.onProgress?.(0, 'ASR 任务已创建，正在等待模型...')
+  } catch (error: any) {
+    if (signal?.aborted) throw new Error('任务已取消')
+    if (uploadTimeout.signal.aborted) throw new Error(`ASR 音频上传超时（${Math.round(timeouts.upload / 60000)} 分钟），请检查 ASR 服务和网络`)
+    throw new Error(`ASR 任务创建失败：${describeAsrError(error)}`)
+  } finally {
+    clearTimeout(uploadTimer)
+  }
+  if (create.status === 404 || create.status === 405) return null
+  if (!create.ok) {
+    const detail = await create.text().catch(() => '')
+    throw new Error(`ASR 任务创建失败 (${create.status}): ${detail.slice(0, 500)}`)
+  }
+  const created = await create.json() as any
+  const jobId = String(created?.jobId || '')
+  if (!jobId) return null
+  options.onProgress?.(0, 'ASR 任务已创建，正在等待模型...')
 
+  const startedAt = Date.now()
+  let lastActivityAt = startedAt
+  let lastProgress = -1
+  let lastMessage = ''
+
+  const failAndCancel = async (message: string): Promise<never> => {
+    await cancelRemoteJob(baseUrl, jobId, headers)
+    throw new Error(message)
+  }
+
+  try {
     while (true) {
       if (signal?.aborted) {
-        await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs/${jobId}/cancel`, {
-          method: 'POST',
-          headers
-        }).catch(() => null)
+        await cancelRemoteJob(baseUrl, jobId, headers)
         throw new Error('任务已取消')
       }
+
+      const elapsed = Date.now() - startedAt
+      if (elapsed > timeouts.absolute) {
+        const minutes = Math.round(elapsed / 60000)
+        await failAndCancel(`ASR 任务超过最长执行时间（${minutes} 分钟），已取消远端任务；最后一次进度 ${lastProgress >= 0 ? lastProgress : 0}% ${lastMessage}`)
+      }
+
+      const idleMs = Date.now() - lastActivityAt
+      if (idleMs > timeouts.idle) {
+        const minutes = Math.round(idleMs / 60000)
+        await failAndCancel(`ASR 长时间没有进度（${minutes} 分钟），已取消远端任务；最后一次进度 ${lastProgress >= 0 ? lastProgress : 0}% ${lastMessage}`)
+      }
+
       await sleep(Math.max(50, Number(process.env.ASR_POLL_MS || JOB_POLL_MS)))
-      const response = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs/${jobId}`, {
-        headers,
-        signal: combinedSignal
-      })
+
+      const pollTimeout = new AbortController()
+      const pollTimer = setTimeout(() => pollTimeout.abort(), timeouts.poll)
+      let response: Response
+      try {
+        response = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs/${jobId}`, {
+          headers,
+          signal: combineSignal(signal, pollTimeout)
+        })
+      } catch (error: any) {
+        if (signal?.aborted) {
+          await cancelRemoteJob(baseUrl, jobId, headers)
+          throw new Error('任务已取消')
+        }
+        await cancelRemoteJob(baseUrl, jobId, headers)
+        throw nonRetryableError(`ASR 任务状态获取失败：${describeAsrError(error)}`)
+      } finally {
+        clearTimeout(pollTimer)
+      }
       if (!response.ok) {
         const detail = await response.text().catch(() => '')
         throw new Error(`ASR 任务状态获取失败 (${response.status}): ${detail.slice(0, 300)}`)
       }
       const job = await response.json() as any
       const progress = Number(job.progress)
-      options.onProgress?.(Number.isFinite(progress) ? progress : 0, String(job.message || '正在识别...'))
+      const message = String(job.message || '正在识别...')
+      if (job.status === 'queued') {
+        // 多个任务会在 ASR 服务内串行推理；排队等待不应触发“无进度”超时。
+        lastActivityAt = Date.now()
+        lastMessage = message
+      } else if (Number.isFinite(progress) && (progress !== lastProgress || message !== lastMessage)) {
+        lastProgress = progress
+        lastMessage = message
+        lastActivityAt = Date.now()
+      }
+      options.onProgress?.(Number.isFinite(progress) ? progress : 0, message)
       if (job.status === 'done') return normalizeLocalResult(job.result)
       if (job.status === 'error') throw new Error(String(job.error || 'ASR 识别失败'))
       if (job.status === 'cancelled') throw new Error('ASR 任务已取消')
     }
   } finally {
-    clearTimeout(timer)
+    // no-op: per-request timers are cleared above
   }
 }
 
-async function transcribeLocalWithRetry(baseUrl: string, fileName: string, audio: Buffer, options: AsrOptions, engine: string, signal?: AbortSignal): Promise<AsrResult> {
+async function transcribeLocalWithRetry(baseUrl: string, fileName: string, audio: Blob, options: AsrOptions, engine: string, signal?: AbortSignal): Promise<AsrResult> {
   let lastError: any
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -166,7 +274,7 @@ async function transcribeLocalWithRetry(baseUrl: string, fileName: string, audio
       return await transcribeLocal(baseUrl, fileName, audio, options, engine, signal)
     } catch (error: any) {
       lastError = error
-      if (!isAsrNetworkError(error) || signal?.aborted || attempt === 2) break
+      if (error?.noRetry || !isAsrNetworkError(error) || signal?.aborted || attempt === 2) break
       await sleep(600 * (attempt + 1))
     }
   }
@@ -375,7 +483,7 @@ export const AsrService = {
       throw new Error('ASR 地址未配置')
     }
 
-    const audio = readFileSync(filePath)
+    const audio = await audioBlob(filePath)
     const fileName = basename(filePath)
     const candidates = asrCandidates(baseUrl)
     let localError: any = null

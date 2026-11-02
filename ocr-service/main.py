@@ -158,13 +158,25 @@ def parse_srt(path: Path) -> list[dict[str, Any]]:
     return segments
 
 
+def process_error_detail(error: Any) -> str:
+    if isinstance(error, subprocess.CalledProcessError):
+        stderr = str(error.stderr or "").strip()
+        stdout = str(error.stdout or "").strip()
+        detail = stderr or stdout or str(error)
+        return detail[-2000:]
+    return str(error)
+
+
 def extract_pgs(path: Path, stream_index: int, workdir: Path) -> Path:
     ffmpeg = require_tool("ffmpeg")
     output = workdir / "subtitle.sup"
-    subprocess.run([
-        ffmpeg, "-y", "-v", "error", "-i", str(path),
-        "-map", f"0:{stream_index}", "-c:s", "copy", "-f", "sup", str(output)
-    ], check=True, capture_output=True, text=True, timeout=600)
+    try:
+        subprocess.run([
+            ffmpeg, "-y", "-v", "error", "-i", str(path),
+            "-map", f"0:{stream_index}", "-c:s", "copy", "-f", "sup", str(output)
+        ], check=True, capture_output=True, text=True, timeout=600)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"PGS 提取失败：{process_error_detail(exc)}") from exc
     return output
 
 
@@ -182,7 +194,10 @@ def rip_pgs(sup_path: Path, language: str, workdir: Path, engine: str | None = N
     if resolved_engine in {"rapidocr", "tesseract"}:
         command.extend(["--engine", resolved_engine])
     command.append(str(sup_path))
-    subprocess.run(command, cwd=workdir, check=True, capture_output=True, text=True, timeout=60 * 60)
+    try:
+        subprocess.run(command, cwd=workdir, check=True, capture_output=True, text=True, timeout=60 * 60)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"pgsrip 识别失败：{process_error_detail(exc)}") from exc
     candidates = sorted(workdir.glob("*.srt"))
     if not candidates:
         raise RuntimeError("PGS OCR 未生成 SRT")
@@ -386,19 +401,27 @@ def ocr_frames(
     frames_dir = workdir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
     duration = min(max(1.0, duration), float(MAX_SECONDS))
-    source = workdir / path.name
+    # 固定安全文件名，避免中文/空格/特殊字符进入 filtergraph。
+    source = workdir / "source.mkv"
     if not source.exists():
         os.symlink(path, source)
-    escaped = str(source).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
-    # subtitles 滤镜的 si 是“第几个字幕流”，不是 ffprobe 的全局 stream index。
-    filter_arg = f"subtitles=filename='{escaped}':si={subtitle_index}"
     if progress:
         progress(8, "正在抽取图像字幕帧")
-    subprocess.run([
+    # PGS/VobSub/DVD 是位图字幕，不能用 subtitles 文本滤镜。
+    # 用黑色背景 + overlay 位图字幕流，按固定 FPS 输出，保持时间轴可映射。
+    filter_complex = f"[1:v][0:s:{subtitle_index}]overlay[out]"
+    command = [
         ffmpeg, "-y", "-v", "error",
+        "-i", str(source),
         "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:r={OCR_FPS}:d={duration}",
-        "-vf", filter_arg, "-vsync", "0", str(frames_dir / "frame_%06d.png")
-    ], check=True, capture_output=True, text=True, timeout=60 * 60)
+        "-filter_complex", filter_complex,
+        "-map", "[out]", "-an", "-vsync", "cfr", "-r", str(OCR_FPS),
+        str(frames_dir / "frame_%06d.png")
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True, timeout=60 * 60)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"位图字幕抽帧失败：{process_error_detail(exc)}") from exc
 
     frames = sorted(frames_dir.glob("frame_*.png"))
     metadata: list[dict[str, Any]] = []
@@ -495,18 +518,22 @@ def ocr_frames(
         })
     if progress:
         progress(88, "正在合并字幕时间轴")
+    expected_frames = max(1, int(round(duration * OCR_FPS)))
     diagnostics = {
         "mode": "frames",
         "subtitleIndex": subtitle_index,
         "renderSize": f"{width}x{height}",
         "fps": OCR_FPS,
         "frames": len(metadata),
+        "expectedFrames": expected_frames,
         "blankFrames": blank_frames,
         "changedFrames": changed_frames,
         "ocrCalls": len(targets),
         "emptyResults": empty_results,
         "segments": len(segments),
     }
+    if len(metadata) > expected_frames * 1.5:
+        diagnostics["frameOverflow"] = True
     return segments, diagnostics
 
 

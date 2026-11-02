@@ -8,6 +8,7 @@ describe('PostgreSQL SQL translation', () => {
   it('converts SQLite placeholders and timestamp helpers', () => {
     expect(translateSql("SELECT '?' AS literal, ? AS value, datetime('now') AS now")).toBe("SELECT '?' AS literal, $1 AS value, CURRENT_TIMESTAMP AS now")
     expect(translateSql("SELECT datetime('now', ?)")).toBe('SELECT (CURRENT_TIMESTAMP + $1::interval)')
+    expect(translateSql("SELECT datetime('now', '+7 days')")).toBe("SELECT (CURRENT_TIMESTAMP + '+7 days'::interval)")
   })
 
   it('converts INSERT OR IGNORE and adds RETURNING id for identity tables', () => {

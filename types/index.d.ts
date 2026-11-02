@@ -115,6 +115,10 @@ export interface AppConfig {
   asrLanguage?: string         // auto 或固定源语言
   asrDevice?: string           // auto / cpu / cuda
   asrComputeType?: string      // int8 / float16
+  asrUploadTimeoutMs?: number  // 音频上传/任务创建超时
+  asrPollTimeoutMs?: number    // 单次 ASR 状态请求超时
+  asrJobIdleTimeoutMs?: number // 无进度超时
+  asrJobAbsoluteTimeoutMs?: number // 单任务绝对上限
   asrVad?: boolean             // 是否启用 VAD
   asrWordTimestamps?: boolean  // 是否请求词级时间轴
   asrKeepAudio?: boolean       // 是否保留临时音频

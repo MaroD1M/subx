@@ -15,6 +15,9 @@ export function classifyTaskError(message: string): TaskErrorInfo {
   if (text.includes('model') && (text.includes('not found') || text.includes('does not exist') || text.includes('invalid'))) {
     return { type: 'model', summary: '模型不可用：请检查模型名称或供应商支持情况' }
   }
+  if (text.includes('长时间没有进度') || text.includes('超过最长执行时间') || text.includes('asr 音频上传超时')) {
+    return { type: 'timeout', summary: 'ASR 识别超时：请检查服务负载，或调大 ASR_JOB_IDLE_TIMEOUT_MS / ASR_JOB_ABSOLUTE_TIMEOUT_MS' }
+  }
   if (text.includes('etimedout') || text.includes('timeout') || text.includes('timed out')) {
     return { type: 'timeout', summary: '请求超时：请检查网络或稍后重试' }
   }

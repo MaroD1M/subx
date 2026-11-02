@@ -59,6 +59,7 @@ export function translateSql(input: string): string {
   }
 
   sql = sql
+    .replace(/datetime\('now',\s*'([^']+)'\)/gi, (_match, interval) => `(CURRENT_TIMESTAMP + '${interval}'::interval)`)
     .replace(/datetime\('now',\s*\?\)/gi, '(CURRENT_TIMESTAMP + ?::interval)')
     .replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP')
 

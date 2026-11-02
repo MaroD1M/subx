@@ -109,6 +109,12 @@ export const apiTokenCreateSchema = z.object({
   expiresAt: z.string().optional()
 })
 
+export const storageCleanupSchema = z.object({
+  targets: z.array(z.enum(['asrAudio', 'aiLogs', 'taskTemp', 'taskLogs', 'ocrTemp', 'translationCache'])).min(1),
+  days: z.coerce.number().int().min(1).max(3650).optional(),
+  all: z.boolean().optional()
+})
+
 export const taskListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),

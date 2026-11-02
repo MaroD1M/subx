@@ -237,6 +237,7 @@ class TaskQueue {
                 if (!taskId) break
                 if (isTaskCancelled(taskId)) {
                     useDb().prepare("UPDATE task_jobs SET status='cancelled', updated_at=datetime('now') WHERE task_id = ?").run(taskId)
+                    cancelledTaskIds.delete(taskId)
                     continue
                 }
 
@@ -975,6 +976,10 @@ export const TaskService = {
                     model: config.asrModel || 'small',
                     device: config.asrDevice || 'auto',
                     computeType: config.asrComputeType || 'int8',
+                    uploadTimeoutMs: config.asrUploadTimeoutMs,
+                    pollTimeoutMs: config.asrPollTimeoutMs,
+                    jobIdleTimeoutMs: config.asrJobIdleTimeoutMs,
+                    jobAbsoluteTimeoutMs: config.asrJobAbsoluteTimeoutMs,
                     language: config.asrLanguage || 'auto',
                     vad: config.asrVad !== false,
                     wordTimestamps: config.asrWordTimestamps !== false,

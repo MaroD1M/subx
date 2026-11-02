@@ -97,6 +97,8 @@ export default defineEventHandler(() => {
       '/api/notification-proxy-test': { post: { summary: '测试通知出站代理（渠道代理或 HTTPS_PROXY/HTTP_PROXY）', responses: { '200': { description: 'OK' } } } },
       '/api/asr/metrics': { get: { summary: 'ASR 指标', responses: { '200': { description: 'OK' } } } },
       '/api/ocr/status': { get: { summary: 'OCR 服务状态', responses: { '200': { description: 'OK' } } } },
+      '/api/storage': { get: { summary: '存储与缓存占用', responses: { '200': { description: 'OK' } } } },
+      '/api/storage/cleanup': { post: { summary: '按类型清理 SubX 缓存', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['targets'], properties: { targets: { type: 'array', items: { type: 'string', enum: ['asrAudio', 'aiLogs', 'taskTemp', 'taskLogs', 'ocrTemp', 'translationCache'] } }, days: { type: 'integer' }, all: { type: 'boolean' } } } } } }, responses: { '200': { description: 'OK' } } } },
       '/api/asr/models': { get: { summary: 'ASR 模型列表、安装状态与下载任务', responses: { '200': { description: 'OK' } } } },
       '/api/asr/models-download': { post: { summary: '开始 ASR 模型下载', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['model'], properties: { model: { type: 'string' }, engine: { type: 'string', enum: ['auto', 'faster-whisper', 'whisper-cpp'] }, proxy: { type: 'string' }, force: { type: 'boolean' } } } } } }, responses: { '200': jsonResponse({ ok: true, jobId: 'uuid', status: 'queued' }) } } },
       '/api/asr/models-download-status': { get: { summary: 'ASR 模型下载进度', parameters: [{ name: 'jobId', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
