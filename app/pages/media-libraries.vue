@@ -10,7 +10,7 @@
       </template>
     </PageHeader>
 
-    <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
+    <div class="surface-card p-4 sm:p-5 space-y-4">
       <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
         <div>
           <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">媒体库概览</p>
@@ -34,7 +34,7 @@
     </div>
 
     <div class="space-y-4">
-      <div v-for="(root, index) in mediaRoots" :key="root.id" class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
+      <div v-for="(root, index) in mediaRoots" :key="root.id" class="surface-card p-4 sm:p-5 space-y-4">
         <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4 xl:gap-5">
           <div class="space-y-4 min-w-0">
             <UFormField label="媒体库名称">
@@ -126,8 +126,8 @@
       </template>
     </UCollapsible>
 
-    <div class="fixed bottom-4 left-1/2 z-30 w-[min(1100px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-gray-200/80 dark:border-gray-800/80 bg-white/92 dark:bg-gray-950/88 backdrop-blur px-4 py-3 shadow-lg">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+    <AppStickyBar>
+      <template #info>
         <div class="flex-1 min-w-0 text-xs text-gray-500 dark:text-gray-400">
           <span>共 {{ mediaRoots.length }} 个媒体库</span>
           <span class="mx-2 text-gray-300 dark:text-gray-600">•</span>
@@ -135,12 +135,12 @@
           <span v-if="forceSaveInvalidRoots" class="mx-2 text-gray-300 dark:text-gray-600">•</span>
           <span v-if="forceSaveInvalidRoots">已启用强制保存</span>
         </div>
-        <div class="flex items-center justify-end gap-3 sm:ml-auto">
-          <UButton label="取消" color="neutral" variant="ghost" to="/" />
-          <UButton label="保存媒体库" color="primary" :loading="pending" @click="save" />
-        </div>
-      </div>
-    </div>
+      </template>
+      <template #actions>
+        <UButton label="取消" color="neutral" variant="ghost" to="/" />
+        <UButton label="保存媒体库" color="primary" :loading="pending" @click="save" />
+      </template>
+    </AppStickyBar>
   <UModal v-model:open="removeDialogOpen" title="确认删除媒体库" description="删除后将移除该媒体库配置，但不会删除宿主机上的真实文件。">
     <template #content>
       <div class="p-5 space-y-4">

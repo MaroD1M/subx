@@ -10,53 +10,29 @@
       </a>
       <header v-if="!isLoginPage" class="sticky top-0 z-50 border-b border-gray-200/80 bg-white/90 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/90">
         <AppContainer class="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div class="flex items-center gap-1 sm:gap-3 min-w-0">
-            <img src="/favicon.ico" alt="SubX Logo" class="w-8 h-8 rounded-lg shadow-sm shrink-0" />
-            <NuxtLink to="/" class="text-xl font-black text-primary-700 dark:text-primary-400 hover:opacity-80 transition-opacity shrink-0">SubX</NuxtLink>
+          <div class="flex min-w-0 items-center gap-1 sm:gap-3">
+            <NuxtLink to="/" class="flex shrink-0 items-center gap-2.5" aria-label="SubX 首页">
+              <img src="/logo.svg" alt="" class="h-8 w-8 rounded-xl shadow-sm" />
+              <span class="text-xl font-black text-primary-700 transition-opacity hover:opacity-80 dark:text-primary-400">SubX</span>
+            </NuxtLink>
             <span v-if="latestVersion && appVersion !== latestVersion" class="version-badge version-stale hidden md:inline-flex" title="有新版本可用">v{{ appVersion }} &#8593; v{{ latestVersion }}</span>
             <span v-else-if="latestVersion" class="version-badge version-ok hidden md:inline-flex" title="已是最新版">v{{ appVersion }} ✓</span>
             <span v-else class="version-badge version-err hidden md:inline-flex">v{{ appVersion }}</span>
-            <div class="hidden md:flex items-center gap-0.5 ml-4">
+            <nav class="ml-4 hidden items-center gap-0.5 md:flex" aria-label="主导航">
               <UButton
-                label="首页"
-                icon="i-lucide-home"
+                v-for="item in navItems"
+                :key="item.to"
+                :label="item.label"
+                :icon="item.icon"
                 variant="ghost"
                 size="sm"
-                :color="route.path === '/' ? 'primary' : 'neutral'"
-                :class="route.path === '/' ? 'font-semibold' : ''"
-                to="/"
+                :color="isNavActive(item.to) ? 'primary' : 'neutral'"
+                :class="isNavActive(item.to) ? 'font-semibold' : ''"
+                :to="item.to"
               />
-              <UButton
-                label="翻译历史"
-                icon="i-lucide-history"
-                variant="ghost"
-                size="sm"
-                :color="route.path === '/history' ? 'primary' : 'neutral'"
-                :class="route.path === '/history' ? 'font-semibold' : ''"
-                to="/history"
-              />
-              <UButton
-                label="媒体库"
-                icon="i-lucide-library-big"
-                variant="ghost"
-                size="sm"
-                :color="route.path === '/media-libraries' ? 'primary' : 'neutral'"
-                :class="route.path === '/media-libraries' ? 'font-semibold' : ''"
-                to="/media-libraries"
-              />
-              <UButton
-                label="自动化"
-                icon="i-lucide-workflow"
-                variant="ghost"
-                size="sm"
-                :color="route.path === '/automation' ? 'primary' : 'neutral'"
-                :class="route.path === '/automation' ? 'font-semibold' : ''"
-                to="/automation"
-              />
-            </div>
+            </nav>
           </div>
-          <div class="flex items-center gap-1 sm:gap-2">
-             <UButton icon="i-lucide-settings" variant="ghost" color="neutral" size="sm" title="全局设置" aria-label="全局设置" to="/settings" />
+          <div class="flex items-center gap-1 sm:gap-1.5">
              <UButton v-if="authenticated" icon="i-lucide-log-out" variant="ghost" color="neutral" size="sm" title="登出" aria-label="登出" @click="handleLogout" />
              <UButton icon="i-lucide-github" variant="ghost" color="neutral" size="sm" aria-label="打开 GitHub 项目页" to="https://github.com/MaroD1M/subx" target="_blank" />
              <UButton
@@ -71,7 +47,7 @@
         </AppContainer>
       </header>
 
-      <main id="main-content" tabindex="-1" :class="[isLoginPage ? 'w-full h-screen' : 'px-4 py-4 pb-24 sm:px-6 md:pb-6 lg:px-8']">
+      <main id="main-content" tabindex="-1" :class="[isLoginPage ? 'h-screen w-full' : 'px-4 py-5 pb-24 sm:px-6 md:pb-8 lg:px-8']">
         <NuxtPage />
       </main>
 
@@ -87,6 +63,19 @@ const { logout, authenticated } = useAuth()
 const route = useRoute()
 
 const isLoginPage = computed(() => route.path === '/login' || route.path === '/login/')
+const navItems = [
+  { label: '首页', icon: 'i-lucide-home', to: '/' },
+  { label: '翻译历史', icon: 'i-lucide-history', to: '/history' },
+  { label: '媒体库', icon: 'i-lucide-library-big', to: '/media-libraries' },
+  { label: '自动化', icon: 'i-lucide-workflow', to: '/automation' },
+  { label: '设置', icon: 'i-lucide-settings', to: '/settings' }
+]
+
+function isNavActive(path) {
+  if (path === '/') return route.path === '/'
+  return route.path.startsWith(path)
+}
+
 const runtimeConfig = useRuntimeConfig()
 const appVersion = runtimeConfig.public.appVersion
 const latestVersion = ref('')

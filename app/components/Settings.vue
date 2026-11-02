@@ -1,21 +1,7 @@
 <template>
   <div class="space-y-4">
     <div class="grid grid-cols-1 gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
-      <nav class="self-start overflow-x-auto rounded-2xl border border-gray-200/80 bg-white p-1.5 shadow-sm dark:border-gray-800 dark:bg-gray-950/60 md:sticky md:top-20">
-        <div class="flex min-w-max gap-1 md:min-w-0 md:flex-col">
-          <button
-            v-for="tab in settingsTabs"
-            :key="tab.value"
-            type="button"
-            class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors"
-            :class="activeTab === tab.value ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900'"
-            @click="activeTab = tab.value"
-          >
-            <UIcon :name="tab.icon" class="h-4 w-4 shrink-0" />
-            <span>{{ tab.label }}</span>
-          </button>
-        </div>
-      </nav>
+      <AppSubNav v-model="activeTab" :items="settingsTabs" label="设置分区" />
 
       <div class="min-w-0 space-y-4">
         <div v-show="activeTab === 'ai'" class="space-y-4">
@@ -409,13 +395,16 @@
       </div>
     </div>
 
-    <div class="flex flex-col gap-3 rounded-2xl border border-gray-200/80 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-gray-950/80 sm:flex-row sm:items-center md:sticky md:bottom-4 md:z-20">
-      <div v-if="hasUnsavedChanges" class="text-xs text-amber-600 dark:text-amber-400">有未保存的更改</div>
-      <div class="flex items-center gap-3 sm:ml-auto">
+    <AppStickyBar>
+      <template #info>
+        <p v-if="hasUnsavedChanges" class="text-xs font-medium text-amber-600 dark:text-amber-400">有未保存的更改</p>
+        <p v-else class="text-xs text-gray-500 dark:text-gray-400">设置修改后需要保存才会生效。</p>
+      </template>
+      <template #actions>
         <UButton label="取消" color="neutral" variant="ghost" @click="handleClose" />
-        <UButton label="保存修改" color="primary" :loading="pending" @click="save" />
-      </div>
-    </div>
+        <UButton label="保存修改" color="primary" :loading="pending" :disabled="!hasUnsavedChanges" @click="save" />
+      </template>
+    </AppStickyBar>
 
     <UModal v-model:open="closeConfirmOpen" title="放弃未保存的更改？" description="当前设置尚未保存，关闭后会丢失本次修改。">
       <template #content>
@@ -442,7 +431,12 @@ import { STYLE_PRESETS } from '~~/shared/stylePresets'
 const emit = defineEmits(['close', 'saved'])
 const route = useRoute()
 const isGuideOpen = ref(false)
-const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'styles' | 'glossary' | 'advanced'>('ai')
+const requestedTab = String(route.query.tab || '')
+const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'styles' | 'glossary' | 'advanced'>(
+  ['ai', 'asr', 'ocr', 'defaults', 'styles', 'glossary', 'advanced'].includes(requestedTab)
+    ? requestedTab as any
+    : 'ai'
+)
 const settingsTabs = [
   { label: 'AI 连接', icon: 'i-lucide-plug', value: 'ai' as const },
   { label: '语音识别', icon: 'i-lucide-mic', value: 'asr' as const },
@@ -709,10 +703,6 @@ watch(glossaryRows, (rows) => {
 }, { deep: true })
 
 onMounted(() => {
-  const requestedTab = String(route.query.tab || '')
-  if (['ai', 'asr', 'ocr', 'defaults', 'styles', 'glossary', 'advanced'].includes(requestedTab)) {
-    activeTab.value = requestedTab as any
-  }
   if (!Array.isArray(config.value.customStylePresets)) config.value.customStylePresets = []
   syncGlossaryFromConfig()
   loadAsrMetrics()

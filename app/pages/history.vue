@@ -12,8 +12,8 @@
       </template>
     </PageHeader>
 
-    <details class="group glass-panel rounded-3xl overflow-hidden p-2">
-      <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 rounded-[calc(theme(borderRadius.3xl)-0.5rem)] bg-white/85 dark:bg-gray-900/70 px-4 py-4 sm:px-5">
+    <details class="group surface-card overflow-hidden p-2">
+      <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 rounded-xl bg-white/85 dark:bg-gray-900/70 px-4 py-4 sm:px-5">
         <div class="space-y-1">
           <div class="flex items-center gap-2 text-gray-900 dark:text-white">
             <UIcon name="i-lucide-chart-no-axes-combined" class="w-4 h-4" />
@@ -72,7 +72,7 @@
       </div>
     </details>
 
-    <div class="history-table glass-panel hidden overflow-hidden rounded-2xl p-2 md:block" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
+    <div class="history-table surface-card hidden overflow-hidden rounded-2xl p-2 md:block" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
       <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group' }">
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
@@ -92,7 +92,7 @@
         </template>
 
         <template #status-cell="{ row }">
-          <UBadge :color="statusColor(row.original.status)" variant="subtle" size="sm" class="capitalize whitespace-nowrap">{{ row.original.status }}</UBadge>
+          <AppStatusBadge :status="row.original.status" />
         </template>
 
         <template #progress-cell="{ row }">
@@ -155,7 +155,7 @@
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ task.rootName || '默认媒体库' }} · {{ formatDate(task.createdAt) }}</p>
             <p v-if="task.content_title" class="mt-1 text-xs text-primary-700">{{ task.content_title }}</p>
           </div>
-          <UBadge :color="statusColor(task.status)" variant="subtle" size="sm" class="shrink-0 capitalize">{{ task.status }}</UBadge>
+          <AppStatusBadge :status="task.status" class="shrink-0" />
         </div>
 
         <div v-if="isActiveStatus(task.status)" class="mt-3 space-y-1.5">

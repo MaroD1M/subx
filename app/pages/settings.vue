@@ -5,9 +5,7 @@
       description="配置 AI 连接、语音识别、图像字幕 OCR、模型下载、翻译默认行为和术语表。"
       :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '设置', icon: 'i-lucide-settings' }]"
     />
-    <div class="rounded-2xl border border-gray-200/80 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950/60 sm:p-6">
-      <Settings @close="navigateTo('/')" />
-    </div>
+    <Settings @close="navigateTo('/')" />
   </AppContainer>
 </template>
 

@@ -92,7 +92,7 @@
 
     <div ref="rightPaneRef" class="surface-card flex min-w-0 flex-1 flex-col p-3 stagger-fade-in" :class="activeMobileTab === 'settings' ? 'flex' : 'hidden lg:flex'" style="animation-delay: 70ms;">
       <div class="flex items-center justify-end mb-2.5 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
-        <UButton label="恢复默认布局" size="xs" variant="ghost" color="neutral" icon="i-lucide-rotate-ccw" @click="resetLayout" />
+        <UButton label="恢复默认宽度" size="xs" variant="ghost" color="neutral" icon="i-lucide-rotate-ccw" @click="resetLayout" />
       </div>
 
       <div v-if="selectedFile" class="h-full flex flex-col min-h-0">
@@ -104,8 +104,27 @@
           </div>
         </div>
 
+        <div class="mb-3 flex rounded-xl border border-gray-200/80 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/60">
+          <button
+            type="button"
+            class="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
+            :class="rightTab === 'tracks' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
+            @click="rightTab = 'tracks'"
+          >
+            字幕与轨道
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
+            :class="rightTab === 'settings' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
+            @click="rightTab = 'settings'"
+          >
+            翻译设置
+          </button>
+        </div>
+
         <div class="flex-1 min-h-0 flex flex-col">
-          <div class="flex h-[260px] min-h-[180px] flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 ring-1 ring-inset ring-white/35 dark:border-gray-700/80 dark:bg-gray-900/40 dark:ring-white/10 lg:h-[var(--right-top-height)]" :style="{ '--right-top-height': `${rightTopHeight}%` }">
+          <div v-show="rightTab === 'tracks'" class="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 ring-1 ring-inset ring-white/35 dark:border-gray-700/80 dark:bg-gray-900/40 dark:ring-white/10">
             <div v-if="isSubtitleFile" class="h-full flex flex-col min-h-0">
               <div v-if="pendingSubtitle" class="flex flex-col items-center justify-center flex-1">
                 <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
@@ -172,9 +191,7 @@
             </div>
           </div>
 
-          <div class="my-2 hidden h-2 w-full cursor-row-resize rounded-full bg-gray-200/80 transition-colors hover:bg-primary-300 dark:bg-gray-700/80 dark:hover:bg-primary-700 lg:block" :class="{ 'bg-primary-400 dark:bg-primary-600': resizeMode === 'right' }" title="拖动调整上下分区高度" aria-label="调整上下分栏高度" role="separator" aria-orientation="horizontal" @mousedown.prevent="startResize('right')" />
-
-          <div class="flex-1 min-h-0 pt-2 border-t border-gray-200/90 dark:border-gray-700/90 flex flex-col bg-white/45 dark:bg-gray-900/30 rounded-xl px-2">
+          <div v-show="rightTab === 'settings'" class="mt-2 flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 dark:border-gray-700/80 dark:bg-gray-900/30">
             <div class="relative flex-1 min-h-0">
               <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
                 <div class="space-y-3 p-0.5">
@@ -237,24 +254,31 @@
               </div>
             </div>
 
-            <div class="mt-2 px-2.5 py-2.5 border border-gray-200/85 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/68 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.24)] shrink-0">
-              <div class="flex gap-2.5">
-                <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" :disabled="!canStartTask" @click="startTask(true)" />
-                <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" :disabled="!canStartTask" @click="startTask(false)" />
-              </div>
+          </div>
+
+          <div class="mt-3 shrink-0 rounded-xl border border-gray-200/85 bg-white/95 px-3 py-3 shadow-sm backdrop-blur dark:border-gray-800/80 dark:bg-gray-900/90">
+            <div class="flex gap-2.5">
+              <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" :disabled="!canStartTask" @click="startTask(true)" />
+              <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" :disabled="!canStartTask" @click="startTask(false)" />
             </div>
           </div>
         </div>
       </div>
 
-      <div v-else class="h-full flex flex-col items-center justify-center text-center px-6 py-8">
-        <div class="max-w-md space-y-4">
-          <div class="mx-auto w-fit p-4 bg-gray-50 dark:bg-gray-900 rounded-full">
-            <UIcon name="i-lucide-file-video-2" class="w-12 h-12 text-neutral-300" />
+      <div v-else class="flex h-full flex-col items-center justify-center px-6 py-8 text-center">
+        <div class="max-w-md space-y-5">
+          <div class="mx-auto w-fit rounded-2xl bg-primary-50 p-4 dark:bg-primary-500/10">
+            <UIcon name="i-lucide-file-video-2" class="h-10 w-10 text-primary-600 dark:text-primary-400" />
           </div>
-          <h4 class="text-lg font-medium text-gray-700 dark:text-gray-300">尚未选择文件</h4>
-          <p class="text-sm text-neutral-500 leading-relaxed">请先在左侧选择一个视频或字幕文件。</p>
-          
+          <div class="space-y-2">
+            <h4 class="text-lg font-semibold text-gray-800 dark:text-gray-100">选择一个视频开始</h4>
+            <p class="text-sm leading-6 text-gray-500 dark:text-gray-400">从左侧文件树选择视频或字幕文件后，这里会显示字幕轨道、语音识别、图像字幕 OCR 和翻译设置。</p>
+          </div>
+          <div class="grid gap-2 text-left text-xs text-gray-500 dark:text-gray-400 sm:grid-cols-3">
+            <div class="rounded-xl border border-gray-200/80 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40"><span class="font-semibold text-primary-700 dark:text-primary-400">1.</span> 选择文件</div>
+            <div class="rounded-xl border border-gray-200/80 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40"><span class="font-semibold text-primary-700 dark:text-primary-400">2.</span> 确认字幕来源</div>
+            <div class="rounded-xl border border-gray-200/80 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40"><span class="font-semibold text-primary-700 dark:text-primary-400">3.</span> 开始翻译</div>
+          </div>
         </div>
       </div>
     </div>
@@ -308,6 +332,7 @@ const activeRootId = ref<string>('')
 const searchQuery = ref('')
 const selectedFile = ref<FileNode | null>(null)
 const activeMobileTab = ref<'files' | 'settings'>('files')
+const rightTab = ref<'tracks' | 'settings'>('tracks')
 const batchMode = ref(false)
 const showAdvancedOptions = ref(false)
 const selectedNode = ref<FileNode | null>(null)
@@ -531,6 +556,7 @@ async function handleRootChange() {
   audioTracks.value = []
   useAsr.value = false
   selectedAudioTrackIndex.value = null
+  rightTab.value = 'tracks'
   subtitlePreview.value = []
   totalSubtitleEntries.value = 0
   await loadRootNodes()
@@ -693,6 +719,7 @@ async function onSelect(node: FileNode) {
     tracks.value = []
     audioTracks.value = []
     useAsr.value = false
+    rightTab.value = 'tracks'
     subtitlePreview.value = []
     return
   }
@@ -710,6 +737,7 @@ async function onSelect(node: FileNode) {
   audioTracks.value = []
   useAsr.value = false
   selectedAudioTrackIndex.value = null
+  rightTab.value = 'tracks'
   subtitlePreview.value = []
 
   if (isSubtitleFile.value) {

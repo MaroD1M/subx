@@ -1,21 +1,29 @@
 <template>
   <AppContainer size="wide" class="space-y-5 py-2">
-    <div class="flex items-start justify-between gap-4 flex-wrap">
-      <div>
-        <p class="text-xs font-semibold tracking-widest text-warning-500 uppercase">字幕核对中心</p>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mt-1">字幕核对</h1>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">批量筛选、重译、手动修正，并实时预览最终字幕。</p>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap">
+    <PageHeader
+      title="字幕核对"
+      description="批量筛选、重译、手动修正，并实时预览最终字幕。"
+      :breadcrumb="[{ label: '翻译历史', icon: 'i-lucide-history', to: '/history' }, { label: '字幕核对' }]"
+    >
+      <template #actions>
         <UButton label="返回任务" color="neutral" variant="ghost" :to="`/task/${taskId}`" />
         <UButton label="AI 校对" icon="i-lucide-sparkles" color="primary" variant="soft" @click="proofreadOpen = true" />
         <UButton label="预览" icon="i-lucide-eye" color="neutral" variant="soft" class="xl:hidden" @click="openPreview" />
         <UButton label="放弃成果" color="error" variant="soft" @click="discardReview" />
         <UButton label="导出结果" color="primary" :loading="exporting" @click="exportReviewed" />
-        <USelect v-model="exportMode" :items="exportModeItems" class="w-28" title="导出模式" aria-label="导出模式" />
-        <USelect v-model="exportStyle" :items="exportStyleItems" class="w-36" title="字幕样式" aria-label="字幕样式" />
-        <USelect v-model="exportFormat" :items="exportFormatItems" class="w-20" title="导出格式" aria-label="导出格式" />
-      </div>
+      </template>
+    </PageHeader>
+
+    <div class="surface-card flex flex-wrap items-end gap-3 p-3">
+      <UFormField label="导出模式" class="min-w-[120px]">
+        <USelect v-model="exportMode" :items="exportModeItems" class="w-32" />
+      </UFormField>
+      <UFormField label="字幕样式" class="min-w-[140px]">
+        <USelect v-model="exportStyle" :items="exportStyleItems" class="w-40" />
+      </UFormField>
+      <UFormField label="导出格式" class="min-w-[100px]">
+        <USelect v-model="exportFormat" :items="exportFormatItems" class="w-24" />
+      </UFormField>
     </div>
 
     <div v-if="clipUrl" class="rounded-2xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-950/20 space-y-2">
@@ -47,7 +55,7 @@
 
     <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
       <div class="space-y-4 min-w-0">
-        <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 overflow-hidden">
+        <div class="surface-card overflow-hidden">
           <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 space-y-3">
             <div class="flex items-center justify-between gap-3 flex-wrap">
               <div class="flex items-center gap-3 flex-wrap text-sm text-gray-500 dark:text-gray-400">
@@ -190,7 +198,7 @@
         </div>
       </div>
 
-      <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/80 dark:bg-gray-950/30 overflow-hidden xl:sticky xl:top-4">
+      <div class="surface-card overflow-hidden xl:sticky xl:top-4">
         <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 space-y-2">
           <div class="flex items-center justify-between gap-2">
             <h2 class="text-sm font-semibold text-gray-900 dark:text-white">实时预览</h2>

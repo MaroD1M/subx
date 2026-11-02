@@ -1,21 +1,24 @@
 <template>
   <AppContainer size="narrow" class="space-y-6 py-2">
-    <div class="flex flex-col sm:flex-row sm:items-start gap-4 mb-8">
-      <UButton icon="i-lucide-arrow-left" variant="ghost" color="neutral" aria-label="返回历史" to="/history" />
-      <div class="flex flex-col min-w-0 flex-1 gap-1.5">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ task.step === 'done' ? '翻译任务完成' : task.step === 'cancelled' ? '翻译任务已取消' : task.step === 'error' ? '翻译任务失败' : task.step === 'review' ? '字幕待核对' : '翻译任务进行中' }}</h2>
-        <p class="text-sm text-neutral-500 break-all">任务 ID: {{ $route.params.id }}</p>
-        <p v-if="task.filePath" class="text-xs text-neutral-400 break-all">{{ task.rootName || '默认媒体库' }} · {{ task.filePath }}</p>
-        <p v-if="task.contentTitle" class="text-xs text-primary-700 break-all">作品：{{ task.contentTitle }}</p>
-      </div>
-    </div>
+    <PageHeader
+      :title="task.step === 'done' ? '翻译任务完成' : task.step === 'cancelled' ? '翻译任务已取消' : task.step === 'error' ? '翻译任务失败' : task.step === 'review' ? '字幕待核对' : '翻译任务进行中'"
+      :description="`任务 ID: ${$route.params.id}`"
+      :breadcrumb="[{ label: '翻译历史', icon: 'i-lucide-history', to: '/history' }, { label: '任务详情' }]"
+    >
+      <p v-if="task.filePath" class="text-xs text-gray-500 break-all dark:text-gray-400">{{ task.rootName || '默认媒体库' }} · {{ task.filePath }}</p>
+      <p v-if="task.contentTitle" class="text-xs text-primary-700 break-all">作品：{{ task.contentTitle }}</p>
+      <template #actions>
+        <AppStatusBadge :status="task.step" />
+        <UButton label="返回历史" icon="i-lucide-arrow-left" variant="soft" color="neutral" to="/history" />
+      </template>
+    </PageHeader>
 
-    <div class="glass-panel rounded-3xl overflow-hidden mb-6 p-2">
+    <div class="surface-card overflow-hidden mb-6 p-2">
       <div class="p-6 space-y-6">
         <div class="space-y-4">
           <div class="flex justify-between items-end mb-2">
             <div class="flex flex-col">
-              <span class="text-xs font-semibold text-primary-700 uppercase tracking-wider mb-1">{{ task.step }}</span>
+              <span class="mb-1 text-xs font-semibold tracking-wider text-primary-700">当前阶段</span>
               <h3 class="text-lg font-bold text-gray-800 dark:text-gray-200" aria-live="polite">
                 <UIcon :name="stepIcon" class="mr-2 text-emerald-500" v-if="task.step === 'done'" />
                 <UIcon :name="stepIcon" class="mr-2 text-red-500" v-else-if="task.step === 'error'" />
@@ -111,7 +114,7 @@
           </div>
           <div class="space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">任务状态</span>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">{{ task.step }}</p>
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ statusLabel }}</p>
           </div>
         </div>
 

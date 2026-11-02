@@ -9,9 +9,7 @@
     <div class="relative z-10 w-full max-w-[420px] animate-in fade-in slide-in-from-bottom-8 duration-1000">
       <!-- Logo & Brand -->
       <div class="text-center mb-10 space-y-4">
-        <div class="inline-flex items-center justify-center w-20 h-20 rounded-[2.5rem] bg-gradient-to-br from-primary-400 to-primary-600 shadow-2xl shadow-primary-500/30 mb-2 transform hover:scale-110 transition-transform duration-500">
-          <UIcon name="i-lucide-shield-check" class="w-10 h-10 text-white" />
-        </div>
+        <img src="/logo.svg" alt="SubX" class="mx-auto mb-2 h-20 w-20 rounded-[2rem] shadow-2xl shadow-primary-500/20 transition-transform duration-500 hover:scale-105" />
         <div class="space-y-1">
           <h1 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400">SubX 安全验证</h1>
           <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">本地部署的字幕提取与翻译入口</p>

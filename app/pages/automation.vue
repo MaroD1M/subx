@@ -11,7 +11,7 @@
       </template>
     </PageHeader>
 
-    <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
+    <div class="surface-card p-4 sm:p-5 space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">全局自动化设置</p>
@@ -43,26 +43,11 @@
     </div>
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
-      <nav class="self-start overflow-x-auto rounded-2xl border border-gray-200/80 bg-white p-1.5 shadow-sm dark:border-gray-800 dark:bg-gray-950/60 md:sticky md:top-20" aria-label="自动化分区">
-        <div class="flex min-w-max gap-1 md:min-w-0 md:flex-col">
-          <button
-            v-for="tab in tabs"
-            :key="tab.value"
-            type="button"
-            class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors"
-            :class="activeTab === tab.value ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900'"
-            :aria-current="activeTab === tab.value ? 'page' : undefined"
-            @click="activeTab = tab.value"
-          >
-            <UIcon :name="tab.icon" class="h-4 w-4 shrink-0" />
-            <span>{{ tab.label }}</span>
-          </button>
-        </div>
-      </nav>
+      <AppSubNav v-model="activeTab" :items="tabs" label="自动化分区" />
 
       <div class="min-w-0 space-y-4">
         <section v-show="activeTab === 'folders'" class="space-y-4" aria-label="监控目录">
-          <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
+          <div class="surface-card p-4 sm:p-5 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">监控目录</p>
@@ -110,7 +95,7 @@
         </section>
 
         <section v-show="activeTab === 'events'" class="space-y-4" aria-label="监控事件">
-          <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
+          <div class="surface-card p-4 sm:p-5 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">最近事件</p>
@@ -144,7 +129,7 @@
         </section>
 
         <section v-show="activeTab === 'notifications'" class="space-y-4" aria-label="通知渠道">
-          <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
+          <div class="surface-card p-4 sm:p-5 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">通知渠道</p>
@@ -178,13 +163,13 @@
             </div>
           </div>
 
-          <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-3">
+          <div class="surface-card p-4 sm:p-5 space-y-3">
             <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">最近投递</p>
             <div v-if="!deliveries.length" class="text-xs text-gray-500 dark:text-gray-400">暂无投递记录</div>
             <div v-else class="space-y-2 max-h-[360px] overflow-y-auto pr-1">
               <div v-for="delivery in deliveries" :key="delivery.id" class="rounded-xl border border-gray-100 dark:border-gray-800 px-3 py-2 text-xs">
                 <div class="flex flex-wrap items-center gap-2">
-                  <UBadge :color="delivery.status === 'sent' ? 'success' : delivery.status === 'failed' ? 'error' : 'neutral'" variant="subtle">{{ delivery.status }}</UBadge>
+                  <AppStatusBadge :status="delivery.status" />
                   <span class="font-medium text-gray-700 dark:text-gray-200">{{ delivery.title }}</span>
                   <span class="text-gray-400">{{ delivery.channelName }}</span>
                   <span class="ml-auto text-gray-400">{{ formatDate(delivery.createdAt) }}</span>
@@ -196,7 +181,7 @@
         </section>
 
         <section v-show="activeTab === 'integrations'" class="space-y-4" aria-label="外部集成">
-          <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
+          <div class="surface-card p-4 sm:p-5 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">下载器 / 媒体服务器 Webhook</p>
@@ -231,7 +216,7 @@
             </div>
           </div>
 
-          <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-3">
+          <div class="surface-card p-4 sm:p-5 space-y-3">
             <div class="flex items-center justify-between gap-3">
               <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">最近集成事件</p>
               <UButton label="刷新" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" @click="refreshIntegrationEvents()" />
@@ -241,7 +226,7 @@
               <div v-for="item in integrationEvents" :key="item.id" class="rounded-xl border border-gray-100 dark:border-gray-800 px-3 py-2 text-xs">
                 <div class="flex flex-wrap items-center gap-2">
                   <UBadge color="primary" variant="subtle">{{ item.source }}</UBadge>
-                  <UBadge :color="item.status === 'queued' ? 'success' : item.status === 'failed' ? 'error' : 'neutral'" variant="subtle">{{ item.status }}</UBadge>
+                  <AppStatusBadge :status="item.status" />
                   <span class="break-all text-gray-700 dark:text-gray-200">{{ item.path }}</span>
                   <UButton v-if="item.taskId" label="任务" size="xs" color="primary" variant="ghost" :to="`/task/${item.taskId}`" />
                   <span class="ml-auto text-gray-400">{{ formatDate(item.createdAt) }}</span>
@@ -253,7 +238,7 @@
         </section>
 
         <section v-show="activeTab === 'api'" class="space-y-4" aria-label="API Token">
-          <div class="rounded-3xl border border-gray-100 dark:border-gray-800 bg-white/85 dark:bg-gray-950/35 p-4 sm:p-5 space-y-4">
+          <div class="surface-card p-4 sm:p-5 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">API Token</p>
