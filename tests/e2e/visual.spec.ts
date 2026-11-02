@@ -30,7 +30,7 @@ test('home visual and accessibility', async ({ page }) => {
   await expect(page.getByText('文件浏览器')).toBeVisible()
   await expect(page).toHaveScreenshot('home.png', {
     fullPage: true,
-    mask: [page.locator('header .version-badge')]
+    mask: [page.locator('.version-badge')]
   })
   await expectNoSeriousA11y(page)
 })
@@ -40,7 +40,7 @@ test('history visual and accessibility', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
   await expect(page).toHaveScreenshot('history.png', {
     fullPage: true,
-    mask: [page.locator('header .version-badge')]
+    mask: [page.locator('.version-badge')]
   })
   await expectNoSeriousA11y(page)
 })
@@ -50,7 +50,7 @@ test('review visual and accessibility', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '字幕核对' })).toBeVisible()
   await expect(page).toHaveScreenshot('review.png', {
     fullPage: true,
-    mask: [page.locator('header .version-badge')]
+    mask: [page.locator('.version-badge')]
   })
   await expectNoSeriousA11y(page)
 })
@@ -60,7 +60,7 @@ test('task detail visual and accessibility', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /翻译任务/ })).toBeVisible()
   await expect(page).toHaveScreenshot('task.png', {
     fullPage: true,
-    mask: [page.locator('header .version-badge')]
+    mask: [page.locator('.version-badge')]
   })
   await expectNoSeriousA11y(page)
 })
@@ -71,7 +71,7 @@ test('automation visual and accessibility', async ({ page }) => {
   await expect(page.getByText('Movies').first()).toBeVisible()
   await expect(page).toHaveScreenshot('automation.png', {
     fullPage: true,
-    mask: [page.locator('header .version-badge')]
+    mask: [page.locator('.version-badge')]
   })
   await expectNoSeriousA11y(page)
 })
@@ -126,7 +126,7 @@ test('settings visual and accessibility', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
   await expect(page).toHaveScreenshot('settings.png', {
     fullPage: true,
-    mask: [page.locator('header .version-badge')]
+    mask: [page.locator('.version-badge')]
   })
   await expectNoSeriousA11y(page)
 })
@@ -231,7 +231,7 @@ test('ASR card stays visible when toggled off without subtitle tracks', async ({
   await page.waitForTimeout(300)
   await expect(page).toHaveScreenshot('asr-source.png', {
     fullPage: false,
-    mask: [page.locator('header .version-badge')]
+    mask: [page.locator('.version-badge')]
   })
 
   await asrSwitch.click()
@@ -306,7 +306,7 @@ test.describe('mobile', () => {
     await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
     await expect(page).toHaveScreenshot('mobile-home.png', {
       fullPage: true,
-      mask: [page.locator('header .version-badge')]
+      mask: [page.locator('.version-badge')]
     })
   })
 })

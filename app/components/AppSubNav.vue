@@ -1,14 +1,14 @@
 <template>
-  <nav :aria-label="label" class="self-start overflow-x-auto rounded-2xl border border-gray-200/80 bg-white p-1.5 shadow-sm dark:border-gray-800 dark:bg-gray-950/60 md:sticky md:top-20">
-    <div class="flex min-w-max gap-1 md:min-w-0 md:flex-col">
+  <nav :aria-label="label" class="overflow-x-auto rounded-xl border border-gray-200/80 bg-white p-1 shadow-sm dark:border-gray-800 dark:bg-gray-950/60">
+    <div class="flex min-w-max items-center gap-1">
       <button
         v-for="item in items"
         :key="item.value"
         type="button"
-        class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors"
+        class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
         :class="modelValue === item.value
-          ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
-          : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900'"
+          ? 'bg-primary-50 text-primary-700 shadow-sm dark:bg-primary-500/10 dark:text-primary-300'
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white'"
         :aria-current="modelValue === item.value ? 'page' : undefined"
         @click="emit('update:modelValue', item.value)"
       >

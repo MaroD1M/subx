@@ -42,7 +42,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
+    <div class="space-y-4">
       <AppSubNav v-model="activeTab" :items="tabs" label="自动化分区" />
 
       <div class="min-w-0 space-y-4">

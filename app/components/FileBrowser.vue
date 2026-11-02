@@ -488,7 +488,7 @@ async function loadRootNodes() {
   loadingFiles.value = true
   filesError.value = null
   try {
-    files.value = await $fetch('/api/files', { query: { rootId: activeRootId.value } })
+    files.value = await ($fetch as any)('/api/files', { query: { rootId: activeRootId.value } })
     await restoreExpandedDirectories(activeRootId.value)
   } catch (e: any) {
     filesError.value = e

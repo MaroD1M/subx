@@ -17,6 +17,7 @@
 }
 
 :root {
+    color-scheme: light;
     --ui-color-primary-500: #0f766e !important;
     --ui-color-primary-600: #115e59 !important;
     --ui-color-primary-700: #134e4a !important;
@@ -32,6 +33,7 @@
 }
 
 .dark {
+    color-scheme: dark;
     --surface-soft: rgba(17, 24, 39, 0.86);
     --surface-strong: rgba(17, 24, 39, 0.96);
     --surface-muted: rgba(15, 23, 42, 0.72);
@@ -90,6 +92,19 @@ body {
 
 .app-meta {
     @apply text-[11px] leading-4 text-gray-500 dark:text-gray-400;
+}
+
+.version-badge {
+    @apply inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none;
+}
+.version-ok {
+    @apply border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300;
+}
+.version-stale {
+    @apply border-amber-200/70 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300;
+}
+.version-err {
+    @apply border-gray-200/80 bg-gray-50 text-gray-500 dark:border-gray-700/60 dark:bg-gray-900/40 dark:text-gray-400;
 }
 
 .section-title {

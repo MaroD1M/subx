@@ -8,50 +8,50 @@
       >
         跳到主要内容
       </a>
-      <header v-if="!isLoginPage" class="sticky top-0 z-50 border-b border-gray-200/80 bg-white/90 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/90">
-        <AppContainer class="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div class="flex min-w-0 items-center gap-1 sm:gap-3">
-            <NuxtLink to="/" class="flex shrink-0 items-center gap-2.5" aria-label="SubX 首页">
-              <img src="/logo.svg" alt="" class="h-8 w-8 rounded-xl shadow-sm" />
-              <span class="text-xl font-black text-primary-700 transition-opacity hover:opacity-80 dark:text-primary-400">SubX</span>
-            </NuxtLink>
-            <span v-if="latestVersion && appVersion !== latestVersion" class="version-badge version-stale hidden md:inline-flex" title="有新版本可用">v{{ appVersion }} &#8593; v{{ latestVersion }}</span>
-            <span v-else-if="latestVersion" class="version-badge version-ok hidden md:inline-flex" title="已是最新版">v{{ appVersion }} ✓</span>
-            <span v-else class="version-badge version-err hidden md:inline-flex">v{{ appVersion }}</span>
-            <nav class="ml-4 hidden items-center gap-0.5 md:flex" aria-label="主导航">
-              <UButton
-                v-for="item in navItems"
-                :key="item.to"
-                :label="item.label"
-                :icon="item.icon"
-                variant="ghost"
-                size="sm"
-                :color="isNavActive(item.to) ? 'primary' : 'neutral'"
-                :class="isNavActive(item.to) ? 'font-semibold' : ''"
-                :to="item.to"
-              />
-            </nav>
-          </div>
-          <div class="flex items-center gap-1 sm:gap-1.5">
-             <UButton v-if="authenticated" icon="i-lucide-log-out" variant="ghost" color="neutral" size="sm" title="登出" aria-label="登出" @click="handleLogout" />
-             <UButton icon="i-lucide-github" variant="ghost" color="neutral" size="sm" aria-label="打开 GitHub 项目页" to="https://github.com/MaroD1M/subx" target="_blank" />
-             <UButton
-               :icon="colorMode.value === 'dark' ? 'i-lucide-moon' : 'i-lucide-sun'"
-               variant="ghost"
-               color="neutral"
-               size="sm"
-               :aria-label="colorMode.value === 'dark' ? '切换到浅色模式' : '切换到深色模式'"
-               @click="colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'"
-             />
-          </div>
-        </AppContainer>
-      </header>
 
-      <main id="main-content" tabindex="-1" :class="[isLoginPage ? 'h-screen w-full' : 'px-4 py-5 pb-24 sm:px-6 md:pb-8 lg:px-8']">
+      <div v-if="!isLoginPage" class="flex min-h-screen">
+        <AppSidebar
+          :collapsed="sidebarCollapsed"
+          :app-version="appVersion"
+          :latest-version="latestVersion"
+          @toggle="toggleSidebar"
+        />
+
+        <div class="flex min-w-0 flex-1 flex-col">
+          <header class="sticky top-0 z-40 border-b border-gray-200/80 bg-white/90 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/90 lg:hidden">
+            <AppContainer class="flex h-14 items-center justify-between px-4 sm:px-6">
+              <NuxtLink to="/" class="flex min-w-0 items-center gap-2" aria-label="SubX 首页">
+                <img src="/logo.svg" alt="" class="h-8 w-8 rounded-xl shadow-sm" />
+                <span class="text-lg font-black text-primary-700 dark:text-primary-400">SubX</span>
+                <span class="version-badge" :class="mobileVersionClass">v{{ appVersion }}</span>
+              </NuxtLink>
+              <div class="flex items-center gap-1">
+                <UButton v-if="authenticated" icon="i-lucide-log-out" variant="ghost" color="neutral" size="sm" title="登出" aria-label="登出" @click="handleLogout" />
+                <UButton icon="i-lucide-github" variant="ghost" color="neutral" size="sm" aria-label="打开 GitHub 项目页" to="https://github.com/MaroD1M/subx" target="_blank" />
+                <UButton
+                  :icon="colorMode.value === 'dark' ? 'i-lucide-moon' : 'i-lucide-sun'"
+                  variant="ghost"
+                  color="neutral"
+                  size="sm"
+                  :aria-label="colorMode.value === 'dark' ? '切换到浅色模式' : '切换到深色模式'"
+                  @click="colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'"
+                />
+              </div>
+            </AppContainer>
+          </header>
+
+          <main id="main-content" tabindex="-1" class="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 md:pb-8 lg:px-8 lg:py-6">
+            <NuxtPage />
+          </main>
+        </div>
+
+        <MobileNav />
+      </div>
+
+      <main v-else id="main-content" tabindex="-1" class="h-screen w-full">
         <NuxtPage />
       </main>
 
-      <MobileNav v-if="!isLoginPage" />
       <UToaster />
     </div>
   </UApp>
@@ -63,23 +63,25 @@ const { logout, authenticated } = useAuth()
 const route = useRoute()
 
 const isLoginPage = computed(() => route.path === '/login' || route.path === '/login/')
-const navItems = [
-  { label: '首页', icon: 'i-lucide-home', to: '/' },
-  { label: '翻译历史', icon: 'i-lucide-history', to: '/history' },
-  { label: '媒体库', icon: 'i-lucide-library-big', to: '/media-libraries' },
-  { label: '自动化', icon: 'i-lucide-workflow', to: '/automation' },
-  { label: '设置', icon: 'i-lucide-settings', to: '/settings' }
-]
-
-function isNavActive(path) {
-  if (path === '/') return route.path === '/'
-  return route.path.startsWith(path)
-}
-
+const sidebarCollapsed = ref(false)
 const runtimeConfig = useRuntimeConfig()
 const appVersion = runtimeConfig.public.appVersion
 const latestVersion = ref('')
+
+const mobileVersionClass = computed(() => {
+  if (!latestVersion.value) return 'version-err'
+  return latestVersion.value === appVersion ? 'version-ok' : 'version-stale'
+})
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
 onMounted(async () => {
+  try {
+    sidebarCollapsed.value = localStorage.getItem('subx:sidebar-collapsed') === '1'
+  } catch { /* ignore storage failures */ }
+
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 5000)
@@ -97,6 +99,11 @@ onMounted(async () => {
   } catch { /* ignore — network unavailable */ }
 })
 
+watch(sidebarCollapsed, (value) => {
+  if (!import.meta.client) return
+  try { localStorage.setItem('subx:sidebar-collapsed', value ? '1' : '0') } catch { /* ignore */ }
+})
+
 const fallbackTitle = computed(() => {
   const path = route.path.replace(/\/$/, '') || '/'
 
@@ -105,7 +112,7 @@ const fallbackTitle = computed(() => {
   if (path === '/history') return '翻译历史 - SubX'
   if (path === '/media-libraries') return '媒体库管理 - SubX'
   if (path === '/automation') return '自动化 - SubX'
-    if (/^\/review\/[^/]+$/.test(path)) return '字幕核对 - SubX'
+  if (/^\/review\/[^/]+$/.test(path)) return '字幕核对 - SubX'
   if (/^\/task\/[^/]+$/.test(path)) return '翻译任务详情 - SubX'
   return 'SubX - 自动化视频字幕提取与翻译工具'
 })
@@ -118,6 +125,3 @@ async function handleLogout() {
   await logout()
 }
 </script>
-
-<style>
-</style>

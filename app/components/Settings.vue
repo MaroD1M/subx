@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-4">
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
+    <div class="space-y-4">
       <AppSubNav v-model="activeTab" :items="settingsTabs" label="设置分区" />
 
       <div class="min-w-0 space-y-4">
