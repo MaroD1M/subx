@@ -139,6 +139,14 @@ test('settings ASR tab is accessible', async ({ page }) => {
   await expectNoSeriousA11y(page)
 })
 
+test('settings OCR tab is accessible', async ({ page }) => {
+  await page.goto('/settings?tab=ocr')
+  await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
+  await expect(page.getByText('OCR 与语音识别是并列的字幕来源')).toBeVisible()
+  await expect(page.getByText('启用图像字幕 OCR')).toBeVisible()
+  await expectNoSeriousA11y(page)
+})
+
 test('subtitled video can be forced to ASR', async ({ page }) => {
   // 从设置页真实保存，验证返回首页后 ASR 开关立即生效（而不是使用旧缓存）。
   await page.goto('/settings', { waitUntil: 'networkidle' })

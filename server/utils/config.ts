@@ -64,6 +64,8 @@ export const ConfigService = {
             ocrBaseUrl: LOCAL_OCR_URL,
             ocrApiKey: String(process.env.OCR_API_KEY || ''),
             ocrLanguage: String(process.env.OCR_LANGUAGE || 'en'),
+            ocrEngine: String(process.env.OCR_ENGINE || 'auto') as AppConfig['ocrEngine'],
+            ocrMinConfidence: Number(process.env.OCR_MIN_CONFIDENCE || 25),
             automationConcurrency: 1,
             notificationEnabled: true,
             notificationLowConfidenceThreshold: 0.6
@@ -77,7 +79,7 @@ export const ConfigService = {
                 config.mediaRoots = JSON.parse(row.value) as MediaRoot[]
             } else if (row.key === 'customStylePresets') {
                 config.customStylePresets = JSON.parse(row.value)
-            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries'].includes(row.key)) {
+            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'

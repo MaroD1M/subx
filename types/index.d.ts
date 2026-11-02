@@ -130,6 +130,8 @@ export interface AppConfig {
   ocrBaseUrl?: string
   ocrLanguage?: string
   ocrApiKey?: string
+  ocrEngine?: 'auto' | 'rapidocr' | 'tesseract'
+  ocrMinConfidence?: number
   automationConcurrency?: number // 自动任务并发上限
   notificationEnabled?: boolean // 是否启用通知
   notificationLowConfidenceThreshold?: number // 低置信度通知阈值
@@ -175,7 +177,7 @@ export interface WatchOutputPolicy {
   subtitleFormat: 'srt' | 'ass' | 'both'
   subtitleStylePreset: string
   bilingualLayout: 'translated_first' | 'original_first'
-  sourceType: 'auto' | 'embedded' | 'external' | 'asr'
+  sourceType: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr'
   model: string
   notifyChannelIds: number[]
 }

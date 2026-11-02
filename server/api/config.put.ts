@@ -53,6 +53,8 @@ const ALLOWED_KEYS = new Set([
   'ocrBaseUrl',
   'ocrLanguage',
   'ocrApiKey',
+  'ocrEngine',
+  'ocrMinConfidence',
   'automationConcurrency',
   'notificationEnabled',
   'notificationLowConfidenceThreshold'
@@ -108,6 +110,15 @@ export default defineEventHandler(async (event) => {
     }
     if (key === 'qualityCheckMaxEntries') {
       await ConfigService.updateConfig(key, Math.max(1, Math.min(1000, Number(value) || 200)))
+      continue
+    }
+    if (key === 'ocrMinConfidence') {
+      const parsed = Number(value)
+      await ConfigService.updateConfig(key, Math.max(0, Math.min(100, Number.isFinite(parsed) ? parsed : 25)))
+      continue
+    }
+    if (key === 'ocrEngine') {
+      await ConfigService.updateConfig(key, ['auto', 'rapidocr', 'tesseract'].includes(String(value)) ? String(value) : 'auto')
       continue
     }
     await ConfigService.updateConfig(key, value)

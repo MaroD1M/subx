@@ -914,6 +914,8 @@ export const TaskService = {
                     language: config.ocrLanguage || 'en',
                     apiKey: config.ocrApiKey || '',
                     trackIndex: task.trackIndex ?? 0,
+                    engine: config.ocrEngine || 'auto',
+                    minConfidence: config.ocrMinConfidence ?? 25,
                     onProgress: (progress, message) => {
                         const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
                         const mapped = 12 + Math.round(stepProgress * 0.08)
@@ -924,6 +926,9 @@ export const TaskService = {
                 allEntries = AsrService.toSubtitleEntries(ocrResult)
                 if (allEntries.length === 0) {
                     throw new Error('OCR 未生成有效字幕')
+                }
+                if (ocrResult.diagnostics) {
+                    writeTaskLog(taskId, 'ocr', 'info', `[OCR] ${JSON.stringify(ocrResult.diagnostics)}`)
                 }
                 task.sourceLanguage = ocrResult.language
                 task.asrRunId = persisted.runId

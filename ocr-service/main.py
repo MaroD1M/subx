@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import cv2
+import numpy as np
 import pysrt
 import pytesseract
 
@@ -66,6 +67,8 @@ class OcrRequest(BaseModel):
     path: str
     track_index: int = 0
     language: str = DEFAULT_LANGUAGE
+    engine: str | None = None
+    min_confidence: float | None = None
 
 
 def require_tool(name: str) -> str:
@@ -88,7 +91,7 @@ def probe(path: Path, track_index: int) -> dict[str, Any]:
     ffprobe = require_tool("ffprobe")
     result = subprocess.run([
         ffprobe, "-v", "error", "-show_entries",
-        "format=duration:stream=index,codec_name,codec_type:stream_disposition=default",
+        "format=duration:stream=index,codec_name,codec_type,width,height:stream_disposition=default",
         "-of", "json", str(path)
     ], check=True, capture_output=True, text=True)
     data = json.loads(result.stdout)
@@ -102,15 +105,34 @@ def probe(path: Path, track_index: int) -> dict[str, Any]:
             match = streams[track_index]
         else:
             raise HTTPException(status_code=400, detail="字幕轨道不存在")
+
+    # FFmpeg 的 subtitles 滤镜 si 参数使用的是“第几个字幕流”，不是全局 stream index。
+    subtitle_index = streams.index(match)
+    video = next((stream for stream in data.get("streams", []) if stream.get("codec_type") == "video"), {})
+    width = int(video.get("width") or 1280)
+    height = int(video.get("height") or 720)
+    width = max(1280, min(1920, width))
+    height = max(720, min(1080, height))
     return {
         "duration": float(data.get("format", {}).get("duration", 0) or 0),
         "codec": str(match.get("codec_name", "")),
         "stream_index": int(match.get("index", track_index)),
+        "subtitle_index": subtitle_index,
+        "width": width,
+        "height": height,
     }
 
 
+def normalize_engine(value: str | None = None) -> str:
+    engine = str(value or OCR_ENGINE or "auto").strip().lower()
+    if engine in {"auto", "rapidocr", "tesseract"}:
+        return engine
+    return "auto"
+
+
 def pgs_language(value: str) -> str:
-    return (value or DEFAULT_LANGUAGE).split("+")[0].split("-")[0]
+    # pgsrip 接受 en / pt-BR 这类带地区的语言代码。
+    return (value or DEFAULT_LANGUAGE).split("+")[0].strip() or DEFAULT_LANGUAGE
 
 
 def tess_language(value: str) -> str:
@@ -146,10 +168,20 @@ def extract_pgs(path: Path, stream_index: int, workdir: Path) -> Path:
     return output
 
 
-def rip_pgs(sup_path: Path, language: str, workdir: Path) -> Path:
+def rip_pgs(sup_path: Path, language: str, workdir: Path, engine: str | None = None) -> Path:
     if not PGSRIP_BIN:
         raise RuntimeError("pgsrip 未安装")
-    command = [PGSRIP_BIN, "-l", language, "--force", str(sup_path)]
+    command = [
+        PGSRIP_BIN,
+        "-l", language,
+        "--force",
+        "--format", "srt",
+        "--no-tesseract-download",
+    ]
+    resolved_engine = normalize_engine(engine)
+    if resolved_engine in {"rapidocr", "tesseract"}:
+        command.extend(["--engine", resolved_engine])
+    command.append(str(sup_path))
     subprocess.run(command, cwd=workdir, check=True, capture_output=True, text=True, timeout=60 * 60)
     candidates = sorted(workdir.glob("*.srt"))
     if not candidates:
@@ -157,8 +189,60 @@ def rip_pgs(sup_path: Path, language: str, workdir: Path) -> Path:
     return candidates[0]
 
 
+def pgs_result_suspicious(segments: list[dict[str, Any]], duration: float) -> str | None:
+    if not segments:
+        return "pgsrip 未生成有效字幕"
+    text_chars = sum(len(str(item.get("text") or "")) for item in segments)
+    if text_chars < 4:
+        return "pgsrip 识别文本过少"
+    if duration >= 600 and len(segments) < 5:
+        return f"pgsrip 仅返回 {len(segments)} 条字幕，疑似不完整"
+    last_end = max(float(item.get("end") or 0) for item in segments)
+    if duration >= 300 and last_end < min(60.0, duration * 0.1):
+        return f"pgsrip 结果疑似不完整（最后一条 {last_end:.0f}s / 总时长 {duration:.0f}s）"
+    return None
+
+
+def bright_mask(image: Any) -> Any:
+    """Return a mask of subtitle pixels, ignoring black background and edges."""
+    if image is None or image.size == 0:
+        return None
+    height, width = image.shape[:2]
+    if height < 4 or width < 4:
+        return None
+    # Use max channel instead of luminance so colored DVD/VobSub subtitles survive.
+    mask = (image.max(axis=2) >= 28).astype(np.uint8) * 255
+    border = max(1, min(4, height // 180, width // 320))
+    mask[:border, :] = 0
+    mask[-border:, :] = 0
+    mask[:, :border] = 0
+    mask[:, -border:] = 0
+    return mask
+
+
+def subtitle_bbox(image: Any) -> tuple[int, int, int, int] | None:
+    mask = bright_mask(image)
+    if mask is None:
+        return None
+    count = int(cv2.countNonZero(mask))
+    # ~0.008% of a 1280x720 frame: enough for a short subtitle line,
+    # high enough to ignore codec noise in the black background.
+    min_pixels = max(12, int(mask.size * 0.00008))
+    if count < min_pixels:
+        return None
+    x, y, w, h = cv2.boundingRect(mask)
+    if w < 6 or h < 4:
+        return None
+    return x, y, w, h
+
+
 def frame_hash(image: Any) -> str:
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    bbox = subtitle_bbox(image)
+    if not bbox:
+        return ""
+    x, y, w, h = bbox
+    crop = image[y:y + h, x:x + w]
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     small = cv2.resize(gray, (32, 8), interpolation=cv2.INTER_AREA)
     mean = float(small.mean())
     return ''.join('1' if value > mean else '0' for value in small.flatten())
@@ -173,32 +257,74 @@ def get_rapidocr():
     return _rapidocr_engine
 
 
-def ocr_image(path: Path, language: str) -> tuple[str, float]:
-    image = cv2.imread(str(path))
-    if image is None:
-        return "", 0.0
-    if RapidOCR is not None and OCR_ENGINE in {"auto", "rapidocr"} and language.split("+")[0].split("-")[0] in {"chi_sim", "chi_tra", "eng", "chinese", "en", "zh"}:
-        try:
-            result = get_rapidocr()(image)
-            if isinstance(result, tuple):
-                result = result[0]
-            texts = getattr(result, "txts", None)
-            scores = getattr(result, "scores", None)
-            if texts is None and isinstance(result, dict):
-                texts = result.get("txts") or result.get("txt")
-                scores = result.get("scores") or result.get("score")
-            text = " ".join(str(item) for item in (texts or []) if str(item).strip()).strip()
-            values = [float(value) for value in (scores or []) if value is not None]
-            confidence = (sum(values) / len(values)) if values else 0.0
-            if text and confidence >= MIN_CONFIDENCE / 100:
-                return text, confidence
-        except Exception:
-            pass
-    text = ""
-    confidence = 0.0
-    try:
-        text = pytesseract.image_to_string(image, lang=language, config="--oem 1 --psm 6")
-        data = pytesseract.image_to_data(image, lang=language, config="--oem 1 --psm 6", output_type=pytesseract.Output.DICT)
+def rapidocr_supports(language: str) -> bool:
+    token = language.split("+")[0].split("-")[0].lower()
+    return token in {"chi_sim", "chi_tra", "eng", "chinese", "en", "zh"}
+
+
+def prepare_ocr_image(image: Any) -> tuple[Any, Any] | None:
+    """Crop the subtitle area, upscale it and produce a black-text/white-bg image."""
+    bbox = subtitle_bbox(image)
+    if not bbox:
+        return None
+    x, y, w, h = bbox
+    pad_x = max(4, int(w * 0.02))
+    pad_y = max(4, int(h * 0.18))
+    height, width = image.shape[:2]
+    x0 = max(0, x - pad_x)
+    y0 = max(0, y - pad_y)
+    x1 = min(width, x + w + pad_x)
+    y1 = min(height, y + h + pad_y)
+    crop = image[y0:y1, x0:x1]
+    if crop.size == 0:
+        return None
+
+    ch, cw = crop.shape[:2]
+    scale = 1.0
+    if ch < 72:
+        scale = max(scale, min(3.0, 72.0 / max(1, ch)))
+    if cw < 800:
+        scale = max(scale, min(2.0, 800.0 / max(1, cw)))
+    if scale > 1.01:
+        crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    # Subtitles are normally bright text on black. Tesseract wants the inverse.
+    if float(gray.mean()) < 127:
+        gray = cv2.bitwise_not(gray)
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if float(binary.mean()) < 127:
+        binary = cv2.bitwise_not(binary)
+    binary = cv2.copyMakeBorder(binary, 8, 8, 8, 8, cv2.BORDER_CONSTANT, value=255)
+    return crop, binary
+
+
+def _rapidocr_read(image: Any) -> tuple[str, float]:
+    result = get_rapidocr()(image)
+    if isinstance(result, tuple):
+        result = result[0]
+    texts = getattr(result, "txts", None)
+    scores = getattr(result, "scores", None)
+    if texts is None and isinstance(result, dict):
+        texts = result.get("txts") or result.get("txt")
+        scores = result.get("scores") or result.get("score")
+    text = " ".join(str(item) for item in (texts or []) if str(item).strip()).strip()
+    values = [float(value) for value in (scores or []) if value is not None]
+    confidence = (sum(values) / len(values)) if values else 0.0
+    return re.sub(r"\s+", " ", text).strip(), confidence
+
+
+def _tesseract_read(image: Any, language: str, min_confidence: float | None = None) -> tuple[str, float]:
+    threshold = float(MIN_CONFIDENCE if min_confidence is None else min_confidence)
+    last_text = ""
+    last_confidence = 0.0
+    for psm in (6, 7):
+        config = f"--oem 1 --psm {psm}"
+        text = pytesseract.image_to_string(image, lang=language, config=config)
+        text = re.sub(r"\s+", " ", text).strip()
+        if not text:
+            continue
+        data = pytesseract.image_to_data(image, lang=language, config=config, output_type=pytesseract.Output.DICT)
         values = []
         for value in data.get("conf", []):
             try:
@@ -208,23 +334,54 @@ def ocr_image(path: Path, language: str) -> tuple[str, float]:
             if parsed >= 0:
                 values.append(parsed)
         confidence = (sum(values) / len(values) / 100.0) if values else 0.0
+        last_text = text
+        last_confidence = confidence
+        if confidence * 100 >= threshold:
+            return text, confidence
+    # 低置信度文本也保留，交给核对页高亮，不再静默丢弃。
+    return last_text, last_confidence
+
+
+def ocr_image(path: Path, language: str, engine: str | None = None, min_confidence: float | None = None) -> tuple[str, float]:
+    image = cv2.imread(str(path))
+    if image is None:
+        return "", 0.0
+    prepared = prepare_ocr_image(image)
+    if prepared is None:
+        return "", 0.0
+    crop, binary = prepared
+    resolved_engine = normalize_engine(engine)
+
+    if RapidOCR is not None and resolved_engine in {"auto", "rapidocr"} and rapidocr_supports(language):
+        try:
+            text, confidence = _rapidocr_read(crop)
+            if text:
+                return text, confidence
+        except Exception:
+            pass
+
+    if resolved_engine == "rapidocr":
+        return "", 0.0
+
+    try:
+        return _tesseract_read(binary, tess_language(language), min_confidence)
     except Exception:
         return "", 0.0
-    text = re.sub(r"\s+", " ", text).strip()
-    if confidence * 100 < MIN_CONFIDENCE:
-        text = ""
-    return text, confidence
 
 
 def ocr_frames(
     path: Path,
-    stream_index: int,
+    subtitle_index: int,
     language: str,
     duration: float,
     workdir: Path,
     progress: Callable[[int, str], None] | None = None,
-    cancelled: Callable[[], bool] | None = None
-) -> list[dict[str, Any]]:
+    cancelled: Callable[[], bool] | None = None,
+    engine: str | None = None,
+    min_confidence: float | None = None,
+    width: int = 1280,
+    height: int = 720,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     ffmpeg = require_tool("ffmpeg")
     frames_dir = workdir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -233,28 +390,34 @@ def ocr_frames(
     if not source.exists():
         os.symlink(path, source)
     escaped = str(source).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
-    filter_arg = f"subtitles=filename='{escaped}':si={stream_index}"
+    # subtitles 滤镜的 si 是“第几个字幕流”，不是 ffprobe 的全局 stream index。
+    filter_arg = f"subtitles=filename='{escaped}':si={subtitle_index}"
     if progress:
         progress(8, "正在抽取图像字幕帧")
     subprocess.run([
         ffmpeg, "-y", "-v", "error",
-        "-f", "lavfi", "-i", f"color=c=black:s=1280x720:r={OCR_FPS}:d={duration}",
+        "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:r={OCR_FPS}:d={duration}",
         "-vf", filter_arg, "-vsync", "0", str(frames_dir / "frame_%06d.png")
     ], check=True, capture_output=True, text=True, timeout=60 * 60)
 
     frames = sorted(frames_dir.glob("frame_*.png"))
     metadata: list[dict[str, Any]] = []
     last_hash = ""
+    blank_frames = 0
+    changed_frames = 0
     for index, frame in enumerate(frames):
         if cancelled and cancelled():
             raise RuntimeError("OCR 任务已取消")
         image = cv2.imread(str(frame))
         if image is None:
             continue
-        blank = float(image.mean()) < 2
-        digest = "" if blank else frame_hash(image)
+        digest = frame_hash(image)
+        blank = not digest
+        if blank:
+            blank_frames += 1
         changed = bool(digest) and digest != last_hash
-        if digest:
+        if changed:
+            changed_frames += 1
             last_hash = digest
         metadata.append({
             "path": frame,
@@ -268,9 +431,13 @@ def ocr_frames(
 
     results: dict[int, tuple[str, float]] = {}
     targets = [index for index, item in enumerate(metadata) if item["changed"]]
+    empty_results = 0
     if targets:
         with ThreadPoolExecutor(max_workers=OCR_WORKERS) as executor:
-            futures = {executor.submit(ocr_image, metadata[index]["path"], language): index for index in targets}
+            futures = {
+                executor.submit(ocr_image, metadata[index]["path"], language, engine, min_confidence): index
+                for index in targets
+            }
             completed = 0
             for future in as_completed(futures):
                 if cancelled and cancelled():
@@ -280,12 +447,12 @@ def ocr_frames(
                     results[index] = future.result()
                 except Exception:
                     results[index] = ("", 0.0)
+                if not results[index][0]:
+                    empty_results += 1
                 completed += 1
                 if progress:
                     progress(35 + int(45 * completed / len(targets)), "正在 OCR 识别")
 
-    active_text = ""
-    active_confidence = 0.0
     frames_text: list[tuple[float, str, float]] = []
     last_ocr = ("", 0.0)
     for index, item in enumerate(metadata):
@@ -298,8 +465,6 @@ def ocr_frames(
         else:
             text, confidence = last_ocr
         frames_text.append((float(item["time"]), text, confidence))
-        active_text = text
-        active_confidence = confidence
 
     segments: list[dict[str, Any]] = []
     previous_text = ""
@@ -330,7 +495,19 @@ def ocr_frames(
         })
     if progress:
         progress(88, "正在合并字幕时间轴")
-    return segments
+    diagnostics = {
+        "mode": "frames",
+        "subtitleIndex": subtitle_index,
+        "renderSize": f"{width}x{height}",
+        "fps": OCR_FPS,
+        "frames": len(metadata),
+        "blankFrames": blank_frames,
+        "changedFrames": changed_frames,
+        "ocrCalls": len(targets),
+        "emptyResults": empty_results,
+        "segments": len(segments),
+    }
+    return segments, diagnostics
 
 
 def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None = None, cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
@@ -345,22 +522,67 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
         if duration > MAX_SECONDS:
             raise RuntimeError(f"视频时长 {duration:.0f}s 超过 OCR_MAX_SECONDS={MAX_SECONDS}s；请调大 OCR_MAX_SECONDS 或缩短视频")
         codec = str(info["codec"]).lower()
-        if codec in {"hdmv_pgs_subtitle", "pgssub"}:
+        engine = "pgsrip" if codec in {"hdmv_pgs_subtitle", "pgssub"} else "ffmpeg-ocr"
+        pgs_error: str | None = None
+        diagnostics: dict[str, Any] = {
+            "mode": "pgsrip" if engine == "pgsrip" else "frames",
+            "codec": codec,
+            "subtitleIndex": int(info["subtitle_index"]),
+            "requestedEngine": normalize_engine(request.engine),
+            "renderSize": f"{info['width']}x{info['height']}",
+        }
+
+        if engine == "pgsrip":
             try:
                 if progress:
                     progress(18, "正在提取 PGS 字幕")
                 sup_path = extract_pgs(path, int(info["stream_index"]), workdir)
                 if progress:
                     progress(45, "正在 OCR PGS 字幕")
-                srt_path = rip_pgs(sup_path, pgs_language(request.language), workdir)
+                srt_path = rip_pgs(sup_path, pgs_language(request.language), workdir, request.engine)
                 segments = parse_srt(srt_path)
-                engine = "pgsrip"
-            except Exception:
-                segments = ocr_frames(path, int(info["stream_index"]), tess_language(request.language), duration, workdir, progress, cancelled)
-                engine = "ffmpeg-tesseract"
+                suspicious = pgs_result_suspicious(segments, duration)
+                if suspicious:
+                    raise RuntimeError(suspicious)
+                diagnostics["pgsSegments"] = len(segments)
+            except Exception as exc:
+                pgs_error = str(exc)
+                if progress:
+                    progress(50, f"PGS OCR 回退到图像识别：{pgs_error}")
+                segments, frame_diagnostics = ocr_frames(
+                    path,
+                    int(info["subtitle_index"]),
+                    request.language,
+                    duration,
+                    workdir,
+                    progress,
+                    cancelled,
+                    request.engine,
+                    request.min_confidence,
+                    int(info["width"]),
+                    int(info["height"]),
+                )
+                engine = "ffmpeg-ocr"
+                diagnostics.update(frame_diagnostics)
         else:
-            segments = ocr_frames(path, int(info["stream_index"]), tess_language(request.language), duration, workdir, progress, cancelled)
-            engine = "ffmpeg-tesseract"
+            segments, frame_diagnostics = ocr_frames(
+                path,
+                int(info["subtitle_index"]),
+                request.language,
+                duration,
+                workdir,
+                progress,
+                cancelled,
+                request.engine,
+                request.min_confidence,
+                int(info["width"]),
+                int(info["height"]),
+            )
+            diagnostics.update(frame_diagnostics)
+
+        if pgs_error:
+            diagnostics["pgsError"] = pgs_error
+
         if not segments:
             raise RuntimeError("OCR 未生成有效字幕")
         if progress:
@@ -369,6 +591,9 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
         confidence_values = [float(segment.get("confidence") or 0) for segment in segments if float(segment.get("confidence") or 0) > 0]
         confidence = sum(confidence_values) / len(confidence_values) if confidence_values else 0
         elapsed = max(0.001, time.perf_counter() - started)
+        diagnostics["segments"] = len(segments)
+        diagnostics["confidence"] = confidence
+        diagnostics["elapsedSeconds"] = round(elapsed, 2)
         return {
             "task": "ocr",
             "engine": f"ocr:{engine}",
@@ -383,6 +608,7 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
             "confidence": confidence,
             "text": text,
             "segments": segments,
+            "diagnostics": diagnostics,
         }
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
@@ -456,7 +682,7 @@ def health() -> dict[str, Any]:
         "minConfidence": MIN_CONFIDENCE,
         "fps": OCR_FPS,
         "workers": OCR_WORKERS,
-        "engine": OCR_ENGINE,
+        "engine": normalize_engine(),
         "rapidocr": RapidOCR is not None,
         "activeJobs": active_jobs,
         "languages": sorted(TESS_LANG.keys()),

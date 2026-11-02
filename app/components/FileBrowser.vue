@@ -151,7 +151,7 @@
 
             <div v-if="!isSubtitleFile && bitmapTracks.length && !appConfig?.ocrEnabled && !hasSupportedSubtitle" class="mt-3 shrink-0 rounded-xl border border-amber-100 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
               <p class="text-xs font-semibold text-amber-800 dark:text-amber-200">发现图像字幕</p>
-              <p class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">PGS / VobSub / DVD 需要先在设置中启用「图像字幕 OCR」；单镜像已内置 OCR 服务。</p>
+              <p class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">PGS / VobSub / DVD 需要先在「设置 → 图像字幕 OCR」启用 OCR；单镜像已内置 OCR 服务。</p>
             </div>
 
             <div v-if="!isSubtitleFile && audioTracks.length" class="mt-3 shrink-0 rounded-xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-500/5">

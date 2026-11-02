@@ -33,6 +33,7 @@ export interface AsrResult {
   rtf?: number
   text: string
   segments: AsrSegment[]
+  diagnostics?: Record<string, unknown>
 }
 
 export type AsrEngine = 'auto' | 'faster-whisper' | 'whisper-cpp' | 'cloud'

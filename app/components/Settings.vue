@@ -182,29 +182,6 @@
               </p>
 
               <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300">图像字幕 OCR</p>
-                    <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">PGS / VobSub / DVD 图像字幕。无文本字幕时优先 OCR，再回退 ASR。</p>
-                  </div>
-                  <USwitch v-model="config.ocrEnabled" aria-label="启用图像字幕 OCR" />
-                </div>
-                <div v-if="config.ocrEnabled" class="grid gap-3 md:grid-cols-2">
-                  <UFormField label="OCR 服务地址">
-                    <div class="flex gap-2">
-                      <UInput v-model="config.ocrBaseUrl" placeholder="http://127.0.0.1:8001" class="w-full" />
-                      <UButton label="使用内置" size="sm" color="neutral" variant="soft" @click="config.ocrBaseUrl = 'http://127.0.0.1:8001'" />
-                    </div>
-                  </UFormField>
-                  <UFormField label="OCR 语言">
-                    <USelect v-model="config.ocrLanguage" :items="ocrLanguageItems" class="w-full" />
-                  </UFormField>
-                  <UFormField label="OCR API Key（可选）"><UInput v-model="config.ocrApiKey" type="password" placeholder="与 OCR_API_KEY 一致" class="w-full" /></UFormField>
-                </div>
-                <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">单镜像已内置 OCR（Tesseract + RapidOCR），默认地址 <code>http://127.0.0.1:8001</code>，无需下载模型。拆分部署时改用 <code>http://subx-ocr:8000</code>。</p>
-              </div>
-
-              <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p class="text-sm font-medium text-gray-700 dark:text-gray-300">ASR 指标</p>
@@ -225,6 +202,72 @@
                   </UBadge>
                 </div>
               </div>
+            </div>
+          </SettingsSection>
+        </div>
+
+        <div v-show="activeTab === 'ocr'" class="space-y-4">
+          <SettingsSection title="图像字幕 OCR" description="把 PGS / VobSub / DVD 图像字幕转换为文本。OCR 与语音识别是并列的字幕来源。">
+            <template #actions>
+              <UButton label="检测服务" size="xs" color="neutral" variant="soft" :loading="testingOcr" @click="testOcr" />
+            </template>
+
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+                <div class="space-y-0.5">
+                  <p class="text-sm font-medium text-gray-700 dark:text-gray-300">启用图像字幕 OCR</p>
+                  <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">PGS / VobSub / DVD 图像字幕。没有文本字幕时优先 OCR，再回退 ASR。</p>
+                </div>
+                <USwitch v-model="config.ocrEnabled" aria-label="启用图像字幕 OCR" />
+              </div>
+
+              <div v-if="config.ocrEnabled" class="space-y-4">
+                <UFormField label="OCR 服务地址">
+                  <div class="flex gap-2">
+                    <UInput v-model="config.ocrBaseUrl" placeholder="http://127.0.0.1:8001" class="w-full" />
+                    <UButton label="使用内置" size="sm" color="neutral" variant="soft" @click="config.ocrBaseUrl = 'http://127.0.0.1:8001'" />
+                  </div>
+                  <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">单镜像默认地址 <code>http://127.0.0.1:8001</code>；拆分部署时改用 <code>http://subx-ocr:8000</code>。</p>
+                </UFormField>
+
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <UFormField label="OCR 语言">
+                    <USelect v-model="config.ocrLanguage" :items="ocrLanguageItems" class="w-full" />
+                  </UFormField>
+                  <UFormField label="OCR 引擎">
+                    <USelect v-model="config.ocrEngine" :items="ocrEngineItems" class="w-full" />
+                  </UFormField>
+                </div>
+
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <UFormField label="OCR API Key（可选）">
+                    <UInput v-model="config.ocrApiKey" type="password" placeholder="与 OCR_API_KEY 一致" class="w-full" />
+                  </UFormField>
+                  <UFormField label="低置信度提示阈值">
+                    <div class="flex items-center gap-2">
+                      <UInput
+                        :model-value="config.ocrMinConfidence"
+                        type="number"
+                        min="0"
+                        max="100"
+                        class="w-full"
+                        @update:model-value="config.ocrMinConfidence = Math.max(0, Math.min(100, Number($event) || 0))"
+                      />
+                      <span class="text-sm text-gray-500">%</span>
+                    </div>
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">低于该值的结果会保留并进入核对，不再静默丢弃。</p>
+                  </UFormField>
+                </div>
+
+                <div class="rounded-xl border border-sky-100 bg-sky-50/70 p-3 text-xs leading-5 text-sky-800 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-200">
+                  <p class="font-medium">PGS / Blu-ray</p>
+                  <p>优先使用 pgsrip 按字幕 cue 识别；结果为空或明显不完整时自动回退到字幕图像 OCR。</p>
+                  <p class="mt-2 font-medium">VobSub / DVD</p>
+                  <p>直接渲染字幕轨并按字幕区域裁剪、放大、二值化后识别。低配 NAS 可把引擎切到 Tesseract 或降低并发。</p>
+                </div>
+              </div>
+
+              <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">OCR 不需要下载独立模型。单镜像已内置 Tesseract 语言包与 RapidOCR；引擎选择只影响本机识别质量与速度。</p>
             </div>
           </SettingsSection>
         </div>
@@ -399,10 +442,11 @@ import { STYLE_PRESETS } from '~~/shared/stylePresets'
 const emit = defineEmits(['close', 'saved'])
 const route = useRoute()
 const isGuideOpen = ref(false)
-const activeTab = ref<'ai' | 'asr' | 'defaults' | 'styles' | 'glossary' | 'advanced'>('ai')
+const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'styles' | 'glossary' | 'advanced'>('ai')
 const settingsTabs = [
   { label: 'AI 连接', icon: 'i-lucide-plug', value: 'ai' as const },
   { label: '语音识别', icon: 'i-lucide-mic', value: 'asr' as const },
+  { label: '图像字幕 OCR', icon: 'i-lucide-scan-text', value: 'ocr' as const },
   { label: '翻译默认', icon: 'i-lucide-sliders-horizontal', value: 'defaults' as const },
   { label: '翻译风格', icon: 'i-lucide-wand-sparkles', value: 'styles' as const },
   { label: '术语表', icon: 'i-lucide-book-a', value: 'glossary' as const },
@@ -413,6 +457,7 @@ const { data } = await useFetch('/api/config')
 const config = ref<any>(data.value || {})
 const pending = ref(false)
 const testingAsr = ref(false)
+const testingOcr = ref(false)
 const asrMetrics = ref<any>(null)
 const asrMetricsLoading = ref(false)
 const closeConfirmOpen = ref(false)
@@ -462,6 +507,11 @@ const ocrLanguageItems = [
   { label: '希伯来语', value: 'he' },
   { label: '印尼语', value: 'id' },
   { label: '马来语', value: 'ms' }
+]
+const ocrEngineItems = [
+  { label: '自动（推荐）', value: 'auto' },
+  { label: 'RapidOCR（中英文优先）', value: 'rapidocr' },
+  { label: 'Tesseract（兼容性优先）', value: 'tesseract' }
 ]
 const asrPreprocessItems = [
   { label: '关闭（推荐）', value: 'off' },
@@ -544,6 +594,8 @@ if (config.value) {
   if (config.value.ocrEnabled === undefined) config.value.ocrEnabled = false
   if (!config.value.ocrBaseUrl) config.value.ocrBaseUrl = 'http://127.0.0.1:8001'
   if (!config.value.ocrLanguage) config.value.ocrLanguage = 'en'
+  if (!config.value.ocrEngine) config.value.ocrEngine = 'auto'
+  if (config.value.ocrMinConfidence === undefined) config.value.ocrMinConfidence = 25
   if (config.value.ocrApiKey === undefined) config.value.ocrApiKey = ''
   if (!config.value.translationMode) config.value.translationMode = 'non_stream'
   if (config.value.streamUsage === undefined) config.value.streamUsage = false
@@ -591,6 +643,8 @@ function buildConfigSnapshot(value: any) {
     ocrBaseUrl: String(value?.ocrBaseUrl || ''),
     ocrLanguage: String(value?.ocrLanguage || 'en'),
     ocrApiKey: String(value?.ocrApiKey || ''),
+    ocrEngine: String(value?.ocrEngine || 'auto'),
+    ocrMinConfidence: Number(value?.ocrMinConfidence ?? 25),
     defaultModel: String(value?.defaultModel || ''),
     targetLanguage: String(value?.targetLanguage || ''),
     outputMode: String(value?.outputMode || ''),
@@ -656,7 +710,7 @@ watch(glossaryRows, (rows) => {
 
 onMounted(() => {
   const requestedTab = String(route.query.tab || '')
-  if (['ai', 'asr', 'defaults', 'styles', 'glossary', 'advanced'].includes(requestedTab)) {
+  if (['ai', 'asr', 'ocr', 'defaults', 'styles', 'glossary', 'advanced'].includes(requestedTab)) {
     activeTab.value = requestedTab as any
   }
   if (!Array.isArray(config.value.customStylePresets)) config.value.customStylePresets = []
@@ -743,6 +797,24 @@ async function loadAsrMetrics() {
     asrMetrics.value = null
   } finally {
     asrMetricsLoading.value = false
+  }
+}
+
+async function testOcr() {
+  testingOcr.value = true
+  try {
+    const result: any = await $fetch('/api/ocr/status')
+    if (result?.ok) {
+      const engines = result.data?.engines || {}
+      const available = Object.entries(engines).filter(([, value]) => value).map(([name]) => name)
+      toast.add({ title: 'OCR 服务正常', description: `引擎：${available.join(' / ') || '-'} · 语言：${result.data?.language || '-'} · 并发：${result.data?.workers || '-'}`, color: 'success' })
+    } else {
+      toast.add({ title: 'OCR 服务不可用', description: result?.message || `HTTP ${result?.status || '-'}`, color: 'error' })
+    }
+  } catch (e: any) {
+    toast.add({ title: 'OCR 检测失败', description: e?.data?.message || e?.message || '无法连接 OCR 服务', color: 'error' })
+  } finally {
+    testingOcr.value = false
   }
 }
 

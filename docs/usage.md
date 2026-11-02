@@ -366,10 +366,11 @@ docker compose --profile asr-enhanced up -d asr-enhanced
 
 启用步骤：
 
-1. 设置页「语音识别」开启「图像字幕 OCR」。
+1. 进入「设置 → 图像字幕 OCR」，开启「启用图像字幕 OCR」。OCR 与语音识别是并列入口，不再放在语音识别页里。
 2. OCR 服务地址保持 `http://127.0.0.1:8001`，或点击「使用内置」。
 3. 选择 OCR 语言，例如 `zh-CN`、`en`、`ja`。
-4. 首页选择带图像字幕的视频，轨道会显示 `[OCR]`；也可以让 `auto` 自动判断。
+4. 选择 OCR 引擎：`auto`、`rapidocr` 或 `tesseract`；低置信度提示阈值默认 25%。
+5. 首页选择带图像字幕的视频，轨道会显示 `[OCR]`；也可以让 `auto` 自动判断。
 
 处理顺序：
 
@@ -379,10 +380,13 @@ docker compose --profile asr-enhanced up -d asr-enhanced
 
 实现说明：
 
-- PGS 使用 FFmpeg 提取 `.sup`，再由 pgsrip + Tesseract 识别。
-- VobSub / DVD 使用 FFmpeg 黑底烧录 + 抽帧 + 图像哈希去重 + 并行 Tesseract。
+- PGS 使用 FFmpeg 提取 `.sup`，再由 pgsrip + Tesseract/RapidOCR 按字幕 cue 识别。
+- pgsrip 结果为空、文本过少或时间覆盖明显不完整时，会自动回退到字幕图像 OCR。
+- VobSub / DVD 使用 FFmpeg 黑底烧录 + 抽帧，先按字幕区域裁剪、放大、二值化，再做图像哈希去重和并行 OCR。
+- 空白帧按字幕区域有效亮像素判断，不再使用整帧平均亮度，避免普通白色字幕被误判为空白。
 - 默认 2fps；可用 `OCR_FPS` 调整，低配 NAS 可降到 1。
 - OCR 使用异步任务和进度轮询，长视频不会卡住请求；可用 `OCR_WORKERS` 调整并行度。
+- 低置信度结果会保留并进入核对页高亮，不再静默丢弃；可在设置页调整提示阈值。
 - PGS 使用 pgsrip AutoEngine（Tesseract + RapidOCR）。
 - 内置 OCR 与主应用共享同一个 `/media`，拆分部署时必须挂载相同的媒体目录。
 - OCR 结果会进入正常翻译、核对和导出流程。

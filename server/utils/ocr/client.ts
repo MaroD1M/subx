@@ -8,6 +8,8 @@ export interface OcrOptions {
   language?: string
   trackIndex: number
   apiKey?: string
+  engine?: string
+  minConfidence?: number
   onProgress?: (progress: number, message: string) => void
 }
 
@@ -42,7 +44,9 @@ export const OcrService = {
     const body = JSON.stringify({
       path: filePath,
       track_index: options.trackIndex,
-      language: options.language || 'en'
+      language: options.language || 'en',
+      engine: options.engine || undefined,
+      min_confidence: options.minConfidence
     })
     const timeout = new AbortController()
     const timer = setTimeout(() => timeout.abort(), OCR_TIMEOUT_MS)

@@ -87,7 +87,9 @@ describe('cloud ASR and OCR clients', () => {
     const result = await OcrService.transcribe('/media/Movie.mkv', {
       baseUrl: 'http://subx-ocr:8000',
       language: 'zh-CN',
-      trackIndex: 3
+      trackIndex: 3,
+      engine: 'rapidocr',
+      minConfidence: 18
     })
     expect(result.engine).toBe('ocr:pgsrip')
     expect(result.segments[0]?.text).toBe('OCR 字幕')
@@ -98,6 +100,8 @@ describe('cloud ASR and OCR clients', () => {
     expect(body.path).toBe('/media/Movie.mkv')
     expect(body.track_index).toBe(3)
     expect(body.language).toBe('zh-CN')
+    expect(body.engine).toBe('rapidocr')
+    expect(body.min_confidence).toBe(18)
   })
 
   it('polls OCR jobs and reports progress', async () => {
