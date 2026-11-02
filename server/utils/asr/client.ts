@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, rmSync, statSync } from 'fs'
 import { basename, dirname, join } from 'path'
+import { Agent } from 'undici'
 import type { SubtitleEntry } from '../../../types'
 import { useDb } from '../db'
 import { SubtitleService } from '../subtitle'
@@ -9,6 +10,17 @@ import type { AsrOptions, AsrPersistedResult, AsrResult, AsrSegment, AsrWord } f
 const REQUEST_TIMEOUT_MS = 60 * 60 * 1000
 const CLOUD_TIMEOUT_MS = 30 * 60 * 1000
 const CLOUD_MAX_BYTES = 24 * 1024 * 1024
+const JOB_POLL_MS = 1500
+// Node 内置 fetch 默认 headersTimeout 只有 300 秒，长音频转写会在 5 分钟时被
+// 误判为网络超时。ASR 请求统一使用放宽到任务超时时间的 dispatcher。
+const asrDispatcher = new Agent({
+  headersTimeout: REQUEST_TIMEOUT_MS,
+  bodyTimeout: REQUEST_TIMEOUT_MS
+})
+
+function asrFetch(input: string, init: RequestInit = {}) {
+  return fetch(input, { ...init, dispatcher: asrDispatcher } as any)
+}
 
 function combineSignal(signal: AbortSignal | undefined, timeout: AbortController): AbortSignal {
   if (!signal) return timeout.signal
@@ -50,13 +62,26 @@ function buildAsrForm(fileName: string, audio: Buffer, options: AsrOptions, engi
   return form
 }
 
+function normalizeLocalResult(data: any): AsrResult {
+  if (!Array.isArray(data.segments) || data.segments.length === 0) {
+    throw new Error('ASR 未返回可用的带时间轴分段')
+  }
+  return {
+    ...data,
+    language: String(data.language || 'unknown'),
+    duration: Number(data.duration || 0),
+    text: String(data.text || ''),
+    segments: data.segments.filter((segment: AsrSegment) => String(segment.text || '').trim())
+  }
+}
+
 async function transcribeLocal(baseUrl: string, fileName: string, audio: Buffer, options: AsrOptions, engine: string, signal?: AbortSignal): Promise<AsrResult> {
   const timeout = new AbortController()
   const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS)
   const headers: Record<string, string> = {}
   if (options.apiKey) headers.Authorization = `Bearer ${options.apiKey}`
   try {
-    const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
+    const response = await asrFetch(`${baseUrl}/v1/audio/transcriptions`, {
       method: 'POST',
       headers,
       body: buildAsrForm(fileName, audio, options, engine),
@@ -66,16 +91,65 @@ async function transcribeLocal(baseUrl: string, fileName: string, audio: Buffer,
       const detail = await response.text().catch(() => '')
       throw new Error(`ASR 请求失败 (${response.status}): ${detail.slice(0, 500)}`)
     }
-    const data = await response.json() as AsrResult
-    if (!Array.isArray(data.segments) || data.segments.length === 0) {
-      throw new Error('ASR 未返回可用的带时间轴分段')
+    return normalizeLocalResult(await response.json())
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function transcribeLocalJob(
+  baseUrl: string,
+  fileName: string,
+  audio: Buffer,
+  options: AsrOptions,
+  engine: string,
+  signal?: AbortSignal
+): Promise<AsrResult | null> {
+  const timeout = new AbortController()
+  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS)
+  const combinedSignal = combineSignal(signal, timeout)
+  const headers: Record<string, string> = {}
+  if (options.apiKey) headers.Authorization = `Bearer ${options.apiKey}`
+  try {
+    const create = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs`, {
+      method: 'POST',
+      headers,
+      body: buildAsrForm(fileName, audio, options, engine),
+      signal: combinedSignal
+    })
+    if (create.status === 404 || create.status === 405) return null
+    if (!create.ok) {
+      const detail = await create.text().catch(() => '')
+      throw new Error(`ASR 任务创建失败 (${create.status}): ${detail.slice(0, 500)}`)
     }
-    return {
-      ...data,
-      language: String(data.language || 'unknown'),
-      duration: Number(data.duration || 0),
-      text: String(data.text || ''),
-      segments: data.segments.filter(segment => String(segment.text || '').trim())
+    const created = await create.json() as any
+    const jobId = String(created?.jobId || '')
+    if (!jobId) return null
+    options.onProgress?.(0, 'ASR 任务已创建，正在等待模型...')
+
+    while (true) {
+      if (signal?.aborted) {
+        await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs/${jobId}/cancel`, {
+          method: 'POST',
+          headers
+        }).catch(() => null)
+        throw new Error('任务已取消')
+      }
+      await sleep(Math.max(50, Number(process.env.ASR_POLL_MS || JOB_POLL_MS)))
+      const response = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs/${jobId}`, {
+        headers,
+        signal: combinedSignal
+      })
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '')
+        throw new Error(`ASR 任务状态获取失败 (${response.status}): ${detail.slice(0, 300)}`)
+      }
+      const job = await response.json() as any
+      const progress = Number(job.progress)
+      options.onProgress?.(Number.isFinite(progress) ? progress : 0, String(job.message || '正在识别...'))
+      if (job.status === 'done') return normalizeLocalResult(job.result)
+      if (job.status === 'error') throw new Error(String(job.error || 'ASR 识别失败'))
+      if (job.status === 'cancelled') throw new Error('ASR 任务已取消')
     }
   } finally {
     clearTimeout(timer)
@@ -86,6 +160,9 @@ async function transcribeLocalWithRetry(baseUrl: string, fileName: string, audio
   let lastError: any
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      const jobResult = await transcribeLocalJob(baseUrl, fileName, audio, options, engine, signal)
+      if (jobResult) return jobResult
+      options.onProgress?.(0, 'ASR 服务不支持进度上报，等待识别完成...')
       return await transcribeLocal(baseUrl, fileName, audio, options, engine, signal)
     } catch (error: any) {
       lastError = error

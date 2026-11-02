@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const dbState = new Map<string, { status: string, progress: number, error?: string | null, forceRetranslate?: number }>()
+const dbState = new Map<string, { status: string, progress: number, error?: string | null, forceRetranslate?: number, stepProgress?: number, stepMessage?: string | null }>()
 const jobs = new Map<string, { status: string }>()
 const emitted: Array<{ event: string, payload: any }> = []
 
@@ -10,7 +10,7 @@ const mockDb = {
       get(taskId: string) {
         if (sql.includes('SELECT status')) {
           const row = dbState.get(taskId)
-          return row ? { status: row.status } : undefined
+          return row ? { status: row.status, step_progress: row.stepProgress ?? 0, step_message: row.stepMessage ?? null } : undefined
         }
 
         if (sql.includes('SELECT * FROM tasks')) {
@@ -51,9 +51,9 @@ const mockDb = {
         }
 
         if (sql.includes('UPDATE tasks SET status = ?, progress = ?')) {
-          const [status, progress, completedChunks, taskId] = args
+          const [status, progress, , stepProgress, stepMessage, taskId] = args
           const current = dbState.get(taskId) ?? { status: 'queued', progress: 0, error: null }
-          dbState.set(taskId, { ...current, status: String(status), progress: Number(progress) })
+          dbState.set(taskId, { ...current, status: String(status), progress: Number(progress), stepProgress: Number(stepProgress), stepMessage: stepMessage == null ? null : String(stepMessage) })
           return { changes: 1 }
         }
 

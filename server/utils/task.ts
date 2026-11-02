@@ -16,6 +16,7 @@ import { SubtitleService } from './subtitle'
 import { getMediaRoot, resolveMediaPath } from './mediaRoots'
 import { TranslationService, TRANSLATION_PROMPT_VERSION, type TranslationContext } from './translation'
 import { AsrService } from './asr/client'
+import { extractAudioCached, removeCachedAudio } from './asr/audioCache'
 import { OcrService } from './ocr/client'
 import { QualityService } from './quality'
 import { ConfigService } from './config'
@@ -748,6 +749,8 @@ export const TaskService = {
             subtitleStylePreset: task.subtitle_style_preset || 'bilingual_simple',
             bilingualLayout: task.bilingual_layout || 'translated_first',
             forceRetranslate: !!task.force_retranslate,
+            stepProgress: Number(task.step_progress || 0),
+            stepMessage: task.step_message || '',
             totalChunks: task.total_chunks,
             completedChunks: task.done_chunks,
             createdAt: task.created_at,
@@ -757,7 +760,7 @@ export const TaskService = {
 
     async updateStatus(taskId: string, status: TaskStatus, progress: number, data: any = {}) {
         const db = useDb()
-        const existing = db.prepare('SELECT status, progress, total_chunks FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, total_chunks?: number } | undefined
+        const existing = db.prepare('SELECT status, progress, total_chunks, step_progress, step_message FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, total_chunks?: number, step_progress?: number, step_message?: string | null } | undefined
         const currentStatus = String(existing?.status || '')
 
         if ((currentStatus === 'cancelled' && status !== 'cancelled') || (currentStatus === 'review' && status !== 'review')) {
@@ -770,23 +773,34 @@ export const TaskService = {
             completedChunks = totalChunks
         }
 
-        const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, done_chunks = COALESCE(?, done_chunks), updated_at = datetime(\'now\') WHERE task_id = ?')
-        stmt.run(status, progress, completedChunks, taskId)
+        const sameStatus = currentStatus === status
+        const requestedStepProgress = Number(data.stepProgress)
+        const stepProgress = Number.isFinite(requestedStepProgress)
+            ? Math.max(0, Math.min(100, Math.round(requestedStepProgress)))
+            : (sameStatus ? Math.max(0, Math.min(100, Number(existing?.step_progress || 0))) : (status === 'done' ? 100 : 0))
+        const stepMessage = data.stepMessage !== undefined
+            ? (data.stepMessage === null ? null : String(data.stepMessage))
+            : (sameStatus ? (existing?.step_message ?? null) : null)
+
+        const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, done_chunks = COALESCE(?, done_chunks), step_progress = ?, step_message = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
+        stmt.run(status, progress, completedChunks, stepProgress, stepMessage, taskId)
+
+        const payload: any = { taskId, step: status, progress, ...data, stepProgress, stepMessage }
 
         if (data.log) {
             const level = status === 'error' ? 'error' : (data.level || 'info')
             const category = data.category || resolveLogCategory(status, level, data.log)
             writeTaskLog(taskId, status, level, data.log, category)
-            taskEvents.emit('progress', { taskId, step: status, progress, ...data, level, category })
+            taskEvents.emit('progress', { ...payload, level, category })
             if (status === 'done' || status === 'error' || status === 'cancelled') {
-                taskEvents.emit(status, { taskId, step: status, progress, ...data, level, category, final: true })
+                taskEvents.emit(status, { ...payload, level, category, final: true })
             }
             return
         }
 
-        taskEvents.emit('progress', { taskId, step: status, progress, ...data })
+        taskEvents.emit('progress', payload)
         if (status === 'done' || status === 'error' || status === 'cancelled') {
-            taskEvents.emit(status, { taskId, step: status, progress, ...data, final: true })
+            taskEvents.emit(status, { ...payload, final: true })
         }
     },
 
@@ -801,6 +815,7 @@ export const TaskService = {
         let srtPath = ''
         let audioPath = ''
         let keepAsrAudio = false
+        let taskSucceeded = false
         let runtimeConfig: { apiKey: string, baseUrl?: string } | null = openaiConfig || null
 
         try {
@@ -815,7 +830,7 @@ export const TaskService = {
 
             const db = useDb()
             if (task.sourceType === 'auto') {
-                await this.updateStatus(taskId, 'probing', 5, { log: '正在分析媒体字幕与音频轨道...' })
+                await this.updateStatus(taskId, 'probing', 5, { stepProgress: 0, stepMessage: '正在分析媒体字幕与音频轨道...', log: '正在分析媒体字幕与音频轨道...' })
                 const media = await VideoService.probeMedia(task.filePath, task.rootId)
                 const autoConfig = await ConfigService.getConfig()
                 const subtitleTrack = media.subtitleTracks.find(track => track.isSupported)
@@ -848,6 +863,14 @@ export const TaskService = {
                 db.prepare('UPDATE tasks SET source_type = ?, source_subtitle_path = ?, track_index = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
                     .run(task.sourceType, task.sourceSubtitlePath || null, task.trackIndex, taskId)
                 await this.updateStatus(taskId, 'probing', 8, {
+                    stepProgress: 100,
+                    stepMessage: task.sourceType === 'asr'
+                        ? '未发现文本字幕，将使用语音识别。'
+                        : task.sourceType === 'ocr'
+                            ? '发现图像字幕，将使用 OCR 识别。'
+                            : task.sourceType === 'external'
+                                ? '发现外挂字幕，将直接使用外挂字幕。'
+                                : '发现文本字幕，将直接提取字幕。',
                     log: task.sourceType === 'asr'
                         ? '未发现文本字幕，将使用语音识别。'
                         : task.sourceType === 'ocr'
@@ -885,15 +908,16 @@ export const TaskService = {
                 if (!config.ocrEnabled) {
                     throw new Error('OCR 未启用，请先在设置中开启图像字幕 OCR 并配置 OCR 服务地址')
                 }
-                await this.updateStatus(taskId, 'ocr', 12, { log: '正在识别图像字幕（PGS/VobSub/DVD）...' })
+                await this.updateStatus(taskId, 'ocr', 12, { stepProgress: 0, stepMessage: '正在识别图像字幕（PGS/VobSub/DVD）...', log: '正在识别图像字幕（PGS/VobSub/DVD）...' })
                 const ocrResult = await OcrService.transcribe(inputPath, {
                     baseUrl: config.ocrBaseUrl || process.env.OCR_INTERNAL_URL || 'http://127.0.0.1:8001',
                     language: config.ocrLanguage || 'en',
                     apiKey: config.ocrApiKey || '',
                     trackIndex: task.trackIndex ?? 0,
                     onProgress: (progress, message) => {
-                        const mapped = 12 + Math.round(Math.max(0, Math.min(100, progress)) * 0.08)
-                        void this.updateStatus(taskId, 'ocr', mapped, { log: message })
+                        const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
+                        const mapped = 12 + Math.round(stepProgress * 0.08)
+                        void this.updateStatus(taskId, 'ocr', mapped, { stepProgress, stepMessage: message, currentText: message })
                     }
                 }, signal)
                 const persisted = AsrService.persistResult(taskId, ocrResult)
@@ -907,16 +931,38 @@ export const TaskService = {
                 db.prepare('UPDATE tasks SET source_lang = ?, asr_run_id = ?, asr_confidence = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
                     .run(ocrResult.language, persisted.runId, persisted.confidence, taskId)
                 await this.updateStatus(taskId, 'parsing', 22, {
+                    stepProgress: 100,
+                    stepMessage: `OCR 完成：${allEntries.length} 条`,
                     log: `OCR 完成：${allEntries.length} 条`
                 })
             } else if (task.sourceType === 'asr') {
                 if (!config.asrEnabled) {
                     throw new Error('语音识别未启用，请先在设置中开启语音识别并配置 ASR 服务地址')
                 }
-                await this.updateStatus(taskId, 'extracting_audio', 10, { log: '正在从视频中提取音频...' })
-                audioPath = join(tempDir, `${taskId}.wav`)
-                await VideoService.extractAudio(task.filePath, task.trackIndex ?? 0, audioPath, task.rootId)
-                await this.updateStatus(taskId, 'transcribing', 18, { log: '正在使用本地语音识别生成字幕...' })
+                await this.updateStatus(taskId, 'extracting_audio', 8, {
+                    stepProgress: 0,
+                    stepMessage: '正在从视频中提取音频...',
+                    log: '正在从视频中提取音频...'
+                })
+                audioPath = await extractAudioCached(
+                    task.filePath,
+                    task.trackIndex ?? 0,
+                    task.rootId,
+                    (progress, message) => {
+                        const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
+                        void this.updateStatus(taskId, 'extracting_audio', 8 + Math.round(stepProgress * 0.08), {
+                            stepProgress,
+                            stepMessage: message,
+                            currentText: message
+                        })
+                    }
+                )
+                await this.updateStatus(taskId, 'transcribing', 16, {
+                    stepProgress: 0,
+                    stepMessage: '音频已就绪，正在启动语音识别...',
+                    currentText: '音频已就绪，正在启动语音识别...',
+                    log: '正在使用本地语音识别生成字幕...'
+                })
 
                 const asrResult = await AsrService.transcribe(audioPath, {
                     baseUrl: config.asrBaseUrl || process.env.ASR_INTERNAL_URL || 'http://127.0.0.1:8000',
@@ -934,7 +980,15 @@ export const TaskService = {
                     cloudBaseUrl: config.asrCloudBaseUrl || 'https://api.openai.com/v1',
                     cloudApiKey: config.asrCloudApiKey || '',
                     cloudModel: config.asrCloudModel || 'whisper-1',
-                    cloudFallback: config.asrCloudFallback !== false
+                    cloudFallback: config.asrCloudFallback !== false,
+                    onProgress: (progress, message) => {
+                        const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
+                        void this.updateStatus(taskId, 'transcribing', 16 + Math.round(stepProgress * 0.12), {
+                            stepProgress,
+                            stepMessage: message,
+                            currentText: message
+                        })
+                    }
                 }, signal)
                 const persisted = AsrService.persistResult(taskId, asrResult)
                 allEntries = AsrService.toSubtitleEntries(asrResult)
@@ -946,21 +1000,23 @@ export const TaskService = {
                 task.asrConfidence = persisted.confidence
                 db.prepare('UPDATE tasks SET source_lang = ?, asr_run_id = ?, asr_confidence = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
                     .run(asrResult.language, persisted.runId, persisted.confidence, taskId)
-                await this.updateStatus(taskId, 'parsing', 22, {
+                await this.updateStatus(taskId, 'parsing', 28, {
+                    stepProgress: 100,
+                    stepMessage: `语音识别完成：${allEntries.length} 条`,
                     log: `语音识别完成：语言 ${asrResult.language}，${allEntries.length} 条，平均置信度 ${(persisted.confidence * 100).toFixed(1)}%`
                 })
             } else {
-                await this.updateStatus(taskId, 'extracting', 10, { log: '正在从原视频中提取字幕流...' })
+                await this.updateStatus(taskId, 'extracting', 10, { stepProgress: 0, stepMessage: '正在从原视频中提取字幕流...', log: '正在从原视频中提取字幕流...' })
                 if (task.sourceType === 'embedded') {
                     assertTaskNotCancelled(taskId)
                     await VideoService.extractSubtitle(task.filePath, task.trackIndex!, srtPath, task.rootId)
-                    await this.updateStatus(taskId, 'extracting', 15, { log: '字幕提取成功，保存至临时文件。' })
+                    await this.updateStatus(taskId, 'extracting', 15, { stepProgress: 100, stepMessage: '字幕提取成功', log: '字幕提取成功，保存至临时文件。' })
                 } else {
-                    await this.updateStatus(taskId, 'extracting', 15, { log: '使用外部字幕文件。' })
+                    await this.updateStatus(taskId, 'extracting', 15, { stepProgress: 100, stepMessage: '使用外部字幕文件', log: '使用外部字幕文件。' })
                 }
 
                 assertTaskNotCancelled(taskId)
-                await this.updateStatus(taskId, 'parsing', 20, { log: '正在解析 SRT 并进行智能分块...' })
+                await this.updateStatus(taskId, 'parsing', 20, { stepProgress: 0, stepMessage: '正在解析 SRT 并进行智能分块...', log: '正在解析 SRT 并进行智能分块...' })
                 allEntries = await SubtitleService.parseSubtitle(srtPath)
             }
 
@@ -973,7 +1029,11 @@ export const TaskService = {
             const initialChunks = SubtitleService.chunkByTokens(allEntries, chunkSize)
             const chunks = initialChunks
             const totalChunks = chunks.length
-            await this.updateStatus(taskId, 'parsing', 25, { log: `解析完成，共划分为 ${totalChunks} 个文本块。` })
+            await this.updateStatus(taskId, 'parsing', 28, {
+                stepProgress: 100,
+                stepMessage: `解析完成，共划分为 ${totalChunks} 个文本块`,
+                log: `解析完成，共划分为 ${totalChunks} 个文本块。`
+            })
             console.log(`[Task] 任务 ${taskId}: ${allEntries.length} 条字幕 → ${totalChunks} 个块 (chunkSize=${chunkSize})`)
 
             db.prepare('UPDATE tasks SET total_chunks = ? WHERE task_id = ?').run(totalChunks, taskId)
@@ -982,20 +1042,26 @@ export const TaskService = {
             if (task.outputMode === 'original') {
                 assertTaskNotCancelled(taskId)
                 await this.updateStatus(taskId, 'translating', 80, { totalChunks, completedChunks: totalChunks, log: '已选择仅导出原字幕，跳过翻译。' })
-                await this.updateStatus(taskId, 'exporting', 90, { log: '正在导出原字幕文件...' })
+                await this.updateStatus(taskId, 'exporting', 90, { stepProgress: 0, stepMessage: '正在导出原字幕文件...', log: '正在导出原字幕文件...' })
                 assertTaskNotCancelled(taskId)
                 const originalEntries = allEntries.map(entry => ({ ...entry, translatedText: entry.text }))
                 const savedPath = await SubtitleService.writeSubtitle(originalEntries, outputPath, 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
                 if (embyVariantPath) {
                     await SubtitleService.writeSubtitle(originalEntries, embyVariantPath, 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
                 }
-                await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${savedPath}` })
+                await this.updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}` })
                 db.prepare('UPDATE tasks SET output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(savedPath, taskId)
-                await this.updateStatus(taskId, 'done', 100)
+                taskSucceeded = true
+                await this.updateStatus(taskId, 'done', 100, { stepProgress: 100, stepMessage: '任务完成' })
                 return
             }
 
-            await this.updateStatus(taskId, 'translating', 30, { totalChunks, completedChunks: 0 })
+            await this.updateStatus(taskId, 'translating', 30, {
+                totalChunks,
+                completedChunks: 0,
+                stepProgress: 0,
+                stepMessage: '正在准备翻译...'
+            })
 
             const provider = createProvider({
                 type: normalizeProviderType((config as any).providerType),
@@ -1036,10 +1102,13 @@ export const TaskService = {
                 for (const count of completedChunksPerChunk.values()) {
                     globalCompletedChunks += count > 0 ? 1 : 0
                 }
-                const progress = 30 + Math.floor((globalCompletedChunks / totalChunks) * 60)
+                const stepProgress = totalChunks > 0 ? Math.floor((globalCompletedChunks / totalChunks) * 100) : 100
+                const progress = 30 + Math.floor(stepProgress * 0.6)
                 this.updateStatus(taskId, 'translating', progress, {
                     totalChunks,
                     completedChunks: globalCompletedChunks,
+                    stepProgress,
+                    stepMessage: `已翻译 ${globalCompletedChunks}/${totalChunks} 个文本块`,
                     currentText: `翻译进度: ${globalCompletedChunks}/${totalChunks}`
                 })
             }
@@ -1210,7 +1279,7 @@ export const TaskService = {
             await Promise.all(promises)
 
             assertTaskNotCancelled(taskId)
-            await this.updateStatus(taskId, 'exporting', 90, { log: '正在合成并保存最终字幕文件...' })
+            await this.updateStatus(taskId, 'exporting', 90, { stepProgress: 0, stepMessage: '正在合成并保存最终字幕文件...', log: '正在合成并保存最终字幕文件...' })
             let translatedEntries = Array.from(translatedMap.values())
             translatedEntries.sort((a, b) => Number(a.id) - Number(b.id))
 
@@ -1274,18 +1343,20 @@ export const TaskService = {
             if (embyVariantPath) {
                 await SubtitleService.writeSubtitle(translatedEntries, embyVariantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
             }
-            await this.updateStatus(taskId, 'exporting', 95, { log: `文件保存成功: ${savedPath}${embyVariantPath ? '（SubX/ 变体已同步）' : ''}` })
+            await this.updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}${embyVariantPath ? '（SubX/ 变体已同步）' : ''}` })
 
             TranslationService.cleanupPartialFiles(taskId, totalChunks)
 
             db.prepare('UPDATE tasks SET output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(savedPath, taskId)
-            await this.updateStatus(taskId, 'done', 100)
+            taskSucceeded = true
+            await this.updateStatus(taskId, 'done', 100, { stepProgress: 100, stepMessage: '任务完成' })
             console.log(`[Task] 完成任务: ${taskId} 输出: ${savedPath}`)
 
         } catch (e: any) {
             if (e instanceof TaskCancelledError || isTaskCancelled(taskId)) {
                 await this.updateStatus(taskId, 'cancelled', Number(taskForCleanup?.progress || 0), {
                     error: '用户取消任务',
+                    stepMessage: '任务已取消',
                     log: '任务已取消，后台执行已停止。',
                     level: 'warn'
                 })
@@ -1310,6 +1381,7 @@ export const TaskService = {
 
             await this.updateStatus(taskId, 'error', Number(taskForCleanup?.progress || 0), {
                 error: `${classified.summary} (${message})`,
+                stepMessage: classified.summary,
                 log: `!!! 任务失败: ${classified.summary}${e.stack ? '\n堆栈信息: ' + e.stack.split('\n').slice(0, 3).join('\n') : ''}`
             })
             useDb().prepare('UPDATE tasks SET status = \'error\', error = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(`${classified.summary} (${message})`, taskId)
@@ -1324,13 +1396,9 @@ export const TaskService = {
                     console.error(`[Task] Failed to clean up temp file: ${srtPath}`, err)
                 }
             }
-            if (audioPath && existsSync(audioPath) && !keepAsrAudio) {
-                try {
-                    rmSync(audioPath, { force: true })
-                    console.log(`[Task] Cleaned up ASR audio: ${audioPath}`)
-                } catch (err) {
-                    console.error(`[Task] Failed to clean up ASR audio: ${audioPath}`, err)
-                }
+            if (audioPath && existsSync(audioPath) && taskSucceeded && !keepAsrAudio) {
+                removeCachedAudio(audioPath)
+                console.log(`[Task] Removed cached ASR audio: ${audioPath}`)
             }
             try {
                 TranslationService.cleanupPartialFiles(taskId, Number(taskForCleanup?.totalChunks || 0) + 1)

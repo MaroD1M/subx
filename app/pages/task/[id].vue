@@ -28,6 +28,14 @@
             </div>
           </div>
           <UProgress :model-value="task.step === 'done' ? 100 : task.progress" aria-label="任务进度" size="xl" :color="task.step === 'error' || task.step === 'cancelled' ? 'error' : task.step === 'done' ? 'success' : 'primary'" class="h-3 rounded-full overflow-hidden" />
+
+          <div v-if="showStepProgress" class="space-y-1.5 pt-1">
+            <div class="flex items-center justify-between gap-3 text-xs text-neutral-500 dark:text-neutral-400">
+              <span class="truncate">{{ task.stepMessage || statusLabel }}</span>
+              <span class="shrink-0 font-medium">{{ stepProgressValue }}%</span>
+            </div>
+            <UProgress :model-value="stepProgressValue" aria-label="当前阶段进度" size="sm" :color="task.step === 'error' || task.step === 'cancelled' ? 'error' : 'primary'" />
+          </div>
         </div>
 
         <div v-if="(task.step === 'error' || task.step === 'cancelled') && task.error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-2xl flex items-start gap-3">
@@ -460,6 +468,8 @@ const qualityThreshold = ref(0.7)
 const task = ref<any>({
   step: 'queued',
   progress: 0,
+  stepProgress: 0,
+  stepMessage: '',
   completedChunks: 0,
   totalChunks: 0,
   currentText: '等待服务器响应...',
@@ -733,6 +743,9 @@ function logMessageClass(log: { type: 'info' | 'error', message: string, categor
   }
 }
 
+const stepProgressValue = computed(() => Math.max(0, Math.min(100, Number(task.value.stepProgress || 0))))
+const showStepProgress = computed(() => ['probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(String(task.value.step || '')))
+
 const statusLabel = computed(() => {
   switch (task.value.step) {
     case 'queued': return '队列中'
@@ -969,6 +982,8 @@ onMounted(async () => {
         ...task.value,
         step: initialTask.status,
         progress: initialTask.progress || 0,
+        stepProgress: initialTask.stepProgress || 0,
+        stepMessage: initialTask.stepMessage || '',
         completedChunks: initialTask.completedChunks || 0,
         totalChunks: initialTask.totalChunks || 0,
         error: initialTask.error || null,
@@ -1057,7 +1072,11 @@ onMounted(async () => {
         if (!data.log) {
           const stepNames = {
             queued: '入队',
+            probing: '分析媒体',
             extracting: '提取字幕',
+            extracting_audio: '提取音频',
+            transcribing: '语音识别',
+            ocr: '图像字幕 OCR',
             parsing: '解析文本',
             translating: 'AI 翻译',
             exporting: '导出文件',

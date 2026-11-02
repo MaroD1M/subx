@@ -16,12 +16,15 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
+import wave
 from pathlib import Path
 from typing import Any
 
 import ctranslate2
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from faster_whisper import WhisperModel
+from starlette.concurrency import run_in_threadpool
 
 import model_manager
 
@@ -59,6 +62,61 @@ _model_cache: dict[tuple[str, str, str], WhisperModel] = {}
 _whisper_cpp_cache: dict[str, Any] = {}
 _diarization_pipeline = None
 _model_lock = threading.Lock()
+_inference_lock = threading.Lock()
+_jobs: dict[str, dict[str, Any]] = {}
+_jobs_lock = threading.Lock()
+JOB_RETENTION_SECONDS = 24 * 60 * 60
+MAX_JOBS = 100
+
+
+class JobCancelled(Exception):
+    pass
+
+
+def _job_update(job_id: str, **fields: Any) -> None:
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            return
+        job.update(fields)
+        job["updatedAt"] = time.time()
+
+
+def _job_cancelled(job_id: str) -> bool:
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        return bool(job and job.get("cancelEvent") and job["cancelEvent"].is_set())
+
+
+def _prune_jobs() -> None:
+    now = time.time()
+    with _jobs_lock:
+        finished = [
+            (job_id, job)
+            for job_id, job in _jobs.items()
+            if job.get("status") in {"done", "error", "cancelled"}
+        ]
+        for job_id, job in finished:
+            if now - float(job.get("finishedAt") or job.get("updatedAt") or now) > JOB_RETENTION_SECONDS:
+                _jobs.pop(job_id, None)
+        overflow = len(_jobs) - MAX_JOBS
+        if overflow > 0:
+            for job_id, _job in sorted(finished, key=lambda item: float(item[1].get("createdAt") or 0))[:overflow]:
+                _jobs.pop(job_id, None)
+
+
+def audio_duration_seconds(path: str) -> float:
+    try:
+        with wave.open(path, "rb") as handle:
+            frame_rate = handle.getframerate()
+            return float(handle.getnframes()) / frame_rate if frame_rate else 0.0
+    except Exception:
+        return 0.0
+
+
+def format_timestamp(seconds: float) -> str:
+    total = max(0, int(seconds))
+    return f"{total // 3600:02d}:{(total % 3600) // 60:02d}:{total % 60:02d}"
 
 
 def resolve_device(value: str | None = None) -> str:
@@ -257,6 +315,7 @@ def health() -> dict[str, Any]:
         "modelsDir": MODEL_DIR,
         "whisperCppModelsDir": WHISPER_CPP_MODEL_DIR,
         "loadedModels": len(_model_cache) + len(_whisper_cpp_cache),
+        "activeJobs": sum(1 for job in list(_jobs.values()) if job.get("status") in {"queued", "running"}),
         "autoDownload": auto_download_enabled(),
         "preprocess": {
             "default": DEFAULT_PREPROCESS,
@@ -376,13 +435,22 @@ def delete_model(model: str = Form(...), engine: str | None = Form(None)) -> dic
     return {"ok": True, **result}
 
 
-def transcribe_whisper_cpp(audio_path: str, model_name: str, language_value: str | None) -> dict[str, Any]:
+def transcribe_whisper_cpp(
+    audio_path: str,
+    model_name: str,
+    language_value: str | None,
+    on_progress: Any = None,
+    should_cancel: Any = None,
+) -> dict[str, Any]:
+    duration = audio_duration_seconds(audio_path)
+    on_progress and on_progress(2, "正在加载模型...")
     whisper = get_whisper_cpp_model(model_name)
     started = time.perf_counter()
     language_probability = 0.0
     language = language_value
     if not language:
         language, language_probability = whisper.auto_detect_language(audio_path)
+    on_progress and on_progress(5, "模型已加载，开始识别...")
     segments_result = whisper.transcribe(
         audio_path,
         language=language or "auto",
@@ -393,11 +461,16 @@ def transcribe_whisper_cpp(audio_path: str, model_name: str, language_value: str
     segments = []
     texts = []
     for index, segment in enumerate(segments_result):
+        if should_cancel and should_cancel():
+            raise JobCancelled()
         text = str(segment.text or "").strip()
-        if not text:
-            continue
         start = max(0.0, float(segment.t0) / 100.0)
         end = max(start + 0.05, float(segment.t1) / 100.0)
+        if on_progress and duration > 0:
+            percent = 5 + int(min(1.0, end / duration) * 94)
+            on_progress(percent, f"正在识别 {format_timestamp(end)} / {format_timestamp(duration)}")
+        if not text:
+            continue
         segments.append({
             "id": index + 1,
             "start": start,
@@ -407,6 +480,7 @@ def transcribe_whisper_cpp(audio_path: str, model_name: str, language_value: str
             "words": [],
         })
         texts.append(text)
+    on_progress and on_progress(99, "正在整理识别结果...")
     elapsed = max(0.001, time.perf_counter() - started)
     duration = segments[-1]["end"] if segments else 0.0
     return {
@@ -433,7 +507,10 @@ def transcribe_faster_whisper(
     word_timestamps: str | None,
     device: str | None = None,
     compute_type: str | None = None,
+    on_progress: Any = None,
+    should_cancel: Any = None,
 ) -> dict[str, Any]:
+    on_progress and on_progress(2, "正在加载模型...")
     whisper, device, compute_type = get_model(model_name, device=device, compute_type=compute_type)
     started = time.perf_counter()
     segments_iter, info = whisper.transcribe(
@@ -449,10 +526,17 @@ def transcribe_faster_whisper(
         temperature=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
     )
 
+    duration_hint = float(getattr(info, "duration", 0) or 0)
+    on_progress and on_progress(5, "模型已加载，开始识别...")
     segments = []
     texts = []
     for index, segment in enumerate(segments_iter):
+        if should_cancel and should_cancel():
+            raise JobCancelled()
         text = str(segment.text or "").strip()
+        if on_progress and duration_hint > 0:
+            percent = 5 + int(min(1.0, float(segment.end) / duration_hint) * 94)
+            on_progress(percent, f"正在识别 {format_timestamp(float(segment.end))} / {format_timestamp(duration_hint)}")
         if not text:
             continue
         words = []
@@ -476,6 +560,7 @@ def transcribe_faster_whisper(
         })
         texts.append(text)
 
+    on_progress and on_progress(99, "正在整理识别结果...")
     elapsed = max(0.001, time.perf_counter() - started)
     duration = float(getattr(info, "duration", 0) or 0)
     return {
@@ -492,6 +577,214 @@ def transcribe_faster_whisper(
         "text": " ".join(texts),
         "segments": segments,
     }
+
+
+def _run_transcription_job(
+    job_id: str,
+    temp_path: str,
+    model_name: str,
+    language_value: str | None,
+    vad: str | None,
+    word_timestamps: str | None,
+    device: str | None,
+    compute_type: str | None,
+    resolved_engine: str,
+    preprocess: str,
+    diarize: str | None,
+) -> None:
+    preprocess_dir = None
+    processed_path = temp_path
+    try:
+        _job_update(job_id, status="running", stage="preparing", progress=0, message="正在准备音频...")
+        if _job_cancelled(job_id):
+            raise JobCancelled()
+        _job_update(job_id, stage="preprocessing", progress=1, message="正在预处理音频...")
+        processed_path, preprocess_dir, preprocess_warning = preprocess_audio(temp_path, preprocess)
+        if _job_cancelled(job_id):
+            raise JobCancelled()
+        _job_update(job_id, stage="transcribing", progress=2, message="正在加载识别模型...")
+
+        def on_progress(percent: float, message: str) -> None:
+            if _job_cancelled(job_id):
+                raise JobCancelled()
+            _job_update(
+                job_id,
+                stage="transcribing",
+                progress=max(1, min(99, int(percent))),
+                message=message,
+            )
+
+        with _inference_lock:
+            if resolved_engine == "whisper-cpp":
+                result = transcribe_whisper_cpp(
+                    processed_path,
+                    model_name,
+                    language_value,
+                    on_progress=on_progress,
+                    should_cancel=lambda: _job_cancelled(job_id),
+                )
+            else:
+                result = transcribe_faster_whisper(
+                    processed_path,
+                    model_name,
+                    language_value,
+                    vad,
+                    word_timestamps,
+                    device=device,
+                    compute_type=compute_type,
+                    on_progress=on_progress,
+                    should_cancel=lambda: _job_cancelled(job_id),
+                )
+        result["preprocess"] = preprocess
+        if preprocess_warning:
+            result["preprocessWarning"] = preprocess_warning
+        if bool_value(diarize, False):
+            _job_update(job_id, stage="diarizing", progress=99, message="正在分离说话人...")
+            warning = apply_diarization(processed_path, result.get("segments") or [])
+            if warning:
+                result["diarizationWarning"] = warning
+        _job_update(
+            job_id,
+            status="done",
+            stage="done",
+            progress=100,
+            message="识别完成",
+            result=result,
+            finishedAt=time.time(),
+        )
+    except JobCancelled:
+        _job_update(
+            job_id,
+            status="cancelled",
+            message="任务已取消",
+            finishedAt=time.time(),
+        )
+    except Exception as exc:
+        _job_update(
+            job_id,
+            status="error",
+            error=str(exc) or "识别失败",
+            message=str(exc) or "识别失败",
+            finishedAt=time.time(),
+        )
+    finally:
+        if preprocess_dir:
+            shutil.rmtree(preprocess_dir, ignore_errors=True)
+        elif processed_path and processed_path != temp_path and os.path.exists(processed_path):
+            try:
+                os.remove(processed_path)
+            except OSError:
+                pass
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+
+@app.post("/v1/audio/transcriptions/jobs", dependencies=[Depends(require_api_key)])
+async def create_transcription_job(
+    file: UploadFile = File(...),
+    model: str | None = Form(None),
+    language: str | None = Form(None),
+    vad: str | None = Form("true"),
+    word_timestamps: str | None = Form("true"),
+    device: str | None = Form(None),
+    compute_type: str | None = Form(None),
+    engine: str | None = Form(None),
+    preprocess: str | None = Form(None),
+    diarize: str | None = Form("false"),
+) -> dict[str, Any]:
+    _prune_jobs()
+    model_name = (model or DEFAULT_MODEL).strip()
+    language_value = (language or "auto").strip()
+    if language_value.lower() in {"auto", "und", ""}:
+        language_value = None
+    resolved_engine = resolve_engine(engine)
+    preprocess_mode = preprocess or DEFAULT_PREPROCESS
+    suffix = os.path.splitext(file.filename or "audio.wav")[1] or ".wav"
+    job_id = uuid.uuid4().hex
+
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    temp_path = temp.name
+    try:
+        while chunk := await file.read(1024 * 1024):
+            temp.write(chunk)
+    except Exception:
+        temp.close()
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise
+    finally:
+        temp.close()
+
+    now = time.time()
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "jobId": job_id,
+            "status": "queued",
+            "stage": "queued",
+            "progress": 0,
+            "message": "任务已创建",
+            "result": None,
+            "error": None,
+            "createdAt": now,
+            "updatedAt": now,
+            "finishedAt": None,
+            "cancelEvent": threading.Event(),
+        }
+
+    threading.Thread(
+        target=_run_transcription_job,
+        args=(
+            job_id,
+            temp_path,
+            model_name,
+            language_value,
+            vad,
+            word_timestamps,
+            device,
+            compute_type,
+            resolved_engine,
+            preprocess_mode,
+            diarize,
+        ),
+        daemon=True,
+    ).start()
+    return {"jobId": job_id, "status": "queued"}
+
+
+@app.get("/v1/audio/transcriptions/jobs/{job_id}", dependencies=[Depends(require_api_key)])
+def get_transcription_job(job_id: str) -> dict[str, Any]:
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="job not found")
+        return {
+            "jobId": job_id,
+            "status": job.get("status"),
+            "stage": job.get("stage"),
+            "progress": job.get("progress", 0),
+            "message": job.get("message", ""),
+            "result": job.get("result"),
+            "error": job.get("error"),
+            "createdAt": job.get("createdAt"),
+            "updatedAt": job.get("updatedAt"),
+        }
+
+
+@app.post("/v1/audio/transcriptions/jobs/{job_id}/cancel", dependencies=[Depends(require_api_key)])
+def cancel_transcription_job(job_id: str) -> dict[str, Any]:
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="job not found")
+        if job.get("status") in {"done", "error", "cancelled"}:
+            return {"ok": True, "status": job.get("status")}
+        job["cancelEvent"].set()
+        job["message"] = "正在取消..."
+        job["updatedAt"] = time.time()
+    return {"ok": True, "status": "cancelling"}
 
 
 @app.post("/v1/audio/transcriptions", dependencies=[Depends(require_api_key)])
@@ -523,18 +816,23 @@ async def transcribe(
             while chunk := await file.read(1024 * 1024):
                 temp.write(chunk)
 
-        processed_path, preprocess_dir, preprocess_warning = preprocess_audio(temp_path, preprocess or DEFAULT_PREPROCESS)
+        processed_path, preprocess_dir, preprocess_warning = await run_in_threadpool(
+            preprocess_audio, temp_path, preprocess or DEFAULT_PREPROCESS
+        )
         if resolved_engine == "whisper-cpp":
-            result = transcribe_whisper_cpp(processed_path, model_name, language_value)
+            result = await run_in_threadpool(
+                transcribe_whisper_cpp, processed_path, model_name, language_value
+            )
         else:
-            result = transcribe_faster_whisper(
+            result = await run_in_threadpool(
+                transcribe_faster_whisper,
                 processed_path,
                 model_name,
                 language_value,
                 vad,
                 word_timestamps,
-                device=device,
-                compute_type=compute_type,
+                device,
+                compute_type,
             )
         result["preprocess"] = preprocess or DEFAULT_PREPROCESS
         if preprocess_warning:

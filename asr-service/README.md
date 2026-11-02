@@ -78,6 +78,9 @@ docker compose --profile asr-enhanced up -d asr-enhanced
 GET  /health
 GET  /models
 POST /v1/audio/transcriptions
+POST /v1/audio/transcriptions/jobs
+GET  /v1/audio/transcriptions/jobs/{job_id}
+POST /v1/audio/transcriptions/jobs/{job_id}/cancel
 POST /models/download
 GET  /models/download/{job_id}
 POST /models/download/{job_id}/pause
@@ -100,6 +103,22 @@ POST /models/delete
 - `diarize`：`true` / `false`
 
 返回 `language`、`duration`、`rtf`、`segments`、词级时间轴和可选 `speaker`。
+
+### 进度任务
+
+长音频推荐使用任务接口。`POST /v1/audio/transcriptions/jobs` 接收与同步接口相同的 multipart 字段，立即返回：
+
+```json
+{ "jobId": "asrjob_xxx", "status": "queued" }
+```
+
+随后轮询 `GET /v1/audio/transcriptions/jobs/{job_id}`：
+
+```json
+{ "jobId": "asrjob_xxx", "status": "running", "progress": 45, "message": "正在识别 45/100" }
+```
+
+完成后 `status` 为 `done`，`result` 与同步接口返回结构一致；失败时为 `error` 并带 `error`。识别期间可调用 `POST /v1/audio/transcriptions/jobs/{job_id}/cancel` 取消。已完成任务默认保留 24 小时，最多保留 100 个任务。
 
 ## 模型下载管理
 

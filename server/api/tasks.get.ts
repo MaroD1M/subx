@@ -56,6 +56,8 @@ export default defineEventHandler(async (event) => {
       trackIndex: task.track_index,
       targetLanguage: task.target_lang,
       outputMode: task.output_mode,
+      stepProgress: Number(task.step_progress || 0),
+      stepMessage: task.step_message || '',
       totalChunks: task.total_chunks,
       completedChunks: task.done_chunks,
       createdAt: toUtcIsoString(task.created_at),

@@ -144,10 +144,24 @@ export const VideoService = {
     /**
      * Extract a single audio stream as 16kHz mono PCM WAV for ASR.
      */
-    async extractAudio(videoFilePath: string, audioTrackIndex: number, outputPath: string, rootId?: string | null): Promise<string> {
+    async extractAudio(
+        videoFilePath: string,
+        audioTrackIndex: number,
+        outputPath: string,
+        rootId?: string | null,
+        onProgress?: (progress: number, message: string) => void
+    ): Promise<string> {
         const fullPath = await resolveMediaPath(videoFilePath, rootId)
 
         return new Promise((resolve, reject) => {
+            let lastPercent = -1
+            const report = (value: number, message: string) => {
+                const percent = Math.max(0, Math.min(100, Math.round(value)))
+                if (percent === lastPercent) return
+                lastPercent = percent
+                try { onProgress?.(percent, message) } catch { /* progress must not break extraction */ }
+            }
+            report(0, '正在提取音频...')
             ffmpeg(fullPath)
                 .outputOptions([
                     `-map 0:${audioTrackIndex}`,
@@ -157,8 +171,16 @@ export const VideoService = {
                     '-c:a pcm_s16le'
                 ])
                 .output(outputPath)
+                .on('progress', (progress: any) => {
+                    const percent = Number(progress?.percent)
+                    if (!Number.isFinite(percent)) return
+                    report(percent, `正在提取音频 ${Math.floor(percent)}%`)
+                })
                 .on('error', (err) => reject(err))
-                .on('end', () => resolve(outputPath))
+                .on('end', () => {
+                    report(100, '音频提取完成')
+                    resolve(outputPath)
+                })
                 .run()
         })
     }

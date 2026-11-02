@@ -225,6 +225,8 @@ volumes:
 | `ASR_AVAILABLE_MODELS` | `tiny,base,small,medium,large-v3,large-v3-turbo` | 设置页可下载模型列表 |
 | `ASR_WHISPER_CPP_MODELS` | 同 `ASR_AVAILABLE_MODELS` | whisper.cpp 可选模型列表 |
 | `ASR_THREADS` | `0` | whisper.cpp 推理线程数；0 表示使用 CPU 核心数 |
+| `ASR_AUDIO_CACHE_DAYS` | `14` | 提取音频缓存保留天数（最小 7 天）；缓存位于 `/app/temp/asr-audio` |
+| `ASR_POLL_MS` | `1500` | 主应用轮询 ASR 任务进度的间隔（毫秒），高级参数 |
 | `ASR_DIARIZATION_MODEL` | `pyannote/speaker-diarization-3.1` | 说话人分离模型；仅 enhanced sidecar |
 | `HF_TOKEN` | 空 | Hugging Face Token；仅 enhanced 的说话人分离/受许可模型需要 |
 

@@ -228,14 +228,14 @@ export const ConfigService = {
         const now = Date.now()
         const { readdirSync, statSync, rmSync } = await import('fs')
 
-        const cleanupDir = (dir: string, match?: (name: string) => boolean) => {
+        const cleanupDir = (dir: string, match?: (name: string) => boolean, maxAgeOverride = maxAge) => {
             if (!existsSync(dir)) return
             for (const file of readdirSync(dir)) {
                 if (match && !match(file)) continue
                 const filePath = join(dir, file)
                 try {
                     const stats = statSync(filePath)
-                    if (stats.isFile() && now - stats.mtimeMs > maxAge) {
+                    if (stats.isFile() && now - stats.mtimeMs > maxAgeOverride) {
                         rmSync(filePath, { force: true })
                     }
                 } catch (e) {
@@ -246,6 +246,8 @@ export const ConfigService = {
 
         cleanupDir(join(process.cwd(), 'temp', 'ai-logs'))
         cleanupDir(join(process.cwd(), 'temp'), name => /\.(partial|srt|mp3)$/.test(name) || name.startsWith('download_orig_') || name.startsWith('clip_'))
+        const audioCacheDays = Math.max(7, Number(process.env.ASR_AUDIO_CACHE_DAYS || 14))
+        cleanupDir(join(process.cwd(), 'temp', 'asr-audio'), undefined, audioCacheDays * 24 * 60 * 60 * 1000)
         cleanupDir(join(process.cwd(), 'db', 'logs'), name => name.startsWith('task_') && name.endsWith('.log'))
 
         try {

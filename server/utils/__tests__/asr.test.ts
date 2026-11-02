@@ -77,6 +77,41 @@ describe('AsrService', () => {
     }
   })
 
+  it('polls ASR jobs and reports real progress', async () => {
+    const originalFetch = globalThis.fetch
+    process.env.ASR_POLL_MS = '1'
+    let statusCalls = 0
+    const progress: number[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).endsWith('/v1/audio/transcriptions/jobs')) {
+        return new Response(JSON.stringify({ jobId: 'job-1', status: 'queued' }), { status: 200 })
+      }
+      statusCalls++
+      if (statusCalls === 1) {
+        return new Response(JSON.stringify({ status: 'running', progress: 45, message: '正在识别' }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        status: 'done',
+        progress: 100,
+        message: '识别完成',
+        result: { language: 'en', duration: 2, text: 'Hi', segments: [{ id: 1, start: 0, end: 2, text: 'Hi' }] }
+      }), { status: 200 })
+    }))
+
+    try {
+      const result = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
+        baseUrl: 'http://asr.test',
+        onProgress: value => progress.push(value)
+      })
+      expect(result.text).toBe('Hi')
+      expect(progress).toContain(45)
+      expect(progress).toContain(100)
+    } finally {
+      delete process.env.ASR_POLL_MS
+      vi.stubGlobal('fetch', originalFetch)
+    }
+  })
+
   it('reports the ASR service URL and network cause when connection fails', async () => {
     const originalFetch = globalThis.fetch
     vi.stubGlobal('fetch', vi.fn(async () => {

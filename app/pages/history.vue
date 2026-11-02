@@ -97,7 +97,8 @@
 
         <template #progress-cell="{ row }">
           <div class="min-w-[62px] text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-            {{ isActiveStatus(row.original.status) ? `${row.original.progress}%` : row.original.status === 'review' ? '待核对' : '—' }}
+            <span>{{ isActiveStatus(row.original.status) ? `${row.original.progress}%` : row.original.status === 'review' ? '待核对' : '—' }}</span>
+            <p v-if="isActiveStatus(row.original.status) && row.original.stepMessage" class="max-w-[180px] truncate text-[10px] font-normal text-gray-400 dark:text-gray-500">{{ row.original.stepMessage }}</p>
           </div>
         </template>
 
@@ -158,9 +159,9 @@
         </div>
 
         <div v-if="isActiveStatus(task.status)" class="mt-3 space-y-1.5">
-          <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-            <span>翻译进度</span>
-            <span>{{ task.progress }}%</span>
+          <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+            <span class="truncate">{{ task.stepMessage || '处理进度' }}</span>
+            <span class="shrink-0">{{ task.progress }}%</span>
           </div>
           <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
             <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${task.progress}%` }" />

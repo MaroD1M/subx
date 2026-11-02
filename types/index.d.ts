@@ -68,6 +68,8 @@ export interface TranslationTask {
   forceRetranslate?: boolean
   status: TaskStatus
   progress: number             // 0-100
+  stepProgress?: number        // 当前阶段进度 0-100
+  stepMessage?: string         // 当前阶段实时说明
   totalChunks: number
   completedChunks: number
   createdAt: string            // ISO 8601
@@ -260,6 +262,8 @@ export interface TrackInfo {
 export interface ProgressUpdate {
   step: TaskStatus
   progress: number
+  stepProgress?: number
+  stepMessage?: string
   completedChunks?: number
   totalChunks?: number
   currentText?: string

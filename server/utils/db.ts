@@ -24,6 +24,12 @@ export function useDb() {
       throw new Error(`PostgreSQL schema 文件不存在: ${schemaPath}`)
     }
     _db.exec(readFileSync(schemaPath, 'utf-8'))
+    for (const statement of [
+      'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS step_progress INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS step_message TEXT'
+    ]) {
+      try { _db.exec(statement) } catch { /* column already exists */ }
+    }
     _db.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (1)').run()
     _db.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (2)').run()
     return _db
@@ -73,6 +79,8 @@ export function useDb() {
       force_retranslate INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'queued',
       progress INTEGER NOT NULL DEFAULT 0,
+      step_progress INTEGER NOT NULL DEFAULT 0,
+      step_message TEXT,
       total_chunks INTEGER DEFAULT 0,
       done_chunks INTEGER DEFAULT 0,
       output_path TEXT,
@@ -378,6 +386,14 @@ export function useDb() {
 
   try {
     _db.exec(`ALTER TABLE tasks ADD COLUMN force_retranslate INTEGER NOT NULL DEFAULT 0`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN step_progress INTEGER NOT NULL DEFAULT 0`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN step_message TEXT`)
   } catch { /* column already exists */ }
 
   try {

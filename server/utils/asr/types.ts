@@ -54,6 +54,7 @@ export interface AsrOptions {
   cloudApiKey?: string
   cloudModel?: string
   cloudFallback?: boolean
+  onProgress?: (progress: number, message: string) => void
 }
 
 export interface AsrPersistedResult {

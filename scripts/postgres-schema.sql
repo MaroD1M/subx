@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   force_retranslate INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'queued',
   progress INTEGER NOT NULL DEFAULT 0,
+  step_progress INTEGER NOT NULL DEFAULT 0,
+  step_message TEXT,
   total_chunks INTEGER DEFAULT 0,
   done_chunks INTEGER DEFAULT 0,
   output_path TEXT,
