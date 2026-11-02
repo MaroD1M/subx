@@ -12,7 +12,12 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'SubX - 自动化视频字幕提取与翻译工具',
-      htmlAttrs: { lang: 'zh-CN' }
+      htmlAttrs: { lang: 'zh-CN' },
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }
+      ]
     }
   },
 
