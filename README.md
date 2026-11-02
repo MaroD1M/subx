@@ -2,13 +2,21 @@
 
 > 把 NAS 里的生肉视频，变成能直接看的双语字幕。
 
-当前版本：**v2.6.1** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.6.2** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
 
 [项目地址](https://github.com/MaroD1M/subx) · [问题反馈](https://github.com/MaroD1M/subx/issues)
 
 > 本仓库基于 [chao-eng/subx](https://github.com/chao-eng/subx) 开发而来。原项目已停止维护，本项目在其基础上继续维护和增强，核心能力与设计思路归功于原作者。
 
 ---
+
+## v2.6.2 新东西
+
+- **长音频不再被 5 分钟超时误杀**：ASR 改用任务式接口和 60 分钟超时，识别期间持续上报真实进度。
+- **任务进度更清楚**：任务详情显示当前阶段、阶段进度和实时说明，长任务不再长时间停在固定百分比。
+- **失败重试不再重复提取音频**：ASR 音频按媒体文件和音轨缓存，默认保留 14 天，失败任务会直接复用。
+- **首页 ASR 开关不再“消失”**：关闭语音识别后卡片和轨道选择保持可见，视频不会被取消选中；没有可用字幕源时会禁用开始按钮并说明原因。
+- **文档与预览图同步更新**：补充 ASR 音频缓存位置、保留策略和最新界面截图。
 
 ## v2.6.1 新东西
 
@@ -54,6 +62,10 @@
 | --- | --- |
 | ![移动端首页](docs/images/preview-mobile.png) | ![设置](docs/images/preview-settings.png) |
 
+| 语音识别来源 | 自动化 |
+| --- | --- |
+| ![语音识别来源](docs/images/preview-asr.png) | ![自动化](docs/images/preview-automation.png) |
+
 > 预览图基于演示数据生成，实际界面会随版本继续优化。
 
 ---
@@ -74,7 +86,7 @@
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.6.1
+    image: ghcr.io/marod1m/subx:v2.6.2
     container_name: subx
     restart: unless-stopped
     ports:
@@ -102,7 +114,7 @@ docker compose up -d
 
 访问 `http://NAS_IP:3000`，第一次进入先设置至少 8 位访问口令。
 
-> 单镜像实测（v2.6.1，不含模型）：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
+> 单镜像实测（v2.6.2，不含模型）：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
 >
 > 根目录 [`docker-compose.yml`](docker-compose.yml) 已逐项注释端口、卷、环境变量、健康检查、资源限制和 profiles；完整变量表见 [部署文档第 4 节](docs/deployment.md#4-环境变量与参数)。
 
@@ -193,6 +205,9 @@ SubX 支持通过 OpenAI 兼容接口接入本地模型，适合隐私优先和�
 - 视频没有文本字幕时，默认走 ASR。
 - 视频已有文本字幕时，默认仍用字幕；想重新听写、修正错字或处理字幕质量差的片源，打开开关即可强制走 ASR。
 - 开启 ASR 后，当前选中的文本/图像字幕轨道会被忽略，任务改用所选音频轨道重新识别。
+- 关闭 ASR 后，「语音识别」卡片和视频选择会保留；如果没有文本/图像字幕轨，开始按钮会禁用并提示原因。
+
+ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/asr-audio`），默认保留 14 天。成功任务默认删除音频，失败或取消的任务会保留缓存，重试时直接复用；可用 `ASR_AUDIO_CACHE_DAYS` 调整保留天数，开启「保留临时音频」则成功任务也不删除。
 
 模型默认保存到 `./data/models`，不会打包进镜像。下载支持：
 
@@ -213,7 +228,7 @@ SubX 支持通过 OpenAI 兼容接口接入本地模型，适合隐私优先和�
 >
 > 需要拆分部署时仍可使用独立 CPU sidecar：`docker compose --profile asr up -d asr`，地址改为 `http://subx-asr:8000`。
 >
-> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.6.1`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
+> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.6.2`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
 
 ---
 
@@ -266,22 +281,24 @@ curl -H "Authorization: Bearer subx_xxx" \
 
 ---
 
-## 升级到 v2.6.1
+## 升级到 v2.6.2
 
 ```bash
 docker compose pull
 docker compose up -d --force-recreate
 ```
 
+本版是 ASR 可靠性与首页交互修复补丁。从 v2.6.1 升级无需调整卷或环境变量；如果从 v2.6.0 或更早版本升级，请继续参考下面的模型卷、sidecar 地址和登录会话说明。
+
 升级说明：
 
-- v2.6.1 单镜像继续包含主应用、ASR 和 OCR；旧的 `--profile asr` / `--profile ocr` 不再需要。
+- v2.6.2 单镜像继续包含主应用、ASR 和 OCR；旧的 `--profile asr` / `--profile ocr` 不再需要。
 - 新镜像启动时会等 ASR/OCR 健康检查通过，低配机器首次启动可能多等 10–30 秒，这是正常的。
 - Telegram/通知代理已改用 undici fetch；如果渠道里填了 `127.0.0.1`，请改成宿主机局域网 IP。
 - 登录口令统一为至少 8 位；已有口令不受影响，只有新建实例和修改提示生效。
 - 新增 `./data/models:/models` 卷；模型需要在设置页手动下载，或复用旧的模型缓存。
 - 旧的 `http://subx-asr:8000` / `http://subx-ocr:8000` 地址会一次性迁移到 `127.0.0.1`；迁移后以设置页保存的地址为准。如需继续连接外部 sidecar，设置 `SUBX_KEEP_LEGACY_SIDECAR_URLS=true`。
-- 主应用、ASR、OCR 镜像建议同步升级到 v2.6.1。
+- 主应用、ASR、OCR 镜像建议同步升级到 v2.6.2。
 - 未设置 `DATABASE_URL` 时继续使用 SQLite。
 - PostgreSQL 同步桥仍是低并发方案；生产高并发建议等待异步 DB 层。
 - 旧 Session 会失效，需要重新登录。

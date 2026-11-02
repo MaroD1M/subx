@@ -173,6 +173,60 @@ test('subtitled video can be forced to ASR', async ({ page }) => {
   await expect(asrSwitch).toBeEnabled()
   await asrSwitch.click()
   await expect(page.getByText('已启用：将从所选音频轨道重新生成字幕')).toBeVisible()
+
+  await asrSwitch.click()
+  await expect(asrSwitch).not.toBeChecked()
+  await expect(page.getByText('语音识别', { exact: true })).toBeVisible()
+  await expect(page.getByText('已有文本字幕。想重新听写')).toBeVisible()
+
+  await asrSwitch.click()
+  await expect(asrSwitch).toBeChecked()
+  await page.getByRole('button', { name: '开始翻译' }).click()
+
+  await expect.poll(() => taskBody?.sourceType, { timeout: 5000 }).toBe('asr')
+  expect(taskBody.trackIndex).toBe(2)
+})
+
+test('ASR card stays visible when toggled off without subtitle tracks', async ({ page }) => {
+  await page.request.put('/api/config', { data: { asrEnabled: true } })
+  await page.route('**/api/tracks**', route => route.fulfill({
+    json: {
+      tracks: [],
+      audioTracks: [{ index: 2, codec: 'aac', language: 'jpn', title: 'Japanese', channels: 2, isDefault: true }],
+      duration: 120
+    }
+  }))
+  let taskBody: any = null
+  await page.route('**/api/task', async route => {
+    taskBody = route.request().postDataJSON()
+    await route.fulfill({ json: { taskId: 'asr-toggle-test', taskIds: ['asr-toggle-test'] } })
+  })
+
+  await page.goto('/')
+  const tree = page.getByRole('tree', { name: '文件目录树' })
+  await tree.getByText('Shows', { exact: true }).click()
+  await tree.getByText('Demo Show', { exact: true }).click()
+  await tree.getByText('Demo.Show.S01E02.mkv', { exact: true }).click()
+
+  const asrSwitch = page.getByRole('switch', { name: '使用语音识别' })
+  await expect(asrSwitch).toBeChecked()
+  await expect(page.getByText('已启用语音识别，将从所选音频轨道生成字幕')).toBeVisible()
+
+  await asrSwitch.click()
+  await expect(asrSwitch).not.toBeChecked()
+  await expect(page.getByText('语音识别', { exact: true })).toBeVisible()
+  await expect(page.getByText('未发现文本字幕，可使用语音识别')).toBeVisible()
+  await expect(page.getByText('当前视频没有可用的文本/图像字幕轨；关闭语音识别后无法创建任务。')).toBeVisible()
+  await expect(page.getByText('字幕轨道：')).toBeVisible()
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await page.waitForTimeout(300)
+  await expect(page).toHaveScreenshot('asr-source.png', {
+    fullPage: false,
+    mask: [page.locator('header .version-badge')]
+  })
+
+  await asrSwitch.click()
+  await expect(page.getByText('已启用语音识别，将从所选音频轨道生成字幕')).toBeVisible()
   await page.getByRole('button', { name: '开始翻译' }).click()
 
   await expect.poll(() => taskBody?.sourceType, { timeout: 5000 }).toBe('asr')

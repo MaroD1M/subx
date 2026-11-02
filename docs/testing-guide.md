@@ -1,6 +1,6 @@
 # SubX 实测指南
 
-> 目标：用真实 NAS、真实媒体和单镜像/可选 sidecar 验证 v2.6.1，不只看构建是否通过。
+> 目标：用真实 NAS、真实媒体和单镜像/可选 sidecar 验证 v2.6.2，不只看构建是否通过。
 
 ## 1. 测试前准备
 
@@ -168,7 +168,7 @@ OCR 耗时：
 ## 7. 反馈模板
 
 ```text
-版本：v2.6.1
+版本：v2.6.2
 镜像：subx（含内置 ASR/OCR）/ 可选 subx-asr / subx-ocr
 设备：
 部署方式：Docker Compose（默认单镜像 / 可选 profile）

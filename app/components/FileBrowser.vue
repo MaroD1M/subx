@@ -105,7 +105,7 @@
         </div>
 
         <div class="flex-1 min-h-0 flex flex-col">
-          <div class="h-[260px] min-h-[180px] overflow-hidden rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 ring-1 ring-inset ring-white/35 dark:border-gray-700/80 dark:bg-gray-900/40 dark:ring-white/10 lg:h-[var(--right-top-height)]" :style="{ '--right-top-height': `${rightTopHeight}%` }">
+          <div class="flex h-[260px] min-h-[180px] flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 ring-1 ring-inset ring-white/35 dark:border-gray-700/80 dark:bg-gray-900/40 dark:ring-white/10 lg:h-[var(--right-top-height)]" :style="{ '--right-top-height': `${rightTopHeight}%` }">
             <div v-if="isSubtitleFile" class="h-full flex flex-col min-h-0">
               <div v-if="pendingSubtitle" class="flex flex-col items-center justify-center flex-1">
                 <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
@@ -133,7 +133,7 @@
               <p class="text-xs text-neutral-500">正在分析视频轨道...</p>
             </div>
 
-            <div v-else-if="tracks.length" class="h-full min-h-0 flex flex-col space-y-2">
+            <div v-else-if="tracks.length" class="flex min-h-0 flex-1 flex-col space-y-2">
               <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
                 <span>可处理轨道 {{ tracks.filter((t: any) => t.isSupported || (appConfig?.ocrEnabled && isBitmapCodec(t.codec))).length }} / {{ tracks.length }}</span>
                 <span v-if="selectedTrackIndex !== null && !useAsr">当前选择 #{{ selectedTrackIndex }}</span>
@@ -144,16 +144,17 @@
               </div>
             </div>
 
-            <div v-else-if="!useAsr" class="flex flex-col items-center justify-center h-full text-neutral-400 text-xs">
-              {{ audioTracks.length ? '未发现文本字幕，可使用语音识别' : '未发现可处理的文本字幕或音频轨道' }}
+            <div v-else class="flex min-h-0 flex-1 flex-col items-center justify-center text-neutral-400 text-xs">
+              <template v-if="useAsr">已启用语音识别，将从所选音频轨道生成字幕</template>
+              <template v-else>{{ audioTracks.length ? '未发现文本字幕，可使用语音识别' : '未发现可处理的文本字幕或音频轨道' }}</template>
             </div>
 
-            <div v-if="!isSubtitleFile && bitmapTracks.length && !appConfig?.ocrEnabled && !hasSupportedSubtitle" class="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <div v-if="!isSubtitleFile && bitmapTracks.length && !appConfig?.ocrEnabled && !hasSupportedSubtitle" class="mt-3 shrink-0 rounded-xl border border-amber-100 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
               <p class="text-xs font-semibold text-amber-800 dark:text-amber-200">发现图像字幕</p>
               <p class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">PGS / VobSub / DVD 需要先在设置中启用「图像字幕 OCR」；单镜像已内置 OCR 服务。</p>
             </div>
 
-            <div v-if="!isSubtitleFile && audioTracks.length" class="mt-3 rounded-xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-500/5">
+            <div v-if="!isSubtitleFile && audioTracks.length" class="mt-3 shrink-0 rounded-xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-500/5">
               <div class="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <div class="flex flex-wrap items-center gap-1.5">
@@ -163,10 +164,11 @@
                   </div>
                   <p class="text-[11px] text-primary-700/80 dark:text-primary-300/80">{{ asrHint }}</p>
                   <p v-if="!appConfig?.asrEnabled" class="mt-1 text-[11px] text-amber-600 dark:text-amber-400">请先在设置中启用语音识别。</p>
+                  <p v-else-if="!useAsr && !hasSupportedSubtitle && !bitmapTracks.length" class="mt-1 text-[11px] text-amber-600 dark:text-amber-400">当前视频没有可用的文本/图像字幕轨；关闭语音识别后无法创建任务。</p>
                 </div>
                 <USwitch v-model="useAsr" :disabled="!audioTracks.length || !appConfig?.asrEnabled" aria-label="使用语音识别" />
               </div>
-              <URadioGroup v-if="useAsr" v-model="selectedAudioTrackIndex" :items="audioTrackOptions" />
+              <URadioGroup v-if="useAsr" v-model="selectedAudioTrackIndex" :items="audioTrackOptions" class="max-h-40 overflow-y-auto custom-scrollbar" />
             </div>
           </div>
 
@@ -237,8 +239,8 @@
 
             <div class="mt-2 px-2.5 py-2.5 border border-gray-200/85 dark:border-gray-800/80 bg-white/92 dark:bg-gray-900/84 backdrop-blur supports-[backdrop-filter]:bg-white/80 supports-[backdrop-filter]:dark:bg-gray-900/68 rounded-xl shadow-[0_8px_20px_-18px_rgba(15,23,42,0.24)] shrink-0">
               <div class="flex gap-2.5">
-                <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" @click="startTask(true)" />
-                <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" @click="startTask(false)" />
+                <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" :disabled="!canStartTask" @click="startTask(true)" />
+                <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" :disabled="!canStartTask" @click="startTask(false)" />
               </div>
             </div>
           </div>
@@ -623,6 +625,20 @@ watch(() => options.value.outputMode, (mode) => {
   options.value.subtitleStylePreset = mode === 'bilingual' ? 'bilingual_simple' : 'mono_clean'
 })
 
+watch(useAsr, (enabled) => {
+  if (enabled) {
+    if (selectedAudioTrackIndex.value !== null) return
+    const firstAudio = audioTracks.value.find((track: any) => track.isDefault) || audioTracks.value[0]
+    selectedAudioTrackIndex.value = firstAudio ? firstAudio.index : null
+    return
+  }
+
+  if (isSubtitleFile.value || selectedTrackIndex.value !== null) return
+  const fallback = tracks.value.find((track: any) => track.isSupported)
+    || tracks.value.find((track: any) => isBitmapCodec(track.codec) && appConfig.value?.ocrEnabled)
+  selectedTrackIndex.value = fallback ? fallback.index : null
+})
+
 const currentStyle = computed(() => allStylePresets.value.find(s => s.id === options.value.stylePreset))
 const supportedTracks = computed(() => tracks.value.filter((t: any) => t.isSupported))
 const hasSupportedSubtitle = computed(() => supportedTracks.value.length > 0)
@@ -654,6 +670,15 @@ const audioTrackOptions = computed(() => audioTracks.value.map((t: any) => ({
   label: `音频 #${t.index} (${t.codec}) - ${t.language || 'und'}${t.channels ? ` · ${t.channels}ch` : ''}${t.title ? ` [${t.title}]` : ''}`,
   value: t.index
 })))
+
+const canStartTask = computed(() => {
+  if (!selectedFile.value) return false
+  if (isSubtitleFile.value) return true
+  if (useAsr.value) return selectedAudioTrackIndex.value !== null && Boolean(appConfig.value?.asrEnabled)
+  const track = tracks.value.find((item: any) => item.index === selectedTrackIndex.value)
+  if (!track) return false
+  return Boolean(track.isSupported || (isBitmapCodec(track.codec) && appConfig.value?.ocrEnabled))
+})
 
 const isSubtitleFile = computed(() => {
   if (!selectedFile.value) return false

@@ -1,5 +1,5 @@
 # ============================================================
-# SubX v2.6.1 - 单镜像开箱即用
+# SubX v2.6.2 - 单镜像开箱即用
 # ============================================================
 # 默认只启动一个 subx 容器，内部包含：
 #   - Web / 翻译主应用
@@ -16,7 +16,7 @@
 # 「设置 → 语音识别 → 本地模型管理」手动开始下载，
 # 支持进度、速度、剩余时间、暂停、续传、取消、重试、卸载和代理。
 #
-# 镜像体积（v2.6.1，不含模型）：
+# 镜像体积（v2.6.2，不含模型）：
 #   amd64 下载约 586 MiB，解压后约 1.57 GiB
 #   arm64 下载约 520 MiB
 #   ASR 模型另算，建议 /models 预留 10–20GB
@@ -31,7 +31,7 @@ services:
   subx:
     # 固定版本，避免 latest 自动升级带来意外。
     # 想跟随最新版可改成 ghcr.io/marod1m/subx:latest
-    image: ghcr.io/marod1m/subx:v2.6.1
+    image: ghcr.io/marod1m/subx:v2.6.2
 
     # 容器名称，便于 docker logs / docker exec 使用。
     container_name: subx
@@ -292,7 +292,7 @@ services:
     profiles: ["asr"]
 
     # 优先使用预构建镜像；本地没有时会按 asr-service 构建。
-    image: ghcr.io/marod1m/subx-asr:v2.6.1
+    image: ghcr.io/marod1m/subx-asr:v2.6.2
     build:
       context: ./asr-service
 
@@ -423,7 +423,7 @@ services:
     profiles: ["ocr"]
 
     # 优先使用预构建镜像；本地没有时会按 ocr-service 构建。
-    image: ghcr.io/marod1m/subx-ocr:v2.6.1
+    image: ghcr.io/marod1m/subx-ocr:v2.6.2
     build:
       context: ./ocr-service
 

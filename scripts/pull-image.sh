@@ -9,7 +9,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 DEFAULT_VERSION="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$ROOT_DIR/package.json" 2>/dev/null | head -n 1)"
 case "$DEFAULT_VERSION" in
-  "") DEFAULT_VERSION="2.6.1" ;;
+  "") DEFAULT_VERSION="2.6.2" ;;
   v*) ;;
   *) DEFAULT_VERSION="v$DEFAULT_VERSION" ;;
 esac
