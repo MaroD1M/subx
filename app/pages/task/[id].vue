@@ -939,6 +939,26 @@ const failureSummary = computed(() => {
     }
   }
 
+  if (/OCR 最大处理时长|视频时长.*超过 OCR|OCR_MAX_SECONDS/i.test(sourceText)) {
+    return {
+      icon: 'i-lucide-scan-text',
+      title: '视频超出 OCR 处理上限',
+      summary: '长视频 OCR 被时长上限拦截。可在「设置 → 图像字幕 OCR → 长视频与超时」调大最大 OCR 时长，或改用语音识别。',
+      typeLabel: 'OCR 时长限制',
+      detail: sourceText
+    }
+  }
+
+  if (/OCR 长时间没有进度|OCR 任务超过最长执行时间|OCR 任务超时/i.test(sourceText)) {
+    return {
+      icon: 'i-lucide-timer-off',
+      title: 'OCR 处理超时',
+      summary: 'OCR 长时间没有进度或超过总任务上限。可调大无进度超时/总任务上限，或缩短分段时长。',
+      typeLabel: 'OCR 超时',
+      detail: sourceText
+    }
+  }
+
   if (/超时|timeout|timed out/i.test(sourceText)) {
     return {
       icon: 'i-lucide-timer-off',

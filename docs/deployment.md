@@ -1,10 +1,10 @@
 # SubX 部署文档
 
-> 适用版本：v2.7.0
+> 适用版本：v2.8.0
 
 本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理、拆分部署、升级备份和常见问题。使用说明请参阅 [usage.md](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
-## 1. v2.7.0 架构
+## 1. v2.8.0 架构
 
 从 v2.5.0 开始，主应用镜像 `ghcr.io/marod1m/subx` 同时包含：
 
@@ -25,7 +25,7 @@ OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下�
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.7.0
+    image: ghcr.io/marod1m/subx:v2.8.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -78,7 +78,7 @@ http://<主机IP>:3000
 4. 需要无字幕识别时开启「启用语音识别」；需要图像字幕时进入「设置 → 图像字幕 OCR」开启 OCR，并按需选择语言和引擎。
 5. 回首页开始翻译。
 
-> 镜像体积参考：amd64 下载约 **586 MiB**，解压后文件约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.7.0 预计接近）。模型体积参考：`tiny` 约 75MB、`small` 约 500MB、`medium` 约 1.5GB、`large-v3` 约 3GB。建议为 `./data/models` 预留 10–20GB。
+> 镜像体积参考：amd64 下载约 **586 MiB**，解压后文件约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.0 预计接近）。模型体积参考：`tiny` 约 75MB、`small` 约 500MB、`medium` 约 1.5GB、`large-v3` 约 3GB。建议为 `./data/models` 预留 10–20GB。
 
 > [!TIP]
 > 不想读全文？先只改三处：媒体路径、`PUID/PGID`、`SUBX_SECRET_KEY`。然后 `docker compose up -d`，进设置页下载模型。其他默认值先别动，真的够用。
@@ -110,7 +110,7 @@ http://<主机IP>:3000
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.7.0
+    image: ghcr.io/marod1m/subx:v2.8.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -243,10 +243,19 @@ volumes:
 | `OCR_ENGINE` | `auto` | `auto` / `rapidocr` / `tesseract` |
 | `OCR_FPS` | `2` | 抽帧 OCR 帧率；低配 NAS 可降到 `1` |
 | `OCR_WORKERS` | `4` | 并行 OCR 线程数；低配可降到 `2` |
-| `OCR_MIN_CONFIDENCE` | `25` | 低置信度过滤阈值（0–100） |
-| `OCR_MAX_SECONDS` | `7200` | 单个视频最大 OCR 时长；超过直接报错 |
+| `OCR_MIN_CONFIDENCE` | `25` | 低置信度提示阈值（0–100），结果保留并进入核对 |
+| `OCR_MAX_SECONDS` | `14400` | OCR 总体最大处理时长；默认 4 小时，设置页可覆盖 |
+| `OCR_CHUNK_SECONDS` | `1800` | VobSub/DVD 分段时长；默认 30 分钟，设置页可覆盖 |
+| `OCR_PGSRIP_TIMEOUT_SECONDS` | `7200` | pgsrip 单次识别超时；默认 2 小时，设置页可覆盖 |
+| `OCR_FFMPEG_TIMEOUT_SECONDS` | `3600` | 单段抽帧/字幕提取超时；设置页可覆盖 |
+| `OCR_CHUNK_RETRIES` | `1` | 单段失败重试次数；设置页可覆盖 |
+| `OCR_RESUME_TTL_HOURS` | `24` | OCR 分段断点保留时间；设置页可覆盖 |
+| `OCR_JOB_IDLE_TIMEOUT_MS` | `3600000` | 主应用 OCR 无进度超时；设置页可覆盖 |
+| `OCR_JOB_ABSOLUTE_TIMEOUT_MS` | `21600000` | 主应用 OCR 总任务上限；设置页可覆盖 |
 | `OCR_TEMP_DIR` | `/app/temp/ocr` | OCR 抽帧临时目录；默认位于主应用 `./data/temp/ocr` 下 |
 | `OCR_MAX_JOBS` | `50` | OCR 内存任务队列上限；超过时清理已结束任务，仍满则返回 429 |
+
+> 以上环境变量用于新实例默认值。设置页「图像字幕 OCR → 长视频与超时」保存后会随每个 OCR 请求下发，优先于容器环境变量，无需重启 OCR 服务。
 
 ### 4.4 数据库 / 多 Worker
 
@@ -276,11 +285,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.7.0
+# 默认拉取 v2.8.0
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.7.0
+./scripts/pull-image.sh --tag v2.8.0
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
@@ -396,7 +405,7 @@ docker compose --profile asr up -d asr
 http://subx-asr:8000
 ```
 
-独立镜像：`ghcr.io/marod1m/subx-asr:v2.7.0`。模型目录为 `./data/models/asr`。
+独立镜像：`ghcr.io/marod1m/subx-asr:v2.8.0`。模型目录为 `./data/models/asr`。
 
 ### 8.2 独立 OCR 容器
 
@@ -404,7 +413,7 @@ http://subx-asr:8000
 docker compose --profile ocr up -d ocr
 ```
 
-设置页 OCR 地址改为 `http://subx-ocr:8000`。OCR 容器必须挂载与主应用相同的媒体目录，容器内路径也要一致。
+设置页 OCR 地址改为 `http://subx-ocr:8000`。OCR 容器必须挂载与主应用相同的媒体目录，容器内路径也要一致。长视频分段、重试和超时参数由主应用随任务下发，设置页调整后不需要重启 OCR 容器；拆分部署时请同步升级 OCR 镜像到与主应用相同版本。
 
 ### 8.3 NVIDIA GPU ASR
 
@@ -494,7 +503,7 @@ OCR 内部健康检查：
 
 ## 12. 升级与备份
 
-升级到 v2.7.0：
+升级到 v2.8.0：
 
 ```bash
 docker compose pull
@@ -503,10 +512,10 @@ docker compose up -d --force-recreate
 
 升级说明：
 
-- v2.7.0 新增目录级批量选择、同集版本去重、批量轨道策略、通知详情和 OCR 稳定性改进；从 v2.6.2 升级不需要调整卷或环境变量，重新拉取镜像即可。
-- 数据库会自动新增 `track_policy_json` 字段；旧任务会继续使用原来的自动选轨逻辑。
-- 批量目录扫描默认只加入视频文件；同名外挂字幕由视频自动匹配，不会单独重复入队。
-- 主应用镜像已包含 ASR/OCR，旧的 `--profile asr` / `--profile ocr` 不再需要。
+- v2.8.0 新增长电影 OCR：PGS 直通、VobSub/DVD 分段、断点续跑和可配置超时；从 v2.7.0 升级不需要调整卷或环境变量。
+- 新增 OCR 参数都有默认值，可在「设置 → 图像字幕 OCR → 长视频与超时」调整；设置页优先于容器环境变量。
+- 拆分部署时请同步升级主应用和 OCR 镜像到 v2.8.0，否则旧 OCR 服务不支持新的分段与超时参数。
+- 本次不需要数据库迁移；主应用镜像仍包含 ASR/OCR，旧的 `--profile asr` / `--profile ocr` 不再需要。
 - 单镜像会把旧默认地址 `http://subx-asr:8000` / `http://subx-ocr:8000` **一次性**迁移到 `127.0.0.1`；迁移后以设置页保存的地址为准，不会覆盖你后来填写的 sidecar 地址。
 - 如需继续连接外部 sidecar，设置 `SUBX_KEEP_LEGACY_SIDECAR_URLS=true`，并保留旧的 sidecar 容器。
 - 新增 `./data/models:/models` 卷；首次需要在设置页手动下载模型，或复用旧模型缓存。
@@ -624,7 +633,7 @@ docker exec -it subx curl -fsS http://127.0.0.1:8000/health
 
 ### 镜像太大 / 拉取很慢
 
-- v2.7.0 单镜像包含 Python、FFmpeg、Tesseract 语言包和 OCR 依赖：amd64 下载约 586 MiB、解压后约 1.57 GiB；arm64 下载约 520 MiB（不含模型，体积参考基于 v2.6.x 实测）。
+- v2.8.0 单镜像包含 Python、FFmpeg、Tesseract 语言包和 OCR 依赖：amd64 下载约 586 MiB、解压后约 1.57 GiB；arm64 下载约 520 MiB（不含模型，体积参考基于 v2.6.x 实测）。
 - 使用 `./scripts/pull-image.sh` 查看 Docker 原生进度；Ctrl+C 暂停后重新执行可续传。
 - 配置 Docker Daemon 代理（见第 5 节）。
 - 只需要主应用时，可继续使用旧版精简镜像和独立 sidecar，但不再推荐。

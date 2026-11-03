@@ -89,7 +89,13 @@ describe('cloud ASR and OCR clients', () => {
       language: 'zh-CN',
       trackIndex: 3,
       engine: 'rapidocr',
-      minConfidence: 18
+      minConfidence: 18,
+      maxSeconds: 14400,
+      chunkSeconds: 1800,
+      pgsripTimeoutSeconds: 7200,
+      ffmpegTimeoutSeconds: 3600,
+      chunkRetries: 1,
+      resumeTtlHours: 24
     })
     expect(result.engine).toBe('ocr:pgsrip')
     expect(result.segments[0]?.text).toBe('OCR 字幕')
@@ -102,6 +108,12 @@ describe('cloud ASR and OCR clients', () => {
     expect(body.language).toBe('zh-CN')
     expect(body.engine).toBe('rapidocr')
     expect(body.min_confidence).toBe(18)
+    expect(body.max_seconds).toBe(14400)
+    expect(body.chunk_seconds).toBe(1800)
+    expect(body.pgsrip_timeout_seconds).toBe(7200)
+    expect(body.ffmpeg_timeout_seconds).toBe(3600)
+    expect(body.chunk_retries).toBe(1)
+    expect(body.resume_ttl_hours).toBe(24)
   })
 
   it('polls OCR jobs and reports progress', async () => {

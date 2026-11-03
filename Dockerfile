@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# SubX v2.7.0 all-in-one image
+# SubX v2.8.0 all-in-one image
 # 主应用 + ASR + OCR 运行在同一个容器内。
 # Whisper 模型不打进镜像，首次在设置页手动下载。
 # ============================================================
@@ -124,7 +124,7 @@ COPY --from=builder --chown=nuxt:nodejs /app/server/utils/pgWorker.cjs /app/.out
 COPY --from=builder --chown=nuxt:nodejs /app/scripts/postgres-schema.sql /app/scripts/postgres-schema.sql
 COPY --chown=nuxt:nodejs package.json ./
 COPY --chown=nuxt:nodejs asr-service/main.py asr-service/model_manager.py /app/asr-service/
-COPY --chown=nuxt:nodejs ocr-service/main.py /app/ocr-service/
+COPY --chown=nuxt:nodejs ocr-service/main.py ocr-service/ocr_utils.py /app/ocr-service/
 COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --chown=root:root scripts/start-all-in-one.sh /usr/local/bin/subx-start
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/subx-start
@@ -155,7 +155,14 @@ ENV TZ=Asia/Shanghai \
     OCR_FPS=2 \
     OCR_WORKERS=4 \
     OCR_MIN_CONFIDENCE=25 \
-    OCR_MAX_SECONDS=7200
+    OCR_MAX_SECONDS=14400 \
+    OCR_CHUNK_SECONDS=1800 \
+    OCR_PGSRIP_TIMEOUT_SECONDS=7200 \
+    OCR_FFMPEG_TIMEOUT_SECONDS=3600 \
+    OCR_CHUNK_RETRIES=1 \
+    OCR_RESUME_TTL_HOURS=24 \
+    OCR_JOB_IDLE_TIMEOUT_MS=3600000 \
+    OCR_JOB_ABSOLUTE_TIMEOUT_MS=21600000
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["/usr/local/bin/subx-start"]

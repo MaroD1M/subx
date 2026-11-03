@@ -270,11 +270,47 @@
                   </UFormField>
                 </div>
 
+                <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
+                  <div>
+                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300">长视频与超时</p>
+                    <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">PGS 直接交给 pgsrip；VobSub/DVD 超过分段时长会自动分段处理，并保留断点供重试复用。</p>
+                  </div>
+                  <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <UFormField label="最大 OCR 时长（小时）">
+                      <UInputNumber v-model="ocrMaxHours" :min="1" :max="24" :step="1" class="w-full" />
+                    </UFormField>
+                    <UFormField label="分段时长（分钟）">
+                      <UInputNumber v-model="ocrChunkMinutes" :min="5" :max="240" :step="5" class="w-full" />
+                    </UFormField>
+                    <UFormField label="无进度超时（分钟）">
+                      <UInputNumber v-model="ocrJobIdleTimeoutMinutes" :min="1" :max="1440" :step="1" class="w-full" />
+                    </UFormField>
+                    <UFormField label="总任务上限（小时）">
+                      <UInputNumber v-model="ocrJobAbsoluteTimeoutHours" :min="1" :max="168" :step="1" class="w-full" />
+                    </UFormField>
+                  </div>
+                  <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <UFormField label="PGS 识别超时（分钟）">
+                      <UInputNumber v-model="ocrPgsripTimeoutMinutes" :min="5" :max="1440" :step="5" class="w-full" />
+                    </UFormField>
+                    <UFormField label="单段抽帧超时（分钟）">
+                      <UInputNumber v-model="ocrFfmpegTimeoutMinutes" :min="1" :max="1440" :step="1" class="w-full" />
+                    </UFormField>
+                    <UFormField label="单段重试次数">
+                      <UInputNumber v-model="config.ocrChunkRetries" :min="0" :max="5" :step="1" class="w-full" />
+                    </UFormField>
+                    <UFormField label="断点保留（小时）">
+                      <UInputNumber v-model="config.ocrResumeTtlHours" :min="1" :max="168" :step="1" class="w-full" />
+                    </UFormField>
+                  </div>
+                  <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">默认最大 4 小时、30 分钟一段。调大后请留意 <code>temp/ocr</code> 磁盘占用；明显超过总任务上限时会在 OCR 开始前明确报错。</p>
+                </div>
+
                 <div class="rounded-xl border border-sky-100 bg-sky-50/70 p-3 text-xs leading-5 text-sky-800 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-200">
                   <p class="font-medium">PGS / Blu-ray</p>
-                  <p>优先使用 pgsrip 按字幕 cue 识别；结果为空或明显不完整时自动回退到字幕图像 OCR。</p>
+                  <p>优先使用 pgsrip 按字幕 cue 识别，长电影不强制整片抽帧；结果为空或明显不完整时自动回退到字幕图像 OCR。</p>
                   <p class="mt-2 font-medium">VobSub / DVD</p>
-                  <p>直接渲染字幕轨并按字幕区域裁剪、放大、二值化后识别。低配 NAS 可把引擎切到 Tesseract 或降低并发。</p>
+                  <p>直接渲染字幕轨并按字幕区域裁剪、放大、二值化后识别。长视频会分段处理，每段完成后立即清理帧文件。</p>
                 </div>
               </div>
 
@@ -706,6 +742,14 @@ if (config.value) {
   if (!config.value.ocrEngine) config.value.ocrEngine = 'auto'
   if (config.value.ocrMinConfidence === undefined) config.value.ocrMinConfidence = 25
   if (config.value.ocrApiKey === undefined) config.value.ocrApiKey = ''
+  if (config.value.ocrMaxSeconds === undefined) config.value.ocrMaxSeconds = 14400
+  if (config.value.ocrChunkSeconds === undefined) config.value.ocrChunkSeconds = 1800
+  if (config.value.ocrPgsripTimeoutSeconds === undefined) config.value.ocrPgsripTimeoutSeconds = 7200
+  if (config.value.ocrFfmpegTimeoutSeconds === undefined) config.value.ocrFfmpegTimeoutSeconds = 3600
+  if (config.value.ocrChunkRetries === undefined) config.value.ocrChunkRetries = 1
+  if (config.value.ocrResumeTtlHours === undefined) config.value.ocrResumeTtlHours = 24
+  if (config.value.ocrJobIdleTimeoutMs === undefined) config.value.ocrJobIdleTimeoutMs = 60 * 60 * 1000
+  if (config.value.ocrJobAbsoluteTimeoutMs === undefined) config.value.ocrJobAbsoluteTimeoutMs = 6 * 60 * 60 * 1000
   if (!config.value.translationMode) config.value.translationMode = 'non_stream'
   if (config.value.streamUsage === undefined) config.value.streamUsage = false
 }
@@ -732,6 +776,31 @@ const asrJobIdleTimeoutMinutes = computed({
 const asrJobAbsoluteTimeoutHours = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.asrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000) / 3600000)),
   set: (value: any) => { config.value.asrJobAbsoluteTimeoutMs = Math.max(1, Math.min(168, Math.round(Number(value) || 6))) * 3600000 }
+})
+
+const ocrMaxHours = computed({
+  get: () => Math.max(1, Math.round(Number(config.value?.ocrMaxSeconds ?? 14400) / 3600)),
+  set: (value: any) => { config.value.ocrMaxSeconds = Math.max(1, Math.min(24, Math.round(Number(value) || 4))) * 3600 }
+})
+const ocrChunkMinutes = computed({
+  get: () => Math.max(5, Math.round(Number(config.value?.ocrChunkSeconds ?? 1800) / 60)),
+  set: (value: any) => { config.value.ocrChunkSeconds = Math.max(5, Math.min(240, Math.round(Number(value) || 30))) * 60 }
+})
+const ocrPgsripTimeoutMinutes = computed({
+  get: () => Math.max(5, Math.round(Number(config.value?.ocrPgsripTimeoutSeconds ?? 7200) / 60)),
+  set: (value: any) => { config.value.ocrPgsripTimeoutSeconds = Math.max(5, Math.min(1440, Math.round(Number(value) || 120))) * 60 }
+})
+const ocrFfmpegTimeoutMinutes = computed({
+  get: () => Math.max(1, Math.round(Number(config.value?.ocrFfmpegTimeoutSeconds ?? 3600) / 60)),
+  set: (value: any) => { config.value.ocrFfmpegTimeoutSeconds = Math.max(1, Math.min(1440, Math.round(Number(value) || 60))) * 60 }
+})
+const ocrJobIdleTimeoutMinutes = computed({
+  get: () => Math.max(1, Math.round(Number(config.value?.ocrJobIdleTimeoutMs ?? 60 * 60 * 1000) / 60000)),
+  set: (value: any) => { config.value.ocrJobIdleTimeoutMs = Math.max(1, Math.min(1440, Math.round(Number(value) || 60))) * 60000 }
+})
+const ocrJobAbsoluteTimeoutHours = computed({
+  get: () => Math.max(1, Math.round(Number(config.value?.ocrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000) / 3600000)),
+  set: (value: any) => { config.value.ocrJobAbsoluteTimeoutMs = Math.max(1, Math.min(168, Math.round(Number(value) || 6))) * 3600000 }
 })
 
 const qualityThresholdPercent = computed({
@@ -775,6 +844,14 @@ function buildConfigSnapshot(value: any) {
     ocrApiKey: String(value?.ocrApiKey || ''),
     ocrEngine: String(value?.ocrEngine || 'auto'),
     ocrMinConfidence: Number(value?.ocrMinConfidence ?? 25),
+    ocrMaxSeconds: Number(value?.ocrMaxSeconds ?? 14400),
+    ocrChunkSeconds: Number(value?.ocrChunkSeconds ?? 1800),
+    ocrPgsripTimeoutSeconds: Number(value?.ocrPgsripTimeoutSeconds ?? 7200),
+    ocrFfmpegTimeoutSeconds: Number(value?.ocrFfmpegTimeoutSeconds ?? 3600),
+    ocrChunkRetries: Number(value?.ocrChunkRetries ?? 1),
+    ocrResumeTtlHours: Number(value?.ocrResumeTtlHours ?? 24),
+    ocrJobIdleTimeoutMs: Number(value?.ocrJobIdleTimeoutMs ?? 60 * 60 * 1000),
+    ocrJobAbsoluteTimeoutMs: Number(value?.ocrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000),
     defaultModel: String(value?.defaultModel || ''),
     targetLanguage: String(value?.targetLanguage || ''),
     outputMode: String(value?.outputMode || ''),
@@ -1005,7 +1082,9 @@ async function testOcr() {
     if (result?.ok) {
       const engines = result.data?.engines || {}
       const available = Object.entries(engines).filter(([, value]) => value).map(([name]) => name)
-      toast.add({ title: 'OCR 服务正常', description: `引擎：${available.join(' / ') || '-'} · 语言：${result.data?.language || '-'} · 并发：${result.data?.workers || '-'}`, color: 'success' })
+      const maxHours = Number(result.data?.maxSeconds || 0) > 0 ? (Number(result.data.maxSeconds) / 3600).toFixed(1) : '-'
+      const chunkMinutes = Number(result.data?.chunkSeconds || 0) > 0 ? Math.round(Number(result.data.chunkSeconds) / 60) : '-'
+      toast.add({ title: 'OCR 服务正常', description: `引擎：${available.join(' / ') || '-'} · 语言：${result.data?.language || '-'} · 并发：${result.data?.workers || '-'} · 服务默认上限：${maxHours}h · 分段：${chunkMinutes}min`, color: 'success' })
     } else {
       toast.add({ title: 'OCR 服务不可用', description: result?.message || `HTTP ${result?.status || '-'}`, color: 'error' })
     }

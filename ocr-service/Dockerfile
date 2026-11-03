@@ -4,7 +4,12 @@ ENV PYTHONUNBUFFERED=1 \
     OCR_MEDIA_ROOT=/media \
     OCR_TEMP_DIR=/app/temp/ocr \
     OCR_LANGUAGE=en \
-    OCR_MAX_SECONDS=7200 \
+    OCR_MAX_SECONDS=14400 \
+    OCR_CHUNK_SECONDS=1800 \
+    OCR_PGSRIP_TIMEOUT_SECONDS=7200 \
+    OCR_FFMPEG_TIMEOUT_SECONDS=3600 \
+    OCR_CHUNK_RETRIES=1 \
+    OCR_RESUME_TTL_HOURS=24 \
     OCR_MIN_CONFIDENCE=25 \
     OCR_FPS=2 \
     OCR_WORKERS=4 \
@@ -51,7 +56,7 @@ WORKDIR /app
 RUN mkdir -p /app/temp/ocr
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py .
+COPY main.py ocr_utils.py ./
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \

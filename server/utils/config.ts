@@ -70,6 +70,14 @@ export const ConfigService = {
             ocrLanguage: String(process.env.OCR_LANGUAGE || 'en'),
             ocrEngine: String(process.env.OCR_ENGINE || 'auto') as AppConfig['ocrEngine'],
             ocrMinConfidence: Number(process.env.OCR_MIN_CONFIDENCE || 25),
+            ocrMaxSeconds: Number(process.env.OCR_MAX_SECONDS || 14400),
+            ocrChunkSeconds: Number(process.env.OCR_CHUNK_SECONDS || 1800),
+            ocrPgsripTimeoutSeconds: Number(process.env.OCR_PGSRIP_TIMEOUT_SECONDS || 7200),
+            ocrFfmpegTimeoutSeconds: Number(process.env.OCR_FFMPEG_TIMEOUT_SECONDS || 3600),
+            ocrChunkRetries: Number(process.env.OCR_CHUNK_RETRIES || 1),
+            ocrResumeTtlHours: Number(process.env.OCR_RESUME_TTL_HOURS || 24),
+            ocrJobIdleTimeoutMs: Number(process.env.OCR_JOB_IDLE_TIMEOUT_MS || 60 * 60 * 1000),
+            ocrJobAbsoluteTimeoutMs: Number(process.env.OCR_JOB_ABSOLUTE_TIMEOUT_MS || 6 * 60 * 60 * 1000),
             automationConcurrency: 1,
             notificationEnabled: true,
             notificationLowConfidenceThreshold: 0.6
@@ -83,7 +91,7 @@ export const ConfigService = {
                 config.mediaRoots = JSON.parse(row.value) as MediaRoot[]
             } else if (row.key === 'customStylePresets') {
                 config.customStylePresets = JSON.parse(row.value)
-            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs'].includes(row.key)) {
+            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'

@@ -6,7 +6,7 @@ on:
       keep_version:
         description: '保留的版本 tag，逗号分隔'
         required: false
-        default: 'v2.7.0,2.7.0,latest'
+        default: 'v2.8.0,2.8.0,latest'
 
 permissions:
   contents: read

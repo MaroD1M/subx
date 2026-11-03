@@ -1,6 +1,6 @@
 {
   "name": "subx",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "type": "module",
   "private": true,
   "scripts": {
@@ -17,7 +17,8 @@
     "format": "prettier --write .",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
-    "test:pg": "vitest run server/utils/__tests__/pgLive.test.ts"
+    "test:pg": "vitest run server/utils/__tests__/pgLive.test.ts",
+    "test:ocr": "python3 -m unittest discover -s ocr-service/tests -v"
   },
   "dependencies": {
     "@nuxt/ui": "^4.12.0",

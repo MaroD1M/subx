@@ -59,6 +59,14 @@ const ALLOWED_KEYS = new Set([
   'ocrApiKey',
   'ocrEngine',
   'ocrMinConfidence',
+  'ocrMaxSeconds',
+  'ocrChunkSeconds',
+  'ocrPgsripTimeoutSeconds',
+  'ocrFfmpegTimeoutSeconds',
+  'ocrChunkRetries',
+  'ocrResumeTtlHours',
+  'ocrJobIdleTimeoutMs',
+  'ocrJobAbsoluteTimeoutMs',
   'automationConcurrency',
   'notificationEnabled',
   'notificationLowConfidenceThreshold'
@@ -123,6 +131,38 @@ export default defineEventHandler(async (event) => {
     }
     if (key === 'ocrEngine') {
       await ConfigService.updateConfig(key, ['auto', 'rapidocr', 'tesseract'].includes(String(value)) ? String(value) : 'auto')
+      continue
+    }
+    if (key === 'ocrMaxSeconds') {
+      await ConfigService.updateConfig(key, Math.max(300, Math.min(24 * 60 * 60, Number(value) || 14400)))
+      continue
+    }
+    if (key === 'ocrChunkSeconds') {
+      await ConfigService.updateConfig(key, Math.max(300, Math.min(4 * 60 * 60, Number(value) || 1800)))
+      continue
+    }
+    if (key === 'ocrPgsripTimeoutSeconds') {
+      await ConfigService.updateConfig(key, Math.max(300, Math.min(24 * 60 * 60, Number(value) || 7200)))
+      continue
+    }
+    if (key === 'ocrFfmpegTimeoutSeconds') {
+      await ConfigService.updateConfig(key, Math.max(60, Math.min(24 * 60 * 60, Number(value) || 3600)))
+      continue
+    }
+    if (key === 'ocrChunkRetries') {
+      await ConfigService.updateConfig(key, Math.max(0, Math.min(5, Math.floor(Number(value) || 0))))
+      continue
+    }
+    if (key === 'ocrResumeTtlHours') {
+      await ConfigService.updateConfig(key, Math.max(1, Math.min(168, Math.floor(Number(value) || 24))))
+      continue
+    }
+    if (key === 'ocrJobIdleTimeoutMs') {
+      await ConfigService.updateConfig(key, Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(value) || 60 * 60 * 1000)))
+      continue
+    }
+    if (key === 'ocrJobAbsoluteTimeoutMs') {
+      await ConfigService.updateConfig(key, Math.max(10 * 60 * 1000, Math.min(7 * 24 * 60 * 60 * 1000, Number(value) || 6 * 60 * 60 * 1000)))
       continue
     }
     if (key === 'asrUploadTimeoutMs') {

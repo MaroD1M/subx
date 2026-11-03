@@ -2,7 +2,7 @@
 
 > 把 NAS 里的生肉视频，变成能直接看的双语字幕。
 
-当前版本：**v2.7.0** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.8.0** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
 
 [项目地址](https://github.com/MaroD1M/subx) · [问题反馈](https://github.com/MaroD1M/subx/issues)
 
@@ -10,14 +10,18 @@
 
 ---
 
-## ✨ v2.7.0 新东西
+## ✨ v2.8.0 新东西
 
-- 📁 **目录级批量选择**：多选模式可直接勾选目录，递归扫描子目录；默认只加入视频，同名外挂字幕不会重复入队。
-- 🎯 **批量轨道策略**：字幕/音轨语言优先、默认轨优先、强制轨开关、无字幕回退 ASR，策略会随任务保存。
-- 🧹 **同集版本去重**：同一目录下相同 `SxxExx` 自动保留体积最大的版本，避免 FLUX / PTERWEB 等版本重复翻译。
-- 🔔 **通知内容更完整**：输出模式、字幕格式、双语排版、字幕来源、模型、耗时和输出路径都会进入通知。
-- 🧾 **历史与任务详情更清楚**：直接显示仅译文 / 双语 / 仅原文字幕，长模型名不再挤压目标语言等字段。
-- 🛠️ **自动化与 OCR 更稳**：包含/排除正则增加说明和模板；OCR 位图字幕识别、PGS 完整性校验和诊断日志同步增强。
+- 🎬 **长电影 OCR 不再被 2 小时限制误拦**：默认上限提升到 4 小时，并可在应用设置页调整。
+- 🧩 **PGS 长片直通**：PGS 优先走 pgsrip，不再强制整片抽帧；失败时自动回退到分段图像 OCR。
+- 💾 **VobSub / DVD 自动分段**：长视频按 30 分钟一段处理，每段完成立即清理帧文件。
+- 🔁 **断点续跑**：失败重试会复用已完成分段，断点默认保留 24 小时，避免整片重新 OCR。
+- ⚙️ **长视频参数进设置页**：最大时长、分段、PGS/抽帧超时、重试、断点、无进度超时和总任务上限都可配置。
+- 🧾 **错误提示更准确**：OCR 超时不再误报“供应商服务异常”，任务详情直接提示调大上限或改用语音识别。
+
+> v2.7.0 的目录批量选择、同集去重、批量轨道策略、通知详情继续保留。
+>
+> 更早版本的变化见 [CHANGELOG.md](CHANGELOG.md)。
 
 > 更早版本的变化见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -61,7 +65,7 @@
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.7.0
+    image: ghcr.io/marod1m/subx:v2.8.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -89,7 +93,7 @@ docker compose up -d
 
 访问 `http://NAS_IP:3000`，第一次进入先设置至少 8 位访问口令。
 
-> 镜像体积参考：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.7.0 预计接近）。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
+> 镜像体积参考：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.0 预计接近）。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
 >
 > 根目录 [`docker-compose.yml`](docker-compose.yml) 已逐项注释端口、卷、环境变量、健康检查、资源限制和 profiles；完整变量表见 [部署文档第 4 节](docs/deployment.md#4-环境变量与参数)。
 
@@ -118,7 +122,7 @@ docker compose up -d
 | **核对** | 筛选、批量重译、三栏编辑、调序、分页、实时预览 |
 | **自动化** | 目录监控、历史回填、规则过滤、通知、API Token、调用审计 |
 | **多引擎** | 内置 faster-whisper、whisper.cpp、OpenAI 兼容云 ASR 兜底；有字幕也可强制语音识别 |
-| **OCR** | 内置 Tesseract / RapidOCR，处理 PGS / VobSub / DVD 图像字幕 |
+| **OCR** | 内置 Tesseract / RapidOCR，处理 PGS / VobSub / DVD；长电影支持 PGS 直通和分段断点 |
 | **模型管理** | 下载进度、速度、剩余时间、暂停、续传、取消、重试、卸载、代理 |
 | **质量** | 双模型评分、问题标签、低分核对、质量报告、AI 校对与术语学习 |
 | **集成** | Sonarr/Radarr/Jellyfin/Plex/Emby/Bazarr Webhook、路径映射 |
@@ -204,7 +208,7 @@ ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/a
 >
 > 需要拆分部署时仍可使用独立 CPU sidecar：`docker compose --profile asr up -d asr`，地址改为 `http://subx-asr:8000`。
 >
-> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.7.0`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
+> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.8.0`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
 
 ---
 
@@ -257,25 +261,23 @@ curl -H "Authorization: Bearer subx_xxx" \
 
 ---
 
-## ⬆️ 升级到 v2.7.0
+## ⬆️ 升级到 v2.8.0
 
 ```bash
 docker compose pull
 docker compose up -d --force-recreate
 ```
 
-本版新增目录级批量选择、同集多版本去重、批量轨道策略、通知详情和 OCR 稳定性改进。从 v2.6.2 升级无需调整卷或环境变量，重新拉取镜像即可。
+本版重点解决长电影 OCR 失败：PGS 直通、VobSub/DVD 分段、断点续跑、可配置超时，并把参数放进应用设置页。从 v2.7.0 升级无需调整卷或环境变量。
 
 升级说明：
 
-- 数据库会自动新增 `track_policy_json` 字段，无需手动迁移；旧任务没有策略时会继续使用原来的自动选轨逻辑。
-- 批量目录扫描默认只加入视频文件；同名外挂字幕由视频自动匹配，不再单独重复入队。
-- v2.7.0 单镜像继续包含主应用、ASR 和 OCR；旧的 `--profile asr` / `--profile ocr` 不再需要。
-- 新镜像启动时会等 ASR/OCR 健康检查通过，低配机器首次启动可能多等 10–30 秒，这是正常的。
-- 新增 `./data/models:/models` 卷；模型需要在设置页手动下载，或复用旧的模型缓存。
-- 旧的 `http://subx-asr:8000` / `http://subx-ocr:8000` 地址会一次性迁移到 `127.0.0.1`；迁移后以设置页保存的地址为准。如需继续连接外部 sidecar，设置 `SUBX_KEEP_LEGACY_SIDECAR_URLS=true`。
-- 主应用、ASR、OCR 镜像建议同步升级到 v2.7.0。
-- 未设置 `DATABASE_URL` 时继续使用 SQLite；PostgreSQL 会自动补充新字段，但仍建议使用低并发同步桥或等待异步 DB 层。
+- 新增的 OCR 长视频参数都有默认值，升级后可直接在「设置 → 图像字幕 OCR → 长视频与超时」调整。
+- 容器环境变量继续作为新实例默认值；设置页保存后以应用内参数为准，无需重启 OCR。
+- 拆分部署时请同步升级主应用和 OCR 镜像到 v2.8.0，旧版 OCR 服务不认识新的分段与超时参数。
+- 长视频断点位于 `temp/ocr/subx-ocr-job-*`，默认保留 24 小时；存储页可查看占用。
+- 主应用、ASR、OCR 镜像建议同步升级到 v2.8.0。
+- 未设置 `DATABASE_URL` 时继续使用 SQLite；本次不需要数据库迁移。
 - 建议升级前备份 `./data/db`、`./data/models` 与 PostgreSQL 数据库。
 
 ---
@@ -322,6 +324,7 @@ npm run dev
 npm run lint
 npm run typecheck
 npm test
+npm run test:ocr
 npm run build
 ```
 

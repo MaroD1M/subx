@@ -33,4 +33,21 @@ describe('ConfigService local service migration', () => {
     const saved = await ConfigService.getConfig(true)
     expect(saved.asrBaseUrl).toBe('http://subx-asr:8000')
   })
+
+  it('provides and persists OCR long-video settings', async () => {
+    const defaults = await ConfigService.getConfig(true)
+    expect(defaults.ocrMaxSeconds).toBe(14400)
+    expect(defaults.ocrChunkSeconds).toBe(1800)
+    expect(defaults.ocrJobIdleTimeoutMs).toBe(60 * 60 * 1000)
+    expect(defaults.ocrJobAbsoluteTimeoutMs).toBe(6 * 60 * 60 * 1000)
+
+    await ConfigService.updateConfig('ocrMaxSeconds', 21600)
+    await ConfigService.updateConfig('ocrChunkSeconds', 3600)
+    await ConfigService.updateConfig('ocrChunkRetries', 2)
+
+    const saved = await ConfigService.getConfig(true)
+    expect(saved.ocrMaxSeconds).toBe(21600)
+    expect(saved.ocrChunkSeconds).toBe(3600)
+    expect(saved.ocrChunkRetries).toBe(2)
+  })
 })

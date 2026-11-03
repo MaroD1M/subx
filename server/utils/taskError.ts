@@ -1,5 +1,5 @@
 export interface TaskErrorInfo {
-  type: 'auth' | 'rate_limit' | 'model' | 'network' | 'timeout' | 'provider' | 'parse' | 'content' | 'unknown'
+  type: 'auth' | 'rate_limit' | 'model' | 'network' | 'timeout' | 'provider' | 'parse' | 'content' | 'ocr_limit' | 'ocr_timeout' | 'unknown'
   summary: string
 }
 
@@ -15,8 +15,14 @@ export function classifyTaskError(message: string): TaskErrorInfo {
   if (text.includes('model') && (text.includes('not found') || text.includes('does not exist') || text.includes('invalid'))) {
     return { type: 'model', summary: '模型不可用：请检查模型名称或供应商支持情况' }
   }
-  if (text.includes('长时间没有进度') || text.includes('超过最长执行时间') || text.includes('asr 音频上传超时')) {
+  if (text.includes('asr') && (text.includes('长时间没有进度') || text.includes('超过最长执行时间') || text.includes('asr 音频上传超时'))) {
     return { type: 'timeout', summary: 'ASR 识别超时：请检查服务负载，或调大 ASR_JOB_IDLE_TIMEOUT_MS / ASR_JOB_ABSOLUTE_TIMEOUT_MS' }
+  }
+  if (text.includes('ocr') && (text.includes('最大处理时长') || text.includes('ocr_max_seconds') || (text.includes('视频时长') && text.includes('超过')))) {
+    return { type: 'ocr_limit', summary: 'OCR 处理时长不足：请调大“设置 → 图像字幕 OCR → 长视频与超时”中的最大 OCR 时长，或改用语音识别' }
+  }
+  if (text.includes('ocr') && (text.includes('长时间没有进度') || text.includes('超过最长执行时间') || text.includes('ocr 任务超时'))) {
+    return { type: 'ocr_timeout', summary: 'OCR 任务超时：请调大“长视频与超时”中的无进度超时/总任务上限，或缩短分段时长' }
   }
   if (text.includes('etimedout') || text.includes('timeout') || text.includes('timed out')) {
     return { type: 'timeout', summary: '请求超时：请检查网络或稍后重试' }

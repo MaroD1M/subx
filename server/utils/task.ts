@@ -949,6 +949,14 @@ export const TaskService = {
                     trackIndex: task.trackIndex ?? 0,
                     engine: config.ocrEngine || 'auto',
                     minConfidence: config.ocrMinConfidence ?? 25,
+                    maxSeconds: config.ocrMaxSeconds,
+                    chunkSeconds: config.ocrChunkSeconds,
+                    pgsripTimeoutSeconds: config.ocrPgsripTimeoutSeconds,
+                    ffmpegTimeoutSeconds: config.ocrFfmpegTimeoutSeconds,
+                    chunkRetries: config.ocrChunkRetries,
+                    resumeTtlHours: config.ocrResumeTtlHours,
+                    idleTimeoutMs: config.ocrJobIdleTimeoutMs,
+                    absoluteTimeoutMs: config.ocrJobAbsoluteTimeoutMs,
                     onProgress: (progress, message) => {
                         const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
                         const mapped = 12 + Math.round(stepProgress * 0.08)

@@ -1,5 +1,5 @@
 # ============================================================
-# SubX v2.7.0 - 单镜像开箱即用
+# SubX v2.8.0 - 单镜像开箱即用
 # ============================================================
 # 默认只启动一个 subx 容器，内部包含：
 #   - Web / 翻译主应用
@@ -16,7 +16,7 @@
 # 「设置 → 语音识别 → 本地模型管理」手动开始下载，
 # 支持进度、速度、剩余时间、暂停、续传、取消、重试、卸载和代理。
 #
-# 镜像体积参考（v2.6.x 实测，v2.7.0 预计接近，不含模型）：
+# 镜像体积参考（v2.6.x 实测，v2.8.0 预计接近，不含模型）：
 #   amd64 下载约 586 MiB，解压后约 1.57 GiB
 #   arm64 下载约 520 MiB
 #   ASR 模型另算，建议 /models 预留 10–20GB
@@ -31,7 +31,7 @@ services:
   subx:
     # 固定版本，避免 latest 自动升级带来意外。
     # 想跟随最新版可改成 ghcr.io/marod1m/subx:latest
-    image: ghcr.io/marod1m/subx:v2.7.0
+    image: ghcr.io/marod1m/subx:v2.8.0
 
     # 容器名称，便于 docker logs / docker exec 使用。
     container_name: subx
@@ -185,8 +185,21 @@ services:
       # 低置信度过滤阈值（0–100），低于该值的结果会被丢弃。
       OCR_MIN_CONFIDENCE: ${OCR_MIN_CONFIDENCE:-25}
 
-      # 单个视频最大 OCR 时长（秒），超过直接报错。
-      OCR_MAX_SECONDS: ${OCR_MAX_SECONDS:-7200}
+      # OCR 总体最大处理时长（秒）；默认 4 小时，设置页可覆盖。
+      OCR_MAX_SECONDS: ${OCR_MAX_SECONDS:-14400}
+      # VobSub/DVD 分段时长（秒）。
+      OCR_CHUNK_SECONDS: ${OCR_CHUNK_SECONDS:-1800}
+      # PGS pgsrip 单次识别超时（秒）。
+      OCR_PGSRIP_TIMEOUT_SECONDS: ${OCR_PGSRIP_TIMEOUT_SECONDS:-7200}
+      # 单段抽帧/字幕提取超时（秒）。
+      OCR_FFMPEG_TIMEOUT_SECONDS: ${OCR_FFMPEG_TIMEOUT_SECONDS:-3600}
+      # 单段失败重试次数。
+      OCR_CHUNK_RETRIES: ${OCR_CHUNK_RETRIES:-1}
+      # OCR 断点保留时间（小时）。
+      OCR_RESUME_TTL_HOURS: ${OCR_RESUME_TTL_HOURS:-24}
+      # 主应用 OCR 无进度超时/总任务上限（毫秒）。
+      OCR_JOB_IDLE_TIMEOUT_MS: ${OCR_JOB_IDLE_TIMEOUT_MS:-3600000}
+      OCR_JOB_ABSOLUTE_TIMEOUT_MS: ${OCR_JOB_ABSOLUTE_TIMEOUT_MS:-21600000}
 
       # 主应用轮询 OCR 任务状态的间隔（毫秒）。高级参数，一般不需要改。
       # OCR_POLL_MS: 1500
@@ -294,7 +307,7 @@ services:
     profiles: ["asr"]
 
     # 优先使用预构建镜像；本地没有时会按 asr-service 构建。
-    image: ghcr.io/marod1m/subx-asr:v2.7.0
+    image: ghcr.io/marod1m/subx-asr:v2.8.0
     build:
       context: ./asr-service
 
@@ -425,7 +438,7 @@ services:
     profiles: ["ocr"]
 
     # 优先使用预构建镜像；本地没有时会按 ocr-service 构建。
-    image: ghcr.io/marod1m/subx-ocr:v2.7.0
+    image: ghcr.io/marod1m/subx-ocr:v2.8.0
     build:
       context: ./ocr-service
 
@@ -440,8 +453,14 @@ services:
       OCR_LANGUAGE: ${OCR_LANGUAGE:-en}
       # 可选 OCR 鉴权；设置后需在 SubX 设置页填写相同 Key。
       OCR_API_KEY: ${OCR_API_KEY:-}
-      # 单个视频最大 OCR 时长（秒）。
-      OCR_MAX_SECONDS: ${OCR_MAX_SECONDS:-7200}
+      # OCR 总体最大处理时长（秒）。
+      OCR_MAX_SECONDS: ${OCR_MAX_SECONDS:-14400}
+      # VobSub/DVD 分段时长、PGS 与抽帧超时、重试和断点保留。
+      OCR_CHUNK_SECONDS: ${OCR_CHUNK_SECONDS:-1800}
+      OCR_PGSRIP_TIMEOUT_SECONDS: ${OCR_PGSRIP_TIMEOUT_SECONDS:-7200}
+      OCR_FFMPEG_TIMEOUT_SECONDS: ${OCR_FFMPEG_TIMEOUT_SECONDS:-3600}
+      OCR_CHUNK_RETRIES: ${OCR_CHUNK_RETRIES:-1}
+      OCR_RESUME_TTL_HOURS: ${OCR_RESUME_TTL_HOURS:-24}
       # 低置信度过滤阈值（0–100）。
       OCR_MIN_CONFIDENCE: ${OCR_MIN_CONFIDENCE:-25}
       # 抽帧 OCR 帧率，低配可降到 1。

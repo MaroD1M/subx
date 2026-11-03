@@ -137,6 +137,14 @@ export interface AppConfig {
   ocrApiKey?: string
   ocrEngine?: 'auto' | 'rapidocr' | 'tesseract'
   ocrMinConfidence?: number
+  ocrMaxSeconds?: number         // OCR 总体安全上限
+  ocrChunkSeconds?: number       // 位图字幕分段抽帧时长
+  ocrPgsripTimeoutSeconds?: number // PGS pgsrip 单次识别超时
+  ocrFfmpegTimeoutSeconds?: number // 单段抽帧/提取超时
+  ocrChunkRetries?: number       // 单段失败重试次数
+  ocrResumeTtlHours?: number     // OCR 断点保留时间
+  ocrJobIdleTimeoutMs?: number   // OCR 无进度超时
+  ocrJobAbsoluteTimeoutMs?: number // OCR 总任务上限
   automationConcurrency?: number // 自动任务并发上限
   notificationEnabled?: boolean // 是否启用通知
   notificationLowConfidenceThreshold?: number // 低置信度通知阈值

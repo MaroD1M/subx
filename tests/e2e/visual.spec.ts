@@ -154,6 +154,11 @@ test('settings OCR tab is accessible', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
   await expect(page.getByText('OCR 与语音识别是并列的字幕来源')).toBeVisible()
   await expect(page.getByText('启用图像字幕 OCR')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(1500)
+  await page.getByRole('switch', { name: '启用图像字幕 OCR' }).click()
+  await expect(page.getByText('长视频与超时')).toBeVisible()
+  await expect(page.getByText('最大 OCR 时长（小时）')).toBeVisible()
   await expectNoSeriousA11y(page)
 })
 

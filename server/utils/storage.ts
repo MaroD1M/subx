@@ -15,6 +15,7 @@ import { useDb } from './db'
 import { isPathInside } from './pathSafety'
 import { isAudioInUse } from './asr/audioCache'
 import { getActiveTaskIds } from './activeTasks'
+import { ConfigService } from './config'
 
 export type StorageTarget =
   | 'asrAudio'
@@ -63,11 +64,21 @@ const OCR_TEMP_DIR = resolve(process.env.OCR_TEMP_DIR || join(TEMP_ROOT, 'ocr'))
 const OCR_TEMP_PREFIXES = ['subx-ocr-', 'subx-preprocess-']
 const TEMP_FILE_PATTERN = /^(?:download_orig_|clip_)|\.(?:partial|srt|mp3|wav)$/i
 const MIN_SAFE_AGE_MS = 5 * 60 * 1000
-const ocrMaxSeconds = Number(process.env.OCR_MAX_SECONDS || 7200)
-const OCR_SAFE_AGE_MS = Math.max(
-  60 * 60 * 1000,
-  (Number.isFinite(ocrMaxSeconds) && ocrMaxSeconds > 0 ? ocrMaxSeconds : 7200) * 1000 + 30 * 60 * 1000
-)
+
+async function ocrSafeAgeMs() {
+  const fallbackMax = Number(process.env.OCR_MAX_SECONDS || 14400)
+  const fallbackAbsolute = Number(process.env.OCR_JOB_ABSOLUTE_TIMEOUT_MS || 6 * 60 * 60 * 1000)
+  try {
+    const config = await ConfigService.getConfig()
+    const maxSeconds = Number(config.ocrMaxSeconds || fallbackMax)
+    const absoluteMs = Number(config.ocrJobAbsoluteTimeoutMs || fallbackAbsolute)
+    const resumeMs = Number(config.ocrResumeTtlHours || 24) * 60 * 60 * 1000
+    return Math.max(60 * 60 * 1000, Math.max(maxSeconds * 1000, absoluteMs, resumeMs) + 30 * 60 * 1000)
+  } catch {
+    const resumeMs = Number(process.env.OCR_RESUME_TTL_HOURS || 24) * 60 * 60 * 1000
+    return Math.max(60 * 60 * 1000, Math.max(fallbackMax * 1000, fallbackAbsolute, resumeMs) + 30 * 60 * 1000)
+  }
+}
 
 function belongsToActiveTask(name: string): boolean {
   return getActiveTaskIds().some(taskId => name.includes(taskId))
@@ -220,8 +231,9 @@ export const StorageService = {
       taskLogs: 7,
       translationCache: 30
     }
+    const ocrSafeAge = selected.includes('ocrTemp') ? await ocrSafeAgeMs() : 0
     const cutoffFor = (target: StorageTarget) => all
-      ? Date.now() - (target === 'ocrTemp' ? OCR_SAFE_AGE_MS : MIN_SAFE_AGE_MS)
+      ? Date.now() - (target === 'ocrTemp' ? ocrSafeAge : MIN_SAFE_AGE_MS)
       : Date.now() - (days || categoryDays[target]) * dayMs
 
     const removeFile = async (file: string, allowedRoot: string, cutoff: number) => {
