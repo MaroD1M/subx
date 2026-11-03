@@ -240,6 +240,7 @@ async function transcribeLocalJob(
       }
       if (!response.ok) {
         const detail = await response.text().catch(() => '')
+        await cancelRemoteJob(baseUrl, jobId, headers)
         throw new Error(`ASR 任务状态获取失败 (${response.status}): ${detail.slice(0, 300)}`)
       }
       const job = await response.json() as any
@@ -561,7 +562,19 @@ export const AsrService = {
       Math.round(Number(result.duration || 0) * 1000),
       Number(result.rtf || 0),
       confidence,
-      JSON.stringify(result)
+      JSON.stringify({
+        task: result.task,
+        engine: result.engine,
+        model: result.model,
+        device: result.device,
+        computeType: result.computeType,
+        language: result.language,
+        duration: result.duration,
+        elapsed: result.elapsed,
+        rtf: result.rtf,
+        segmentCount: result.segments.length,
+        diagnostics: result.diagnostics
+      })
     )
 
     const runId = Number(run.lastInsertRowid)
@@ -575,7 +588,7 @@ export const AsrService = {
         Math.round(Number(segment.start || 0) * 1000),
         Math.round(Number(segment.end || 0) * 1000),
         String(segment.text || ''),
-        JSON.stringify(segment.words || []),
+        JSON.stringify((segment.words || []).slice(0, 100)),
         Number(segment.confidence || 0),
         Number(segment.noSpeechProb || 0),
         segment.speaker || null

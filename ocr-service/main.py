@@ -39,6 +39,7 @@ MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "25"))
 OCR_FPS = max(0.5, float(os.getenv("OCR_FPS", "2")))
 OCR_WORKERS = max(1, int(os.getenv("OCR_WORKERS", "4")))
 OCR_ENGINE = os.getenv("OCR_ENGINE", "auto")
+MAX_JOBS = max(1, int(os.getenv("OCR_MAX_JOBS", "50")))
 _rapidocr_engine = None
 TESS_LANG = {
     "en": "eng", "eng": "eng", "zh": "chi_sim+eng", "zh-cn": "chi_sim+eng",
@@ -732,6 +733,21 @@ def create_ocr_job(request: OcrRequest) -> dict[str, Any]:
     prune_jobs()
     job_id = uuid.uuid4().hex
     with ocr_jobs_lock:
+        if len(ocr_jobs) >= MAX_JOBS:
+            finished = sorted(
+                (
+                    (existing_id, job)
+                    for existing_id, job in ocr_jobs.items()
+                    if job.get("status") in {"done", "error", "cancelled"}
+                ),
+                key=lambda item: float(item[1].get("createdAt") or 0),
+            )
+            while len(ocr_jobs) >= MAX_JOBS and finished:
+                existing_id, _job = finished.pop(0)
+                ocr_jobs.pop(existing_id, None)
+                ocr_cancel.discard(existing_id)
+            if len(ocr_jobs) >= MAX_JOBS:
+                raise HTTPException(status_code=429, detail="OCR 任务过多，请稍后重试")
         ocr_jobs[job_id] = {
             "jobId": job_id,
             "status": "queued",

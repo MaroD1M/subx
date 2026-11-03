@@ -9,7 +9,7 @@
         type="button"
         class="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
         :class="activeMobileTab === 'files' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
-        @click="activeMobileTab = 'files'"
+        @click="switchMobileTab('files')"
       >
         文件
       </button>
@@ -17,7 +17,7 @@
         type="button"
         class="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
         :class="activeMobileTab === 'settings' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
-        @click="activeMobileTab = 'settings'"
+        @click="switchMobileTab('settings')"
       >
         翻译设置
       </button>
@@ -333,6 +333,11 @@ const searchQuery = ref('')
 const selectedFile = ref<FileNode | null>(null)
 const activeMobileTab = ref<'files' | 'settings'>('files')
 const rightTab = ref<'tracks' | 'settings'>('tracks')
+
+function switchMobileTab(tab: 'files' | 'settings') {
+  activeMobileTab.value = tab
+  if (tab === 'settings') rightTab.value = 'settings'
+}
 const batchMode = ref(false)
 const showAdvancedOptions = ref(false)
 const selectedNode = ref<FileNode | null>(null)

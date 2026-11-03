@@ -94,7 +94,11 @@ export async function getMediaRoots(): Promise<MediaRoot[]> {
 export async function getMediaRoot(rootId?: string | null): Promise<MediaRoot> {
   const roots = await getMediaRoots()
   if (!rootId) return roots[0]!
-  return roots.find(root => root.id === rootId) || roots[0]!
+  const matched = roots.find(root => root.id === rootId)
+  if (!matched) {
+    throw createError({ statusCode: 404, message: `媒体库不存在或已被删除：${rootId}` })
+  }
+  return matched
 }
 
 export async function resolveMediaPath(userPath: string, rootId?: string | null): Promise<string> {

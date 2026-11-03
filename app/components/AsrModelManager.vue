@@ -114,6 +114,7 @@ const props = defineProps<{
 const emit = defineEmits<{ select: [model: string] }>()
 
 const toast = useToast()
+const { confirm } = useConfirm()
 const loading = ref(true)
 const busy = ref('')
 const errorMessage = ref('')
@@ -300,7 +301,12 @@ async function resume(row: any) {
 
 async function cancel(row: any) {
   if (!row.job?.jobId) return
-  if (!window.confirm(`取消下载 ${row.model}？已下载的部分会被删除。`)) return
+  if (!(await confirm({
+    title: `取消下载 ${row.model}？`,
+    description: '已下载的部分会被删除，之后需要重新开始。',
+    confirmLabel: '取消下载',
+    color: 'error'
+  }))) return
   busy.value = row.key
   try {
     await $fetch('/api/asr/models-download-cancel', { method: 'POST', body: { jobId: row.job.jobId } })
@@ -313,7 +319,12 @@ async function cancel(row: any) {
 }
 
 async function remove(row: any) {
-  if (!window.confirm(`卸载模型 ${row.model}？磁盘上的模型文件会被删除。`)) return
+  if (!(await confirm({
+    title: `卸载模型 ${row.model}？`,
+    description: '磁盘上的模型文件会被删除，之后需要重新下载。',
+    confirmLabel: '卸载模型',
+    color: 'error'
+  }))) return
   busy.value = row.key
   try {
     await $fetch('/api/asr/models-delete', {

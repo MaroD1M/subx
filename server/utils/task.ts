@@ -16,7 +16,8 @@ import { SubtitleService } from './subtitle'
 import { getMediaRoot, resolveMediaPath } from './mediaRoots'
 import { TranslationService, TRANSLATION_PROMPT_VERSION, type TranslationContext } from './translation'
 import { AsrService } from './asr/client'
-import { extractAudioCached, removeCachedAudio } from './asr/audioCache'
+import { acquireAudioLease, extractAudioCached, releaseAudioLease, removeCachedAudio } from './asr/audioCache'
+import { markTaskActive, unmarkTaskActive } from './activeTasks'
 import { OcrService } from './ocr/client'
 import { QualityService } from './quality'
 import { ConfigService } from './config'
@@ -810,6 +811,7 @@ export const TaskService = {
         assertTaskNotCancelled(taskId)
         const abortController = new AbortController()
         taskAbortControllers.set(taskId, abortController)
+        markTaskActive(taskId)
         const signal = abortController.signal
         const tempDir = join(process.cwd(), 'temp')
         let taskForCleanup: TranslationTask | null = null
@@ -920,7 +922,7 @@ export const TaskService = {
                     onProgress: (progress, message) => {
                         const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
                         const mapped = 12 + Math.round(stepProgress * 0.08)
-                        void this.updateStatus(taskId, 'ocr', mapped, { stepProgress, stepMessage: message, currentText: message })
+                        void this.updateStatus(taskId, 'ocr', mapped, { stepProgress, stepMessage: message, currentText: message }).catch(error => console.error('[Task] Failed to update OCR progress', error))
                     }
                 }, signal)
                 const persisted = AsrService.persistResult(taskId, ocrResult)
@@ -960,9 +962,10 @@ export const TaskService = {
                             stepProgress,
                             stepMessage: message,
                             currentText: message
-                        })
+                        }).catch(error => console.error('[Task] Failed to update audio extraction progress', error))
                     }
                 )
+                acquireAudioLease(audioPath)
                 await this.updateStatus(taskId, 'transcribing', 16, {
                     stepProgress: 0,
                     stepMessage: '音频已就绪，正在启动语音识别...',
@@ -997,7 +1000,7 @@ export const TaskService = {
                             stepProgress,
                             stepMessage: message,
                             currentText: message
-                        })
+                        }).catch(error => console.error('[Task] Failed to update ASR progress', error))
                     }
                 }, signal)
                 const persisted = AsrService.persistResult(taskId, asrResult)
@@ -1120,7 +1123,7 @@ export const TaskService = {
                     stepProgress,
                     stepMessage: `已翻译 ${globalCompletedChunks}/${totalChunks} 个文本块`,
                     currentText: `翻译进度: ${globalCompletedChunks}/${totalChunks}`
-                })
+                }).catch(error => console.error('[Task] Failed to update translation progress', error))
             }
 
             const promises = chunks.map((chunk, index) => limit(async () => {
@@ -1283,7 +1286,7 @@ export const TaskService = {
                     totalChunks,
                     completedChunks: globalCompletedChunks,
                     log: `[AI] 块 #${index + 1} 翻译完成 (${globalCompletedChunks}/${totalChunks})`
-                })
+                }).catch(error => console.error('[Task] Failed to update chunk progress', error))
             }))
 
             await Promise.all(promises)
@@ -1398,6 +1401,8 @@ export const TaskService = {
         } finally {
             cancelledTaskIds.delete(taskId)
             taskAbortControllers.delete(taskId)
+            unmarkTaskActive(taskId)
+            if (audioPath) releaseAudioLease(audioPath)
             if (taskForCleanup?.sourceType === 'embedded' && srtPath && existsSync(srtPath)) {
                 try {
                     rmSync(srtPath, { force: true })

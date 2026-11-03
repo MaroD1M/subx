@@ -6,6 +6,24 @@ import { VideoService } from '../video'
 
 export type AudioProgressCallback = (progress: number, message: string) => void
 
+const audioLeases = new Map<string, number>()
+
+export function acquireAudioLease(audioPath: string) {
+  if (!audioPath) return
+  audioLeases.set(audioPath, (audioLeases.get(audioPath) || 0) + 1)
+}
+
+export function releaseAudioLease(audioPath: string) {
+  if (!audioPath) return
+  const count = (audioLeases.get(audioPath) || 0) - 1
+  if (count > 0) audioLeases.set(audioPath, count)
+  else audioLeases.delete(audioPath)
+}
+
+export function isAudioInUse(audioPath: string): boolean {
+  return (audioLeases.get(audioPath) || 0) > 0
+}
+
 export function getAsrAudioCacheDir() {
   return join(process.cwd(), 'temp', 'asr-audio')
 }
@@ -63,6 +81,7 @@ export async function extractAudioCached(
 
 export function removeCachedAudio(audioPath?: string | null) {
   if (!audioPath) return
+  if (isAudioInUse(audioPath)) return
   if (!audioPath.startsWith(`${getAsrAudioCacheDir()}${sep}`)) return
   try {
     rmSync(audioPath, { force: true })

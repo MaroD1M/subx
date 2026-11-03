@@ -424,7 +424,13 @@
               <UButton label="刷新" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="storageLoading" @click="loadStorage" />
             </template>
 
-            <div v-if="storageLoading && !storage" class="py-8 text-center text-xs text-gray-500 dark:text-gray-400">正在统计存储占用...</div>
+            <div v-if="storageLoading && !storage" class="space-y-3" aria-label="正在统计存储占用">
+              <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div v-for="index in 4" :key="index" class="skeleton h-20" />
+              </div>
+              <div class="skeleton h-3 w-full" />
+              <div class="skeleton h-56 w-full" />
+            </div>
             <div v-else-if="storage" class="space-y-4">
               <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <div class="surface-muted p-3"><p class="app-meta">磁盘总量</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(storage.disk.totalBytes) }}</p></div>

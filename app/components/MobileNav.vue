@@ -1,5 +1,5 @@
 <template>
-  <nav aria-label="主导航" class="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200/80 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/95 md:hidden">
+  <nav aria-label="主导航" class="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200/80 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/95 xl:hidden">
     <div class="mx-auto grid max-w-lg grid-cols-5">
       <NuxtLink
         v-for="item in items"
@@ -29,6 +29,9 @@ const items = [
 
 function isActive(path: string) {
   if (path === '/') return route.path === '/'
+  if (path === '/history') {
+    return route.path.startsWith('/history') || route.path.startsWith('/task') || route.path.startsWith('/review')
+  }
   return route.path.startsWith(path)
 }
 </script>

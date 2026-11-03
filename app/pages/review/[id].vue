@@ -285,6 +285,7 @@ const route = useRoute()
 const taskId = String(route.params.id)
 const focusedSubtitleId = ref('')
 const toast = useToast()
+const { confirm } = useConfirm()
 const { data: appConfig } = await useFetch('/api/config')
 const qualityThreshold = computed(() => Number(appConfig.value?.qualityScoreThreshold ?? 0.7))
 const saving = ref(false)
@@ -545,9 +546,14 @@ function isEntryDirty(entry: any) {
     || snapshot.edited !== !!entry.edited
 }
 
-function confirmLeaveIfDirty() {
+async function confirmLeaveIfDirty() {
   if (dirtyCount.value <= 0) return true
-  return window.confirm('当前有未保存修改，确定要离开吗？')
+  return await confirm({
+    title: '离开字幕核对？',
+    description: '当前有未保存修改，离开后会丢失本次编辑。',
+    confirmLabel: '放弃修改并离开',
+    color: 'warning'
+  })
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -880,7 +886,7 @@ async function exportReviewed() {
 }
 
 async function discardReview() {
-  if (!confirmLeaveIfDirty()) return
+  if (!(await confirmLeaveIfDirty())) return
   try {
     await $fetch(`/api/tasks/${taskId}/review-discard`, { method: 'POST' })
     toast.add({ title: '已放弃本次翻译成果', color: 'warning' })

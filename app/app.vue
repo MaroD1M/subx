@@ -18,12 +18,12 @@
         />
 
         <div class="flex min-w-0 flex-1 flex-col">
-          <header class="sticky top-0 z-40 border-b border-gray-200/80 bg-white/90 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/90 lg:hidden">
+          <header class="sticky top-0 z-40 border-b border-gray-200/80 bg-white/90 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/90 xl:hidden">
             <AppContainer class="flex h-14 items-center justify-between px-4 sm:px-6">
               <NuxtLink to="/" class="flex min-w-0 items-center gap-2" aria-label="SubX 首页">
                 <img src="/logo.svg" alt="" class="h-8 w-8 rounded-xl shadow-sm" />
                 <span class="text-lg font-black text-primary-700 dark:text-primary-400">SubX</span>
-                <span class="version-badge" :class="mobileVersionClass">v{{ appVersion }}</span>
+                <span class="version-badge version-ok">v{{ appVersion }}</span>
               </NuxtLink>
               <div class="flex items-center gap-1">
                 <UButton v-if="authenticated" icon="i-lucide-log-out" variant="ghost" color="neutral" size="sm" title="登出" aria-label="登出" @click="handleLogout" />
@@ -40,8 +40,8 @@
             </AppContainer>
           </header>
 
-          <main id="main-content" tabindex="-1" class="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 md:pb-8 lg:px-8 lg:py-6">
-            <NuxtPage />
+          <main id="main-content" tabindex="-1" class="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 xl:px-8 xl:py-6">
+            <NuxtPage :transition="{ name: 'page', mode: 'out-in' }" />
           </main>
         </div>
 
@@ -49,9 +49,10 @@
       </div>
 
       <main v-else id="main-content" tabindex="-1" class="h-screen w-full">
-        <NuxtPage />
+        <NuxtPage :transition="{ name: 'page', mode: 'out-in' }" />
       </main>
 
+      <AppConfirmDialog />
       <UToaster />
     </div>
   </UApp>
@@ -67,11 +68,6 @@ const sidebarCollapsed = ref(false)
 const runtimeConfig = useRuntimeConfig()
 const appVersion = runtimeConfig.public.appVersion
 const latestVersion = ref('')
-
-const mobileVersionClass = computed(() => {
-  if (!latestVersion.value) return 'version-err'
-  return latestVersion.value === appVersion ? 'version-ok' : 'version-stale'
-})
 
 function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value

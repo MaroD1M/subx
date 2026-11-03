@@ -245,6 +245,7 @@ volumes:
 | `OCR_WORKERS` | `4` | 并行 OCR 线程数；低配可降到 `2` |
 | `OCR_MIN_CONFIDENCE` | `25` | 低置信度过滤阈值（0–100） |
 | `OCR_MAX_SECONDS` | `7200` | 单个视频最大 OCR 时长；超过直接报错 |
+| `OCR_MAX_JOBS` | `50` | OCR 内存任务队列上限；超过时清理已结束任务，仍满则返回 429 |
 
 ### 4.4 数据库 / 多 Worker
 

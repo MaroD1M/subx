@@ -13,6 +13,8 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { useDb } from './db'
 import { isPathInside } from './pathSafety'
+import { isAudioInUse } from './asr/audioCache'
+import { getActiveTaskIds } from './activeTasks'
 
 export type StorageTarget =
   | 'asrAudio'
@@ -60,6 +62,15 @@ const MODEL_DIR = process.env.ASR_MODEL_DIR || '/models'
 const OCR_TEMP_PREFIXES = ['subx-ocr-', 'subx-preprocess-']
 const TEMP_FILE_PATTERN = /^(?:download_orig_|clip_)|\.(?:partial|srt|mp3|wav)$/i
 const MIN_SAFE_AGE_MS = 5 * 60 * 1000
+const ocrMaxSeconds = Number(process.env.OCR_MAX_SECONDS || 7200)
+const OCR_SAFE_AGE_MS = Math.max(
+  60 * 60 * 1000,
+  (Number.isFinite(ocrMaxSeconds) && ocrMaxSeconds > 0 ? ocrMaxSeconds : 7200) * 1000 + 30 * 60 * 1000
+)
+
+function belongsToActiveTask(name: string): boolean {
+  return getActiveTaskIds().some(taskId => name.includes(taskId))
+}
 
 function asrAudioDefaultDays() {
   const value = Number(process.env.ASR_AUDIO_CACHE_DAYS || 14)
@@ -201,7 +212,7 @@ export const StorageService = {
       translationCache: 30
     }
     const cutoffFor = (target: StorageTarget) => all
-      ? Date.now() - MIN_SAFE_AGE_MS
+      ? Date.now() - (target === 'ocrTemp' ? OCR_SAFE_AGE_MS : MIN_SAFE_AGE_MS)
       : Date.now() - (days || categoryDays[target]) * dayMs
 
     const removeFile = async (file: string, allowedRoot: string, cutoff: number) => {
@@ -232,13 +243,13 @@ export const StorageService = {
       result.categories.push(target)
       try {
         if (target === 'asrAudio') {
-          await cleanDirectoryFiles(ASR_AUDIO_DIR, 'asrAudio')
+          await cleanDirectoryFiles(ASR_AUDIO_DIR, 'asrAudio', name => !isAudioInUse(join(ASR_AUDIO_DIR, name)))
         } else if (target === 'aiLogs') {
           await cleanDirectoryFiles(AI_LOGS_DIR, 'aiLogs')
         } else if (target === 'taskTemp') {
-          await cleanDirectoryFiles(TEMP_ROOT, 'taskTemp', name => TEMP_FILE_PATTERN.test(name))
+          await cleanDirectoryFiles(TEMP_ROOT, 'taskTemp', name => TEMP_FILE_PATTERN.test(name) && !belongsToActiveTask(name))
         } else if (target === 'taskLogs') {
-          await cleanDirectoryFiles(TASK_LOG_DIR, 'taskLogs', name => name.startsWith('task_') && name.endsWith('.log'))
+          await cleanDirectoryFiles(TASK_LOG_DIR, 'taskLogs', name => name.startsWith('task_') && name.endsWith('.log') && !belongsToActiveTask(name))
         } else if (target === 'ocrTemp') {
           const root = tmpdir()
           const entries = await readdir(root, { withFileTypes: true }).catch(() => [])

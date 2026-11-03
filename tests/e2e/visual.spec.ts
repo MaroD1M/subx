@@ -28,9 +28,20 @@ async function expectNoSeriousA11y(page: import('@playwright/test').Page) {
 test('home visual and accessibility', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByText('文件浏览器')).toBeVisible()
+  await expect(page.getByText('选择一个视频开始')).toBeVisible()
   await expect(page).toHaveScreenshot('home.png', {
-    fullPage: true,
-    mask: [page.locator('.version-badge')]
+    fullPage: true
+  })
+  await expectNoSeriousA11y(page)
+})
+
+test('home dark visual and accessibility', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.goto('/')
+  await expect(page.locator('html')).toHaveClass(/dark/)
+  await expect(page.getByText('文件浏览器')).toBeVisible()
+  await expect(page).toHaveScreenshot('home-dark.png', {
+    fullPage: true
   })
   await expectNoSeriousA11y(page)
 })
@@ -39,8 +50,7 @@ test('history visual and accessibility', async ({ page }) => {
   await page.goto('/history')
   await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
   await expect(page).toHaveScreenshot('history.png', {
-    fullPage: true,
-    mask: [page.locator('.version-badge')]
+    fullPage: true
   })
   await expectNoSeriousA11y(page)
 })
@@ -49,18 +59,19 @@ test('review visual and accessibility', async ({ page }) => {
   await page.goto('/review/preview-review')
   await expect(page.getByRole('heading', { name: '字幕核对' })).toBeVisible()
   await expect(page).toHaveScreenshot('review.png', {
-    fullPage: true,
-    mask: [page.locator('.version-badge')]
+    fullPage: true
   })
   await expectNoSeriousA11y(page)
 })
 
 test('task detail visual and accessibility', async ({ page }) => {
+  const response = page.waitForResponse(item => item.url().includes('/api/tasks/preview-done') && item.status() === 200).catch(() => null)
   await page.goto('/task/preview-done')
+  await response
+  await page.waitForTimeout(300)
   await expect(page.getByRole('heading', { name: /翻译任务/ })).toBeVisible()
   await expect(page).toHaveScreenshot('task.png', {
-    fullPage: true,
-    mask: [page.locator('.version-badge')]
+    fullPage: true
   })
   await expectNoSeriousA11y(page)
 })
@@ -70,8 +81,7 @@ test('automation visual and accessibility', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '自动化' })).toBeVisible()
   await expect(page.getByText('Movies').first()).toBeVisible()
   await expect(page).toHaveScreenshot('automation.png', {
-    fullPage: true,
-    mask: [page.locator('.version-badge')]
+    fullPage: true
   })
   await expectNoSeriousA11y(page)
 })
@@ -125,8 +135,7 @@ test('settings visual and accessibility', async ({ page }) => {
   await page.goto('/settings')
   await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
   await expect(page).toHaveScreenshot('settings.png', {
-    fullPage: true,
-    mask: [page.locator('.version-badge')]
+    fullPage: true
   })
   await expectNoSeriousA11y(page)
 })
@@ -230,8 +239,7 @@ test('ASR card stays visible when toggled off without subtitle tracks', async ({
   await page.evaluate(() => window.scrollTo(0, 0))
   await page.waitForTimeout(300)
   await expect(page).toHaveScreenshot('asr-source.png', {
-    fullPage: false,
-    mask: [page.locator('.version-badge')]
+    fullPage: false
   })
 
   await asrSwitch.click()
@@ -298,6 +306,16 @@ test('login help modal explains passkey recovery', async ({ browser }) => {
   await context.close()
 })
 
+test.describe('tablet', () => {
+  test.use({ viewport: { width: 900, height: 900 } })
+
+  test('tablet keeps bottom navigation available', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('nav[aria-label="主导航"].fixed')).toBeVisible()
+    await expect(page.getByRole('link', { name: '设置' }).last()).toBeVisible()
+  })
+})
+
 test.describe('mobile', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
@@ -305,8 +323,7 @@ test.describe('mobile', () => {
     await page.goto('/')
     await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
     await expect(page).toHaveScreenshot('mobile-home.png', {
-      fullPage: true,
-      mask: [page.locator('.version-badge')]
+      fullPage: true
     })
   })
 })

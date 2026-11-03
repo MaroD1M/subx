@@ -1,6 +1,6 @@
 <template>
   <aside
-    class="sticky top-0 z-40 hidden h-screen shrink-0 flex-col border-r border-gray-200/80 bg-white/85 backdrop-blur-xl transition-[width] duration-200 dark:border-gray-800/80 dark:bg-gray-950/80 lg:flex"
+    class="sticky top-0 z-40 hidden h-screen shrink-0 flex-col border-r border-gray-200/80 bg-white/85 backdrop-blur-xl transition-[width] duration-200 dark:border-gray-800/80 dark:bg-gray-950/80 xl:flex"
     :class="collapsed ? 'w-16' : 'w-60'"
   >
     <div class="flex h-16 shrink-0 items-center border-b border-gray-100/90 px-3 dark:border-gray-800/80">
@@ -42,7 +42,7 @@
 
     <div class="shrink-0 border-t border-gray-100/90 p-2 dark:border-gray-800/80">
       <div v-if="!collapsed" class="mb-2 flex items-center rounded-xl bg-gray-50/80 px-2.5 py-2 dark:bg-gray-900/50">
-        <span class="version-badge" :class="versionClass" :title="versionTitle">v{{ appVersion }}</span>
+        <span class="version-badge version-ok" :title="versionTitle">v{{ appVersion }}</span>
       </div>
       <div class="space-y-1">
         <UButton
@@ -123,13 +123,11 @@ const navItems = [
 
 function isActive(path: string) {
   if (path === '/') return route.path === '/'
+  if (path === '/history') {
+    return route.path.startsWith('/history') || route.path.startsWith('/task') || route.path.startsWith('/review')
+  }
   return route.path.startsWith(path)
 }
-
-const versionClass = computed(() => {
-  if (!props.latestVersion) return 'version-err'
-  return props.latestVersion === props.appVersion ? 'version-ok' : 'version-stale'
-})
 
 const versionTitle = computed(() => {
   if (!props.latestVersion) return '版本检查不可用'

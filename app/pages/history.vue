@@ -228,6 +228,7 @@ const isClearing = ref(false)
 const retryingTaskId = ref('')
 const deletingTaskId = ref('')
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const page = ref(1)
 const pageSize = ref(50)
@@ -339,7 +340,12 @@ async function retryTask(taskId) {
 }
 
 async function deleteTask(taskId) {
-  if (!window.confirm('确认删除这条历史记录吗？此操作不可撤销。')) return
+  if (!(await confirm({
+    title: '删除这条历史记录？',
+    description: '任务记录、日志和核对数据会被删除，此操作不可撤销。',
+    confirmLabel: '删除记录',
+    color: 'error'
+  }))) return
 
   deletingTaskId.value = taskId
   try {
