@@ -2,7 +2,7 @@
 
 > 把 NAS 里的生肉视频，变成能直接看的双语字幕。
 
-当前版本：**v2.8.0** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.8.1** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
 
 [项目地址](https://github.com/MaroD1M/subx) · [问题反馈](https://github.com/MaroD1M/subx/issues)
 
@@ -10,8 +10,9 @@
 
 ---
 
-## ✨ v2.8.0 新东西
+## ✨ 近期亮点
 
+- 🩹 **v2.8.1 修复**：PGS 提取的 `.sup` 现在携带轨道语言和 forced/full 标记，避免 pgsrip 误过滤；OCR 成功回退后不再显示红色“错误”。
 - 🎬 **长电影 OCR 不再被 2 小时限制误拦**：默认上限提升到 4 小时，并可在应用设置页调整。
 - 🧩 **PGS 长片直通**：PGS 优先走 pgsrip，不再强制整片抽帧；失败时自动回退到分段图像 OCR。
 - 💾 **VobSub / DVD 自动分段**：长视频按 30 分钟一段处理，每段完成立即清理帧文件。
@@ -21,8 +22,6 @@
 
 > v2.7.0 的目录批量选择、同集去重、批量轨道策略、通知详情继续保留。
 >
-> 更早版本的变化见 [CHANGELOG.md](CHANGELOG.md)。
-
 > 更早版本的变化见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
@@ -65,7 +64,7 @@
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.8.0
+    image: ghcr.io/marod1m/subx:v2.8.1
     container_name: subx
     restart: unless-stopped
     ports:
@@ -93,7 +92,7 @@ docker compose up -d
 
 访问 `http://NAS_IP:3000`，第一次进入先设置至少 8 位访问口令。
 
-> 镜像体积参考：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.0 预计接近）。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
+> 镜像体积参考：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.1 预计接近）。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
 >
 > 根目录 [`docker-compose.yml`](docker-compose.yml) 已逐项注释端口、卷、环境变量、健康检查、资源限制和 profiles；完整变量表见 [部署文档第 4 节](docs/deployment.md#4-环境变量与参数)。
 
@@ -208,7 +207,7 @@ ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/a
 >
 > 需要拆分部署时仍可使用独立 CPU sidecar：`docker compose --profile asr up -d asr`，地址改为 `http://subx-asr:8000`。
 >
-> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.8.0`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
+> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.8.1`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
 
 ---
 
@@ -261,23 +260,22 @@ curl -H "Authorization: Bearer subx_xxx" \
 
 ---
 
-## ⬆️ 升级到 v2.8.0
+## ⬆️ 升级到 v2.8.1
 
 ```bash
 docker compose pull
 docker compose up -d --force-recreate
 ```
 
-本版重点解决长电影 OCR 失败：PGS 直通、VobSub/DVD 分段、断点续跑、可配置超时，并把参数放进应用设置页。从 v2.7.0 升级无需调整卷或环境变量。
+本版是 PGS 与日志显示的修复补丁：修正 pgsrip 对 `.sup` 语言/flags 的误过滤，并避免 OCR 成功回退后日志误显示为“错误”。从 v2.8.0 升级无需调整卷、环境变量或数据库。
 
 升级说明：
 
-- 新增的 OCR 长视频参数都有默认值，升级后可直接在「设置 → 图像字幕 OCR → 长视频与超时」调整。
-- 容器环境变量继续作为新实例默认值；设置页保存后以应用内参数为准，无需重启 OCR。
-- 拆分部署时请同步升级主应用和 OCR 镜像到 v2.8.0，旧版 OCR 服务不认识新的分段与超时参数。
-- 长视频断点位于 `temp/ocr/subx-ocr-job-*`，默认保留 24 小时；存储页可查看占用。
-- 主应用、ASR、OCR 镜像建议同步升级到 v2.8.0。
-- 未设置 `DATABASE_URL` 时继续使用 SQLite；本次不需要数据库迁移。
+- PGS 提取的 `.sup` 会使用轨道语言和 forced/full 标记命名，pgsrip 直通成功率更高。
+- 拆分部署时请同步升级主应用和 OCR 镜像到 v2.8.1；只升级主应用不会修复 OCR 服务端命名逻辑。
+- OCR 诊断日志现在归入系统分类；PGS 回退成功只显示警告，不再显示红色“错误”。
+- 长视频 OCR 参数仍可在「设置 → 图像字幕 OCR → 长视频与超时」调整。
+- 主应用、ASR、OCR 镜像建议同步升级到 v2.8.1。
 - 建议升级前备份 `./data/db`、`./data/models` 与 PostgreSQL 数据库。
 
 ---

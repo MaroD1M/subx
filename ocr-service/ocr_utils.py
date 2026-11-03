@@ -2,13 +2,40 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 PGS_CODECS = {"hdmv_pgs_subtitle", "pgssub"}
 
+PGSRIP_LANGUAGE_ALIASES = {
+    "eng": "en", "chi": "zh", "zho": "zh", "cmn": "zh", "chs": "zh", "cht": "zh",
+    "jpn": "ja", "kor": "ko", "fra": "fr", "fre": "fr", "deu": "de", "ger": "de",
+    "spa": "es", "ita": "it", "por": "pt", "rus": "ru", "tha": "th", "ara": "ar",
+    "hin": "hi", "tur": "tr", "vie": "vi", "ukr": "uk", "nld": "nl", "dut": "nl",
+    "pol": "pl", "swe": "sv", "dan": "da", "fin": "fi", "nor": "no", "ces": "cs",
+    "cze": "cs", "ell": "el", "gre": "el", "heb": "he", "ind": "id", "msa": "ms",
+    "may": "ms",
+}
+
 
 def is_pgs_codec(codec: str) -> bool:
     return str(codec or "").lower() in PGS_CODECS
+
+
+def pgsrip_language(value: str | None, fallback: str = "en") -> str:
+    text = str(value or fallback or "en").split("+")[0].strip()
+    if not text:
+        text = fallback or "en"
+    return PGSRIP_LANGUAGE_ALIASES.get(text.lower(), text)
+
+
+def pgsrip_sup_name(language: str | None, is_forced: bool = False, fallback: str = "en") -> str:
+    token = re.sub(r"[^A-Za-z0-9-]+", "", pgsrip_language(language, fallback)) or "und"
+    return f"subtitle.{token}{'.forced' if is_forced else ''}.sup"
+
+
+def pgsrip_track_flag(is_forced: bool) -> str:
+    return "forced" if is_forced else "full"
 
 
 def clamp_int(value: Any, fallback: int, minimum: int, maximum: int) -> int:

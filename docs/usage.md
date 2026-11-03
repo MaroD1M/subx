@@ -1,6 +1,6 @@
 # SubX 使用文档
 
-> 适用版本：v2.8.0
+> 适用版本：v2.8.1
 
 ## 目录
 
@@ -416,7 +416,7 @@ docker compose --profile asr-enhanced up -d asr-enhanced
 
 实现说明：
 
-- PGS 使用 FFmpeg 提取 `.sup`，再由 pgsrip + Tesseract/RapidOCR 按字幕 cue 识别；长电影不强制整片抽帧，pgsrip 失败时回退到分段位图 OCR。
+- PGS 使用 FFmpeg 提取 `.sup`，文件名会携带轨道语言和 forced/full 标记；再由 pgsrip + Tesseract/RapidOCR 按字幕 cue 识别。长电影不强制整片抽帧，pgsrip 失败时回退到分段位图 OCR。
 - pgsrip 结果为空、文本过少或时间覆盖明显不完整时，会自动回退到字幕图像 OCR。
 - VobSub / DVD 使用 FFmpeg 将位图字幕 overlay 到黑底后抽帧，先按字幕区域裁剪、放大、二值化，再做图像哈希去重和并行 OCR。
 - 空白帧按字幕区域有效亮像素判断，不再使用整帧平均亮度，避免普通白色字幕被误判为空白。

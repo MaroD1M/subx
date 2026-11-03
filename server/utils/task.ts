@@ -22,6 +22,7 @@ import { OcrService } from './ocr/client'
 import { QualityService } from './quality'
 import { ConfigService } from './config'
 import { classifyTaskError } from './taskError'
+import { resolveTaskLogCategory, type TaskLogCategory } from './taskLog'
 import { createProvider, normalizeProviderType } from './providers/registry'
 import type { BoundTranslationProvider } from './providers/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
@@ -50,8 +51,6 @@ function assertTaskNotCancelled(taskId: string) {
     }
 }
 
-type TaskLogCategory = 'system' | 'translation' | 'export' | 'error' | 'process'
-
 type ChunkRiskProfile = {
     tags: string[]
     stylePromptSuffix?: string
@@ -72,20 +71,12 @@ type ChunkDiagnostics = {
     finalStatus: 'ok' | 'partial' | 'fallback' | 'review'
 }
 
-function resolveLogCategory(step: string | null, level: 'info' | 'error' | 'warn', message: string): TaskLogCategory {
-    if (level === 'error' || step === 'error' || /失败|错误|异常|取消|error/i.test(message)) return 'error'
-    if (step === 'exporting' || /导出|保存|输出文件/i.test(message)) return 'export'
-    if (step === 'translating' || /翻译|文本块|chunk|tokens|模型|术语表|风格/i.test(message)) return 'translation'
-    if (step === 'queued' || step === 'probing' || step === 'extracting' || step === 'extracting_audio' || step === 'transcribing' || step === 'parsing' || /提取|解析|SRT|字幕|初始化|队列|创建|语音识别/i.test(message)) return 'system'
-    return 'process'
-}
-
 function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'error' | 'warn', message: string, category?: TaskLogCategory) {
     if (isTaskCancelled(taskId) && step !== 'cancelled' && step !== 'error') {
         return
     }
     const db = useDb()
-    const resolvedCategory = category || resolveLogCategory(step, level, message)
+    const resolvedCategory = category || resolveTaskLogCategory(step, level, message)
     db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
         .run(taskId, step, resolvedCategory, level, message)
 
@@ -799,7 +790,7 @@ export const TaskService = {
 
         if (data.log) {
             const level = status === 'error' ? 'error' : (data.level || 'info')
-            const category = data.category || resolveLogCategory(status, level, data.log)
+            const category = data.category || resolveTaskLogCategory(status, level, data.log)
             writeTaskLog(taskId, status, level, data.log, category)
             taskEvents.emit('progress', { ...payload, level, category })
             if (status === 'done' || status === 'error' || status === 'cancelled') {
@@ -969,7 +960,8 @@ export const TaskService = {
                     throw new Error('OCR 未生成有效字幕')
                 }
                 if (ocrResult.diagnostics) {
-                    writeTaskLog(taskId, 'ocr', 'info', `[OCR] ${JSON.stringify(ocrResult.diagnostics)}`)
+                    const level = ocrResult.diagnostics.pgsError ? 'warn' : 'info'
+                    writeTaskLog(taskId, 'ocr', level, `[OCR] ${JSON.stringify(ocrResult.diagnostics)}`, 'system')
                 }
                 task.sourceLanguage = ocrResult.language
                 task.asrRunId = persisted.runId

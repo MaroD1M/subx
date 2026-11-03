@@ -699,7 +699,7 @@ function resetLogs(entries: Array<{ type: 'info' | 'error', message: string, tim
 function resolveLogCategory(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
   if (log.category) return log.category
   const text = log.message || ''
-  if (log.type === 'error' || /失败|错误|中断|断开|异常|取消|error/i.test(text)) return 'error'
+  if (log.type === 'error' || /\b(?:error|failed|failure)\b|失败|错误|中断|断开|异常|取消/i.test(text)) return 'error'
   if (/导出|保存|输出文件|write/i.test(text)) return 'export'
   if (/翻译|文本块|chunk|tokens|模型|术语表|风格/i.test(text)) return 'translation'
   if (/提取|解析|SRT|字幕|初始化|队列|状态变更|创建|加载/i.test(text)) return 'system'

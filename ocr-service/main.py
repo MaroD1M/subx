@@ -31,7 +31,7 @@ except Exception:
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-from ocr_utils import clamp_int, is_pgs_codec, merge_chunk_segments, plan_chunks
+from ocr_utils import clamp_int, is_pgs_codec, merge_chunk_segments, pgsrip_language, pgsrip_sup_name, pgsrip_track_flag, plan_chunks
 
 MEDIA_ROOT = Path(os.getenv("OCR_MEDIA_ROOT", "/media")).resolve()
 OCR_TEMP_DIR = Path(os.getenv("OCR_TEMP_DIR", "/app/temp/ocr")).resolve()
@@ -239,8 +239,8 @@ def normalize_engine(value: str | None = None) -> str:
 
 
 def pgs_language(value: str) -> str:
-    # pgsrip 接受 en / pt-BR 这类带地区的语言代码。
-    return (value or DEFAULT_LANGUAGE).split("+")[0].strip() or DEFAULT_LANGUAGE
+    # pgsrip 接受 en / pt-BR 这类带地区的语言代码；同时把 chi/zho 等三位码规范为 zh。
+    return pgsrip_language(value, DEFAULT_LANGUAGE)
 
 
 def tess_language(value: str) -> str:
@@ -275,9 +275,17 @@ def process_error_detail(error: Any) -> str:
     return str(error)
 
 
-def extract_pgs(path: Path, stream_index: int, workdir: Path, timeout_seconds: int, cancelled: Callable[[], bool] | None = None) -> Path:
+def extract_pgs(
+    path: Path,
+    stream_index: int,
+    workdir: Path,
+    timeout_seconds: int,
+    language: str,
+    is_forced: bool,
+    cancelled: Callable[[], bool] | None = None,
+) -> Path:
     ffmpeg = require_tool("ffmpeg")
-    output = workdir / "subtitle.sup"
+    output = workdir / pgsrip_sup_name(language, is_forced)
     run_process([
         ffmpeg, "-y", "-v", "error", "-i", str(path),
         "-map", f"0:{stream_index}", "-c:s", "copy", "-f", "sup", str(output)
@@ -295,31 +303,49 @@ def rip_pgs(
     timeout_seconds: int = PGSRIP_TIMEOUT_SECONDS,
     heartbeat: Callable[[str], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
+    is_forced: bool = False,
 ) -> Path:
     if not PGSRIP_BIN:
         raise RuntimeError("pgsrip 未安装")
-    command = [
+
+    base_command = [
         PGSRIP_BIN,
-        "-l", language,
         "--force",
         "--format", "srt",
         "--no-tesseract-download",
+        "--with", pgsrip_track_flag(is_forced),
     ]
     resolved_engine = normalize_engine(engine)
     if resolved_engine in {"rapidocr", "tesseract"}:
-        command.extend(["--engine", resolved_engine])
-    command.append(str(sup_path))
-    stdout, stderr = run_process(
-        command,
-        timeout_seconds,
-        "PGS OCR",
-        heartbeat=heartbeat,
-        cancelled=cancelled,
-        cwd=workdir,
-    )
+        base_command.extend(["--engine", resolved_engine])
+
+    def execute(include_language: bool) -> tuple[str, str]:
+        command = [PGSRIP_BIN]
+        if include_language and language:
+            command.extend(["-l", language])
+        command.extend(base_command[1:])
+        command.append(str(sup_path))
+        return run_process(
+            command,
+            timeout_seconds,
+            "PGS OCR",
+            heartbeat=heartbeat,
+            cancelled=cancelled,
+            cwd=workdir,
+        )
+
+    stdout, stderr = execute(True)
     candidates = sorted(workdir.rglob("*.srt"))
-    if not candidates:
+    detail = (stderr or stdout or "").strip()[-2000:]
+    filtered_out = "filtered out" in detail.lower() or "0 pgs subtitle collected" in detail.lower()
+    if not candidates and filtered_out and language:
+        # .sup language is inferred from its filename. A mismatched or unusual language
+        # code can make pgsrip filter the only input file out. Retry without -l because
+        # the extracted filename already carries the track language.
+        stdout, stderr = execute(False)
+        candidates = sorted(workdir.rglob("*.srt"))
         detail = (stderr or stdout or "").strip()[-2000:]
+    if not candidates:
         raise RuntimeError(f"PGS OCR 未生成 SRT：{detail or 'pgsrip 没有输出'}")
     return candidates[0]
 
@@ -834,19 +860,35 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
 
         if pgs_codec:
             try:
+                track_language = str(info.get("language") or "").strip()
+                pgs_request_language = track_language if track_language.lower() not in {"", "und", "unknown"} else request.language
+                pgs_request_language = pgs_language(pgs_request_language)
+                is_forced = bool(info.get("is_forced"))
                 if progress:
                     progress(18, "正在提取 PGS 字幕")
-                sup_path = extract_pgs(path, int(info["stream_index"]), workdir, ffmpeg_timeout, cancelled)
+                sup_path = extract_pgs(
+                    path,
+                    int(info["stream_index"]),
+                    workdir,
+                    ffmpeg_timeout,
+                    pgs_request_language,
+                    is_forced,
+                    cancelled,
+                )
+                diagnostics["pgsLanguage"] = pgs_request_language
+                diagnostics["pgsSupFile"] = sup_path.name
+                diagnostics["pgsFlag"] = pgsrip_track_flag(is_forced)
                 if progress:
                     progress(45, "正在 OCR PGS 字幕")
                 srt_path = rip_pgs(
                     sup_path,
-                    pgs_language(request.language),
+                    pgs_request_language,
                     workdir,
                     request.engine,
                     pgsrip_timeout,
                     heartbeat=(lambda message: progress(50, message)) if progress else None,
                     cancelled=cancelled,
+                    is_forced=is_forced,
                 )
                 segments = parse_srt(srt_path)
                 suspicious = pgs_result_suspicious(segments, duration)

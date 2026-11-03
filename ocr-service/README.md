@@ -2,7 +2,7 @@
 
 图像字幕 OCR 服务，用于 PGS / VobSub / DVD。v2.5.0 起默认运行在 SubX 单镜像内部（`127.0.0.1:8001`），也可以独立 sidecar 部署。
 
-- PGS：FFmpeg 提取 `.sup` 后交给 pgsrip；长电影不强制整片抽帧，结果为空、文本过少或时间覆盖异常时自动回退到分段位图 OCR。
+- PGS：FFmpeg 提取 `.sup` 后交给 pgsrip；提取文件名会携带轨道语言和 forced/full 标记，避免 pgsrip 按语言或 flags 误过滤。长电影不强制整片抽帧，结果为空、文本过少或时间覆盖异常时自动回退到分段位图 OCR。
 - FFmpeg/pgsrip 失败时会保留 stderr 摘要，并通过任务错误返回，避免只看到 `exit status 1`。
 - VobSub / DVD：FFmpeg 将位图字幕 overlay 到黑色背景（不使用仅支持文本字幕的 `subtitles` 滤镜），按 `OCR_FPS` 抽帧，再按字幕区域亮像素检测空白、按图像哈希去重并并行 OCR。
 - 图像会先裁剪字幕区域、放大、灰度化、Otsu 二值化并反色为黑字白底，再交给 Tesseract；中英文优先尝试 RapidOCR。

@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ocr_utils import is_pgs_codec, merge_chunk_segments, plan_chunks
+from ocr_utils import is_pgs_codec, merge_chunk_segments, pgsrip_language, pgsrip_sup_name, pgsrip_track_flag, plan_chunks
 
 
 class OcrUtilsTests(unittest.TestCase):
@@ -12,6 +12,14 @@ class OcrUtilsTests(unittest.TestCase):
         self.assertTrue(is_pgs_codec("hdmv_pgs_subtitle"))
         self.assertTrue(is_pgs_codec("PGSsub"))
         self.assertFalse(is_pgs_codec("dvd_subtitle"))
+
+    def test_pgsrip_sup_name_includes_language_and_flags(self):
+        self.assertEqual(pgsrip_language("chi"), "zh")
+        self.assertEqual(pgsrip_sup_name("chi", True), "subtitle.zh.forced.sup")
+        self.assertEqual(pgsrip_sup_name("zh-CN", False), "subtitle.zh-CN.sup")
+        self.assertEqual(pgsrip_sup_name("und", False, "en"), "subtitle.und.sup")
+        self.assertEqual(pgsrip_track_flag(True), "forced")
+        self.assertEqual(pgsrip_track_flag(False), "full")
 
     def test_plan_chunks(self):
         self.assertEqual(plan_chunks(60, 1800), [(0.0, 60.0)])

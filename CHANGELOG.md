@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.8.1 - 2026-11-03
+
+### Fixed
+
+- 修复 PGS 直通 pgsrip 被语言/flags 过滤的问题：提取的 `.sup` 文件名现在携带轨道语言和 forced/full 标记，语言代码不匹配时会自动去掉 `-l` 重试。
+- 修复 OCR 成功回退后日志仍显示红色“错误”的问题：`pgsError` 等 JSON 字段不再触发错误分类，OCR 诊断日志显式归入系统分类。
+- PGS 诊断日志补充实际语言、`.sup` 文件名和 forced/full 标记。
+
+### Tests
+
+- 新增 PGS `.sup` 命名、forced/full 选择、日志分类回归测试。
+
+### Upgrade Notes
+
+- 从 v2.8.0 升级无需调整卷、环境变量或数据库。
+- 拆分部署时请同步升级主应用与 OCR 镜像到 v2.8.1；OCR 服务端命名逻辑不升级则 PGS 直通仍可能失败。
+- 建议升级前备份 `./data/db`、`./data/models` 与 PostgreSQL 数据库。
+
 ## v2.8.0 - 2026-11-03
 
 ### Added
