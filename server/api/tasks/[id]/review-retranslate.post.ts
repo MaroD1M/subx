@@ -3,6 +3,7 @@ import { ConfigService } from '../../../utils/config'
 import { SubtitleService } from '../../../utils/subtitle'
 import { translateChunkWithRetry } from '../../../utils/task'
 import { createProvider, normalizeProviderType } from '../../../utils/providers/registry'
+import { TRANSLATION_CONTEXT_WINDOW } from '../../../utils/translation'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { parseBody, reviewRetranslateSchema } from '../../../utils/validation'
 
@@ -72,15 +73,27 @@ export default defineEventHandler(async (event) => {
 
   for (let index = 0; index < chunks.length; index++) {
     const chunk = chunks[index]!
-    const firstId = String(chunk[0]?.id || '')
-    const firstIndex = allRows.findIndex(row => String(row.subtitle_id) === firstId)
+    const chunkRowIndexes = chunk
+      .map(entry => allRows.findIndex(row => String(row.subtitle_id) === String(entry.id)))
+      .filter(rowIndex => rowIndex >= 0)
+    const firstIndex = chunkRowIndexes.length ? Math.min(...chunkRowIndexes) : -1
+    const lastIndex = chunkRowIndexes.length ? Math.max(...chunkRowIndexes) : -1
     const previousContext = firstIndex > 0
-      ? allRows.slice(Math.max(0, firstIndex - 5), firstIndex).map(row => ({
+      ? allRows.slice(Math.max(0, firstIndex - TRANSLATION_CONTEXT_WINDOW), firstIndex).map(row => ({
           id: String(row.subtitle_id),
           startTime: row.start_time,
           endTime: row.end_time,
           text: row.original_text,
           translatedText: row.final_text || row.translated_text || row.original_text
+        }))
+      : []
+    const nextContext = lastIndex >= 0
+      ? allRows.slice(lastIndex + 1, lastIndex + 1 + TRANSLATION_CONTEXT_WINDOW).map(row => ({
+          id: String(row.subtitle_id),
+          startTime: row.start_time,
+          endTime: row.end_time,
+          text: row.original_text,
+          translatedText: ''
         }))
       : []
 
@@ -100,7 +113,8 @@ export default defineEventHandler(async (event) => {
       false,
       `核对重译块 #${index + 1}`,
       abortController.signal,
-      translationContext
+      translationContext,
+      nextContext as any
     )
     allResults.push(...result.entries)
   }

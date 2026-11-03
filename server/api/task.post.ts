@@ -3,11 +3,13 @@ import { TaskService, globalTaskQueue } from '../utils/task'
 import { ConfigService } from '../utils/config'
 import { VideoService } from '../utils/video'
 import { parseBody, taskCreateSchema } from '../utils/validation'
+import { dedupeBatchEntries } from '../utils/fileScan'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import type { TrackPolicy } from '~~/types'
 
 export default defineEventHandler(async (event) => {
   const body = await parseBody(event, taskCreateSchema)
-  const { filePath, sourceType, trackIndex, targetLanguage, outputMode, model, stylePreset, stylePrompt, contentTitle, contentBackground, customInstructions, subtitleFormat, subtitleStylePreset, bilingualLayout, files, rootId } = body
+  const { filePath, sourceType, trackIndex, trackPolicy, dedupeEpisodes, targetLanguage, outputMode, model, stylePreset, stylePrompt, contentTitle, contentBackground, customInstructions, subtitleFormat, subtitleStylePreset, bilingualLayout, files, rootId } = body
 
   const config = await ConfigService.getConfig()
   const taskIds: string[] = []
@@ -15,7 +17,7 @@ export default defineEventHandler(async (event) => {
   const selectedStyleId = stylePreset || 'default'
   const resolvedStylePrompt = stylePrompt || allStylePresets.find(preset => preset.id === selectedStyleId)?.prompt || ''
 
-  const processFile = async (path: string, type: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr', track: number, currentRootId?: string) => {
+  const processFile = async (path: string, type: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr', track: number, currentRootId?: string, policy?: TrackPolicy) => {
     const taskId = uuidv4()
     await TaskService.createTask({
       taskId,
@@ -34,7 +36,8 @@ export default defineEventHandler(async (event) => {
       translationMode: config.translationMode || 'non_stream',
       subtitleFormat: (subtitleFormat || config.subtitleFormat || 'srt') as any,
       subtitleStylePreset: subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
-      bilingualLayout: (bilingualLayout || config.bilingualLayout || 'translated_first') as any
+      bilingualLayout: (bilingualLayout || config.bilingualLayout || 'translated_first') as any,
+      trackPolicy: policy
     })
 
     globalTaskQueue.add(taskId, {
@@ -73,6 +76,7 @@ export default defineEventHandler(async (event) => {
       subtitleFormat: (oldTask.subtitleFormat || config.subtitleFormat || 'srt') as any,
       subtitleStylePreset: oldTask.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
       bilingualLayout: (oldTask.bilingualLayout || config.bilingualLayout || 'translated_first') as any,
+      trackPolicy: oldTask.trackPolicy,
       forceRetranslate: true
     })
 
@@ -86,34 +90,45 @@ export default defineEventHandler(async (event) => {
   }
 
   if (files && Array.isArray(files) && files.length > 0) {
-    for (const entry of files) {
+    const normalized = files.map((entry) => {
       const path = typeof entry === 'string' ? entry : entry.path
       const entryRootId = typeof entry === 'string' ? rootId : entry.rootId
-      const ext = path.split('.').pop()?.toLowerCase() || ''
+      return { path, rootId: entryRootId }
+    })
+    const deduped = dedupeEpisodes === true
+      ? await dedupeBatchEntries(normalized)
+      : { files: normalized, skipped: [], duplicateGroups: 0 }
+
+    for (const entry of deduped.files) {
+      const ext = entry.path.split('.').pop()?.toLowerCase() || ''
       const isExternal = ['srt', 'vtt', 'ass', 'ssa'].includes(ext)
-      let selectedTrack = 0
 
       if (isExternal) {
-        const id = await processFile(path, 'external', 0, entryRootId)
+        const id = await processFile(entry.path, 'external', 0, entry.rootId)
         taskIds.push(id)
         continue
       }
 
       // Video: let the task pipeline decide subtitle vs ASR.
-      const id = await processFile(path, 'auto', 0, entryRootId)
+      const id = await processFile(entry.path, 'auto', 0, entry.rootId, trackPolicy)
       taskIds.push(id)
     }
 
     if (taskIds.length === 0) {
       throw createError({ statusCode: 400, message: 'No valid files or tracks found' })
     }
-    return { taskIds, taskId: taskIds[0] }
+    return {
+      taskIds,
+      taskId: taskIds[0],
+      skippedDuplicates: deduped.skipped.length,
+      duplicateGroups: deduped.duplicateGroups
+    }
   }
 
   if (!filePath) {
     throw createError({ statusCode: 400, message: 'File path or files array is required' })
   }
 
-  const taskId = await processFile(filePath, sourceType || 'embedded', trackIndex || 0, rootId)
+  const taskId = await processFile(filePath, sourceType || 'embedded', trackIndex || 0, rootId, trackPolicy)
   return { taskId, taskIds: [taskId] }
 })

@@ -86,33 +86,41 @@
         <div v-show="activeTab === 'overview'" class="space-y-6">
         <USeparator />
 
-        <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-6">
-          <div class="space-y-1">
+        <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4 xl:grid-cols-6">
+          <div class="min-w-0 space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">媒体库</span>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.rootName || '默认媒体库' }}</p>
+            <p class="truncate text-sm font-medium text-gray-700 dark:text-gray-300" :title="task.rootName || '默认媒体库'">{{ task.rootName || '默认媒体库' }}</p>
           </div>
-          <div class="space-y-1">
+          <div class="min-w-0 space-y-1 xl:col-span-2">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">模型</span>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.model || '默认多模态模型' }}</p>
+            <p class="break-all text-sm font-medium leading-relaxed text-gray-700 dark:text-gray-300" :title="task.model || '默认多模态模型'">{{ task.model || '默认多模态模型' }}</p>
           </div>
-          <div class="space-y-1">
+          <div class="min-w-0 space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">目标语言</span>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.targetLanguage === 'zh-CN' ? '简体中文' : (task.targetLanguage || '自动') }}</p>
+            <p class="break-words text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.targetLanguage === 'zh-CN' ? '简体中文' : (task.targetLanguage || '自动') }}</p>
           </div>
-          <div v-if="['asr', 'ocr'].includes(task.sourceType)" class="space-y-1">
+          <div class="min-w-0 space-y-1">
+            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">输出</span>
+            <p class="break-words text-sm font-medium text-gray-700 dark:text-gray-300">{{ taskOutputSummary }}</p>
+          </div>
+          <div class="min-w-0 space-y-1">
+            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">字幕来源</span>
+            <p class="break-words text-sm font-medium text-gray-700 dark:text-gray-300">{{ sourceTypeLabel }}</p>
+          </div>
+          <div v-if="['asr', 'ocr'].includes(task.sourceType)" class="min-w-0 space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">源语言</span>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.sourceLanguage || '自动检测' }}</p>
+            <p class="break-words text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.sourceLanguage || '自动检测' }}</p>
           </div>
-          <div v-if="['asr', 'ocr'].includes(task.sourceType)" class="space-y-1">
+          <div v-if="['asr', 'ocr'].includes(task.sourceType)" class="min-w-0 space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">ASR 置信度</span>
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.asrConfidence != null ? `${(Number(task.asrConfidence) * 100).toFixed(1)}%` : '-' }}</p>
           </div>
-          <div class="space-y-1">
+          <div class="min-w-0 space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">分块进度</span>
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300" v-if="task.step === 'done'">已完成</p>
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300" v-else>{{ task.completedChunks || 0 }} / {{ task.totalChunks || '-' }}</p>
           </div>
-          <div class="space-y-1">
+          <div class="min-w-0 space-y-1">
             <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">任务状态</span>
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ statusLabel }}</p>
           </div>
@@ -479,6 +487,9 @@ const task = ref<any>({
   error: null,
   model: null,
   targetLanguage: null,
+  outputMode: 'translated',
+  subtitleFormat: 'srt',
+  bilingualLayout: 'translated_first',
   sourceType: '',
   sourceLanguage: '',
   asrConfidence: null,
@@ -491,6 +502,37 @@ const task = ref<any>({
   customInstructions: '',
   reviewDiagnostics: { totalEntries: 0, needsReview: 0, issues: [] as Array<{ reason: string, count: number, subtitleIds: string[] }> }
 })
+
+const outputModeLabels: Record<string, string> = {
+  translated: '仅译文',
+  bilingual: '双语',
+  original: '仅原文字幕'
+}
+const subtitleFormatLabels: Record<string, string> = {
+  srt: 'SRT',
+  ass: 'ASS',
+  both: 'SRT + ASS'
+}
+const bilingualLayoutLabels: Record<string, string> = {
+  translated_first: '译文在上',
+  original_first: '原文在上'
+}
+const sourceTypeLabels: Record<string, string> = {
+  auto: '自动判断',
+  embedded: '内嵌字幕',
+  external: '外挂字幕',
+  asr: '语音识别',
+  ocr: '图像字幕 OCR'
+}
+const taskOutputSummary = computed(() => {
+  const mode = outputModeLabels[String(task.value.outputMode || 'translated')] || task.value.outputMode || '仅译文'
+  const format = subtitleFormatLabels[String(task.value.subtitleFormat || 'srt')] || task.value.subtitleFormat || 'SRT'
+  const layout = task.value.outputMode === 'bilingual'
+    ? `（${bilingualLayoutLabels[String(task.value.bilingualLayout || 'translated_first')] || '译文在上'}）`
+    : ''
+  return `${mode}${layout} · ${format}`
+})
+const sourceTypeLabel = computed(() => sourceTypeLabels[String(task.value.sourceType || 'auto')] || task.value.sourceType || '自动判断')
 
 const pageTitle = computed(() => {
   const status = String(task.value?.step || '')
@@ -992,6 +1034,9 @@ onMounted(async () => {
         error: initialTask.error || null,
         model: initialTask.model,
         targetLanguage: initialTask.targetLanguage,
+        outputMode: initialTask.outputMode || 'translated',
+        subtitleFormat: initialTask.subtitleFormat || 'srt',
+        bilingualLayout: initialTask.bilingualLayout || 'translated_first',
         sourceType: initialTask.sourceType || '',
         sourceLanguage: initialTask.sourceLanguage || '',
         asrConfidence: initialTask.asrConfidence ?? null,

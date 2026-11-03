@@ -271,7 +271,7 @@
       </div>
     </div>
 
-    <UModal v-model:open="folderModalOpen" :title="folderForm.id ? '编辑监控目录' : '新增监控目录'" description="规则越严格，误触发越少。">
+    <UModal v-model:open="folderModalOpen" :title="folderForm.id ? '编辑监控目录' : '新增监控目录'" description="规则越严格，误触发越少。" :ui="{ content: 'sm:max-w-3xl xl:max-w-4xl' }">
       <template #body>
         <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
           <div class="rounded-2xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
@@ -313,12 +313,60 @@
                 <UInput v-model="extensionsText" placeholder=".mkv,.mp4" class="w-full" />
               </UFormField>
               <div class="grid gap-3 sm:grid-cols-2">
-                <UFormField label="包含正则（可选）"><UInput v-model="folderForm.rules.includeRegex" placeholder="S01|S02" class="w-full" /></UFormField>
-                <UFormField label="排除正则（可选）"><UInput v-model="folderForm.rules.excludeRegex" placeholder="Sample|Trailer" class="w-full" /></UFormField>
+                <UFormField>
+                  <template #label>
+                    <span class="inline-flex items-center gap-1.5">
+                      包含正则（可选）
+                      <UTooltip text="只处理路径匹配该正则的文件，留空表示不限制。多个关键词用 | 分隔，例如 S01|S02。">
+                        <UIcon name="i-lucide-circle-help" class="h-3.5 w-3.5 text-gray-400" role="img" tabindex="0" aria-label="包含正则说明" />
+                      </UTooltip>
+                    </span>
+                  </template>
+                  <UInput v-model="folderForm.rules.includeRegex" placeholder="例如：S01|S02 或 1080p|2160p" class="w-full" />
+                </UFormField>
+                <UFormField>
+                  <template #label>
+                    <span class="inline-flex items-center gap-1.5">
+                      排除正则（可选）
+                      <UTooltip text="匹配该正则的文件会被跳过，留空表示不排除。多个关键词用 | 分隔，例如 Sample|Trailer。">
+                        <UIcon name="i-lucide-circle-help" class="h-3.5 w-3.5 text-gray-400" role="img" tabindex="0" aria-label="排除正则说明" />
+                      </UTooltip>
+                    </span>
+                  </template>
+                  <UInput v-model="folderForm.rules.excludeRegex" placeholder="例如：Sample|Trailer|花絮" class="w-full" />
+                </UFormField>
                 <UFormField label="最小体积 MB"><UInput v-model.number="folderForm.rules.minSizeMb" type="number" min="0" class="w-full" /></UFormField>
                 <UFormField label="最大体积 MB（0 不限）"><UInput v-model.number="folderForm.rules.maxSizeMb" type="number" min="0" class="w-full" /></UFormField>
                 <UFormField label="最短时长 秒（0 不限）"><UInput v-model.number="folderForm.rules.minDurationSec" type="number" min="0" class="w-full" /></UFormField>
                 <UFormField label="文件稳定等待 秒"><UInput v-model.number="folderForm.rules.stableSeconds" type="number" min="0" class="w-full" /></UFormField>
+                <div class="space-y-3 rounded-xl border border-primary-100 bg-primary-50/50 p-3 sm:col-span-2 dark:border-primary-900/40 dark:bg-primary-950/20">
+                  <div class="flex items-start gap-2">
+                    <UIcon name="i-lucide-regex" class="mt-0.5 h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" />
+                    <div class="min-w-0 space-y-1">
+                      <p class="text-xs font-semibold text-primary-800 dark:text-primary-200">正则怎么写？</p>
+                      <p class="text-[11px] leading-relaxed text-primary-800/80 dark:text-primary-200/80">
+                        正则匹配的是相对媒体库的文件路径；多个关键词用 <code class="rounded bg-white/70 px-1 py-0.5 dark:bg-black/20">|</code> 分隔，默认区分大小写，留空表示不限制。点击下方示例可直接填入。
+                      </p>
+                    </div>
+                  </div>
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="space-y-1.5">
+                      <p class="text-[11px] font-medium text-primary-800 dark:text-primary-200">包含示例</p>
+                      <div class="flex flex-wrap gap-1.5">
+                        <UButton v-for="snippet in includeRegexSnippets" :key="snippet.value" :label="snippet.label" size="xs" color="primary" variant="soft" :title="`填入：${snippet.value}`" @click="folderForm.rules.includeRegex = snippet.value" />
+                      </div>
+                    </div>
+                    <div class="space-y-1.5">
+                      <p class="text-[11px] font-medium text-primary-800 dark:text-primary-200">排除示例</p>
+                      <div class="flex flex-wrap gap-1.5">
+                        <UButton v-for="snippet in excludeRegexSnippets" :key="snippet.value" :label="snippet.label" size="xs" color="neutral" variant="soft" :title="`填入：${snippet.value}`" @click="folderForm.rules.excludeRegex = snippet.value" />
+                      </div>
+                    </div>
+                  </div>
+                  <p class="text-[11px] leading-relaxed text-primary-800/70 dark:text-primary-200/70">
+                    例：<code>S01|S02</code> 只处理第 1、2 季；<code>1080p|2160p</code> 只保留高清；<code>Sample|Trailer</code> 跳过样本和预告。
+                  </p>
+                </div>
               </div>
               <div class="grid gap-2 sm:grid-cols-2">
                 <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 px-3 py-2.5">
@@ -672,6 +720,18 @@ const modeOptions = [
   { label: '仅新文件', value: 'new' },
   { label: '仅历史回填', value: 'backfill' },
   { label: '新文件 + 回填', value: 'both' }
+]
+const includeRegexSnippets = [
+  { label: '指定季度 S01/S02', value: 'S01|S02' },
+  { label: '第 1-3 季', value: 'S0[1-3]' },
+  { label: '只要 1080p/2160p', value: '1080p|2160p' },
+  { label: '只要中英字幕', value: 'CHS|ENG|中英' }
+]
+const excludeRegexSnippets = [
+  { label: '跳过样本/预告', value: 'Sample|Trailer|Featurette|预告|花絮' },
+  { label: '跳过低画质', value: '480p|720p' },
+  { label: '跳过片头/片尾', value: 'NCOP|NCED|Opening|Ending' },
+  { label: '跳过访谈/幕后', value: 'Interview|Behind|Making' }
 ]
 const outputModeOptions = [
   { label: '仅译文', value: 'translated' },

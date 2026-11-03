@@ -95,7 +95,7 @@ body {
 }
 
 .version-badge {
-    @apply inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none;
+    @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium leading-none;
 }
 .version-ok {
     @apply border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300;

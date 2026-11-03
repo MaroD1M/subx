@@ -13,6 +13,7 @@ import type { NotificationChannel, NotificationChannelType, NotificationEvent } 
 import { useDb } from './db'
 import { ConfigService } from './config'
 import { decryptSecret, encryptSecret, isEncryptedSecret } from './secret'
+import { STYLE_PRESETS } from '../../shared/stylePresets'
 
 export const NOTIFICATION_EVENTS: NotificationEvent[] = [
   'task_done',
@@ -41,6 +42,72 @@ const EVENT_LABELS: Record<NotificationEvent, string> = {
   watch_error: '监控异常',
   backfill_done: '回填完成',
   test: '测试通知'
+}
+
+const TASK_EVENT_STATUS: Record<string, string> = {
+  task_done: '已完成',
+  task_error: '失败',
+  task_cancelled: '已取消',
+  low_confidence: '待人工核对'
+}
+
+const OUTPUT_MODE_LABELS: Record<string, string> = {
+  translated: '仅译文',
+  bilingual: '双语',
+  original: '仅原文字幕'
+}
+
+const SUBTITLE_FORMAT_LABELS: Record<string, string> = {
+  srt: 'SRT',
+  ass: 'ASS',
+  both: 'SRT + ASS'
+}
+
+const BILINGUAL_LAYOUT_LABELS: Record<string, string> = {
+  translated_first: '译文在上',
+  original_first: '原文在上'
+}
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  auto: '自动判断',
+  embedded: '内嵌字幕',
+  external: '外挂字幕',
+  asr: '语音识别',
+  ocr: '图像字幕 OCR'
+}
+
+const TARGET_LANGUAGE_LABELS: Record<string, string> = {
+  'zh-CN': '简体中文',
+  'zh-TW': '繁体中文',
+  en: '英语',
+  ja: '日语',
+  ko: '韩语'
+}
+
+function labelOf(map: Record<string, string>, value: unknown, fallback = '-') {
+  const key = asString(value)
+  return key ? (map[key] || key) : fallback
+}
+
+function parseTaskDate(value: unknown): Date | null {
+  const text = asString(value)
+  if (!text) return null
+  const normalized = text.includes('T') ? text : `${text.replace(' ', 'T')}Z`
+  const date = new Date(normalized)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatElapsed(createdAt: unknown, updatedAt: unknown): string {
+  const start = parseTaskDate(createdAt)
+  const end = parseTaskDate(updatedAt)
+  if (!start || !end || end.getTime() < start.getTime()) return ''
+  const totalSeconds = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours} 小时 ${String(minutes).padStart(2, '0')} 分`
+  if (minutes > 0) return `${minutes} 分 ${String(seconds).padStart(2, '0')} 秒`
+  return `${seconds} 秒`
 }
 
 function asString(value: unknown): string {
@@ -568,9 +635,33 @@ export const NotificationService = {
     if (config.notificationEnabled === false) return 0
 
     const fileName = String(task.file_path || '').split('/').pop() || task.file_path
-    let body = `文件：${fileName}\n目标语言：${task.target_lang || '-'}`
-    if (task.output_path) body += `\n输出：${task.output_path}`
-    if (task.error) body += `\n错误：${task.error}`
+    const outputMode = asString(task.output_mode) || 'translated'
+    const subtitleFormat = asString(task.subtitle_format) || 'srt'
+    const bilingualLayout = asString(task.bilingual_layout) || 'translated_first'
+    const sourceType = asString(task.source_type) || 'auto'
+    const stylePreset = asString(task.style_preset) || 'default'
+    const styleName = [...STYLE_PRESETS, ...(Array.isArray(config.customStylePresets) ? config.customStylePresets : [])]
+      .find(preset => preset.id === stylePreset)?.name || stylePreset
+
+    const lines = [
+      `文件：${fileName}`,
+      `状态：${TASK_EVENT_STATUS[event] || EVENT_LABELS[event] || event}`,
+      `输出模式：${labelOf(OUTPUT_MODE_LABELS, outputMode)}`,
+      `字幕格式：${labelOf(SUBTITLE_FORMAT_LABELS, subtitleFormat)}`
+    ]
+    if (outputMode === 'bilingual') lines.push(`双语排版：${labelOf(BILINGUAL_LAYOUT_LABELS, bilingualLayout)}`)
+    lines.push(
+      `字幕来源：${labelOf(SOURCE_TYPE_LABELS, sourceType)}`,
+      `目标语言：${outputMode === 'original' ? '不翻译（仅导出原字幕）' : labelOf(TARGET_LANGUAGE_LABELS, task.target_lang)}`,
+      `模型：${asString(task.model) || '默认模型'}`
+    )
+    if (stylePreset !== 'default') lines.push(`翻译风格：${styleName}`)
+    lines.push(`任务来源：${task.origin === 'automation' ? '自动监控' : '手动创建'}`)
+    const elapsed = formatElapsed(task.created_at, task.updated_at)
+    if (elapsed) lines.push(`耗时：${elapsed}`)
+    if (task.output_path) lines.push(`输出文件：${task.output_path}`)
+    if (task.error) lines.push(`错误：${task.error}`)
+    let body = lines.join('\n')
 
     let title = EVENT_LABELS[event] || event
     if (event === 'task_done') title = 'SubX 任务完成'

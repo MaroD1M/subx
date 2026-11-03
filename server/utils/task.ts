@@ -14,7 +14,7 @@ import { useDb } from './db'
 import { VideoService } from './video'
 import { SubtitleService } from './subtitle'
 import { getMediaRoot, resolveMediaPath } from './mediaRoots'
-import { TranslationService, TRANSLATION_PROMPT_VERSION, type TranslationContext } from './translation'
+import { TranslationService, TRANSLATION_CONTEXT_WINDOW, TRANSLATION_PROMPT_VERSION, type TranslationContext } from './translation'
 import { AsrService } from './asr/client'
 import { acquireAudioLease, extractAudioCached, releaseAudioLease, removeCachedAudio } from './asr/audioCache'
 import { markTaskActive, unmarkTaskActive } from './activeTasks'
@@ -26,6 +26,7 @@ import { createProvider, normalizeProviderType } from './providers/registry'
 import type { BoundTranslationProvider } from './providers/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
+import { fileNameMatchesLanguage, resolveTrackPolicy, selectTrackForPolicy } from './trackPolicy'
 
 export const taskEvents = new EventEmitter()
 taskEvents.setMaxListeners(0)
@@ -358,7 +359,8 @@ export async function translateChunkWithRetry(
     useStreaming: boolean = false,
     logLabel?: string,
     signal?: AbortSignal,
-    translationContext?: TranslationContext
+    translationContext?: TranslationContext,
+    nextContext: SubtitleEntry[] = []
 ): Promise<{ entries: SubtitleEntry[], diagnostics: ChunkDiagnostics }> {
     const finalResults = new Map<string, SubtitleEntry>()
     let unresolvedEntries = [...chunk]
@@ -391,7 +393,7 @@ export async function translateChunkWithRetry(
 
         try {
             const results = await TranslationService.translateChunk(
-                provider, unresolvedEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming, signal, translationContext
+                provider, unresolvedEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming, signal, translationContext, nextContext
             )
             assertTaskNotCancelled(taskId)
 
@@ -660,7 +662,7 @@ function analyzeChunkRisk(entries: SubtitleEntry[]): ChunkRiskProfile {
     }
 }
 
-function findExternalSubtitle(videoAbsolutePath: string, rootPath: string): string | null {
+function findExternalSubtitle(videoAbsolutePath: string, rootPath: string, preferredLanguage = ''): string | null {
     try {
         const base = basename(videoAbsolutePath).replace(/\.[^.]+$/, '')
         const entries = readdirSync(dirname(videoAbsolutePath), { withFileTypes: true })
@@ -672,9 +674,11 @@ function findExternalSubtitle(videoAbsolutePath: string, rootPath: string): stri
                 return priority.includes(ext) && (entry.name === `${base}${ext}` || entry.name.startsWith(`${base}.`))
             })
             .sort((a, b) => {
+                const aLang = preferredLanguage && fileNameMatchesLanguage(a.name, preferredLanguage) ? 0 : 1
+                const bLang = preferredLanguage && fileNameMatchesLanguage(b.name, preferredLanguage) ? 0 : 1
                 const aExt = a.name.toLowerCase().match(/\.[^.]+$/)?.[0] || ''
                 const bExt = b.name.toLowerCase().match(/\.[^.]+$/)?.[0] || ''
-                return priority.indexOf(aExt) - priority.indexOf(bExt) || a.name.localeCompare(b.name)
+                return aLang - bLang || priority.indexOf(aExt) - priority.indexOf(bExt) || a.name.localeCompare(b.name)
             })
         return candidates[0] ? relative(rootPath, join(dirname(videoAbsolutePath), candidates[0].name)).replaceAll('\\', '/') : null
     } catch {
@@ -687,8 +691,8 @@ export const TaskService = {
         const db = useDb()
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, bilingual_layout, force_retranslate, status, progress, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, bilingual_layout, force_retranslate, status, progress, track_policy_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
             task.taskId,
@@ -716,7 +720,8 @@ export const TaskService = {
             task.bilingualLayout || 'translated_first',
             task.forceRetranslate ? 1 : 0,
             'queued',
-            0
+            0,
+            JSON.stringify(task.trackPolicy || {})
         )
         writeTaskLog(task.taskId!, 'queued', 'info', '任务已创建，等待执行')
         console.log(`[Task] 创建任务: ${task.taskId} 文件: ${task.filePath}`)
@@ -750,6 +755,9 @@ export const TaskService = {
             subtitleFormat: task.subtitle_format || 'srt',
             subtitleStylePreset: task.subtitle_style_preset || 'bilingual_simple',
             bilingualLayout: task.bilingual_layout || 'translated_first',
+            trackPolicy: (() => {
+                try { return JSON.parse(task.track_policy_json || '{}') } catch { return {} }
+            })(),
             forceRetranslate: !!task.force_retranslate,
             stepProgress: Number(task.step_progress || 0),
             stepMessage: task.step_message || '',
@@ -836,35 +844,57 @@ export const TaskService = {
                 await this.updateStatus(taskId, 'probing', 5, { stepProgress: 0, stepMessage: '正在分析媒体字幕与音频轨道...', log: '正在分析媒体字幕与音频轨道...' })
                 const media = await VideoService.probeMedia(task.filePath, task.rootId)
                 const autoConfig = await ConfigService.getConfig()
-                const subtitleTrack = media.subtitleTracks.find(track => track.isSupported)
-                const bitmapTrack = media.subtitleTracks.find(track => ['hdmv_pgs_subtitle', 'pgssub', 'dvd_subtitle', 'dvdsub', 'dvb_subtitle', 'xsub'].includes(String(track.codec || '').toLowerCase()))
+                const trackPolicy = resolveTrackPolicy(task.trackPolicy)
+                const textTracks = media.subtitleTracks.filter(track => track.isSupported)
+                const bitmapTracks = media.subtitleTracks.filter(track => ['hdmv_pgs_subtitle', 'pgssub', 'dvd_subtitle', 'dvdsub', 'dvb_subtitle', 'xsub'].includes(String(track.codec || '').toLowerCase()))
+                const subtitleTrack = selectTrackForPolicy(textTracks, trackPolicy, 'subtitle')
+                const bitmapTrack = selectTrackForPolicy(bitmapTracks, trackPolicy, 'subtitle')
                 if (subtitleTrack) {
                     task.sourceType = 'embedded'
                     task.trackIndex = subtitleTrack.index
+                } else if (bitmapTrack && autoConfig.ocrEnabled) {
+                    task.sourceType = 'ocr'
+                    task.trackIndex = bitmapTrack.index
                 } else {
-                    const root = await getMediaRoot(task.rootId)
                     const videoAbsolute = await resolveMediaPath(task.filePath, task.rootId)
-                    const externalSubtitle = findExternalSubtitle(videoAbsolute, root.path)
+                    const externalSubtitle = findExternalSubtitle(videoAbsolute, root.path, trackPolicy.subtitleLanguage)
                     if (externalSubtitle) {
                         task.sourceType = 'external'
                         task.sourceSubtitlePath = externalSubtitle
                         task.trackIndex = 0
-                    } else if (bitmapTrack && autoConfig.ocrEnabled) {
-                        task.sourceType = 'ocr'
-                        task.trackIndex = bitmapTrack.index
                     } else {
-                    const audioTrack = media.audioTracks.find(track => track.isDefault) || media.audioTracks[0]
-                    if (!audioTrack) {
-                        throw new Error(bitmapTrack
-                            ? '发现图像字幕但 OCR 未启用，且没有可用音频轨道'
-                            : '未发现可用的文本字幕轨道或音频轨道')
-                    }
+                        if (!trackPolicy.fallbackToAsr) {
+                            throw new Error(trackPolicy.allowForcedSubtitle
+                                ? '未发现可用的文本字幕、外挂字幕或已启用的图像字幕，且已关闭自动语音识别'
+                                : '未发现可用的非强制字幕轨道，且已关闭自动语音识别。可尝试允许强制字幕轨或启用 ASR')
+                        }
+                        const audioTrack = selectTrackForPolicy(media.audioTracks, trackPolicy, 'audio')
+                        if (!audioTrack) {
+                            throw new Error(bitmapTrack
+                                ? '发现图像字幕但 OCR 未启用，且没有可用音频轨道'
+                                : '未发现可用的文本字幕轨道或音频轨道')
+                        }
                         task.sourceType = 'asr'
                         task.trackIndex = audioTrack.index
                     }
                 }
                 db.prepare('UPDATE tasks SET source_type = ?, source_subtitle_path = ?, track_index = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
                     .run(task.sourceType, task.sourceSubtitlePath || null, task.trackIndex, taskId)
+                const selectedTrack = media.subtitleTracks.find(track => track.index === task.trackIndex)
+                if (selectedTrack) {
+                    writeTaskLog(taskId, 'probing', 'info', `已选择字幕轨 #${selectedTrack.index} ${selectedTrack.codec} ${selectedTrack.language || 'und'}${selectedTrack.isForced ? ' [强制]' : selectedTrack.isDefault ? ' [默认]' : ''}`)
+                } else if (task.sourceType === 'asr') {
+                    const selectedAudio = media.audioTracks.find(track => track.index === task.trackIndex)
+                    if (selectedAudio) {
+                        writeTaskLog(taskId, 'probing', 'info', `已选择音频轨 #${selectedAudio.index} ${selectedAudio.codec} ${selectedAudio.language || 'und'}${selectedAudio.isDefault ? ' [默认]' : ''}`)
+                    }
+                }
+                if (trackPolicy.subtitleLanguage) {
+                    writeTaskLog(taskId, 'probing', 'info', `字幕语言优先：${trackPolicy.subtitleLanguage}`)
+                }
+                if (trackPolicy.audioLanguage) {
+                    writeTaskLog(taskId, 'probing', 'info', `音轨语言优先：${trackPolicy.audioLanguage}`)
+                }
                 await this.updateStatus(taskId, 'probing', 8, {
                     stepProgress: 100,
                     stepMessage: task.sourceType === 'asr'
@@ -1041,6 +1071,14 @@ export const TaskService = {
 
             const initialChunks = SubtitleService.chunkByTokens(allEntries, chunkSize)
             const chunks = initialChunks
+            const chunkOffsets: number[] = []
+            {
+                let offset = 0
+                for (const chunk of chunks) {
+                    chunkOffsets.push(offset)
+                    offset += chunk.length
+                }
+            }
             const totalChunks = chunks.length
             await this.updateStatus(taskId, 'parsing', 28, {
                 stepProgress: 100,
@@ -1128,12 +1166,12 @@ export const TaskService = {
 
             const promises = chunks.map((chunk, index) => limit(async () => {
                 assertTaskNotCancelled(taskId)
-                const previousContext = index > 0 && chunks[index - 1]
-                    ? chunks[index - 1]!.slice(-5).map(e => {
-                        const translated = translatedMap.get(String(e.id))
-                        return translated || e
-                    })
-                    : []
+                const chunkStart = chunkOffsets[index] ?? 0
+                const chunkEnd = chunkStart + chunk.length
+                const previousContext = allEntries
+                    .slice(Math.max(0, chunkStart - TRANSLATION_CONTEXT_WINDOW), chunkStart)
+                    .map(entry => translatedMap.get(String(entry.id)) || entry)
+                const nextContext = allEntries.slice(chunkEnd, chunkEnd + TRANSLATION_CONTEXT_WINDOW)
 
                 const uncachedEntries: SubtitleEntry[] = []
                 const cachedResults = new Map<string, string>()
@@ -1141,7 +1179,8 @@ export const TaskService = {
 
                 const shouldUseCache = !task.forceRetranslate
                 const effectiveStylePromptForCache = stylePrompt
-                const contextCacheKey = [task.contentTitle, task.contentBackground, task.customInstructions].filter(Boolean).join('|')
+                const contextWindowKey = [...previousContext, ...nextContext].map(entry => String(entry.text || '')).join('\u0001')
+                const contextCacheKey = [task.contentTitle, task.contentBackground, task.customInstructions, contextWindowKey].filter(Boolean).join('|')
                 for (const entry of chunk) {
                     if (SubtitleService.isNonVerbal(entry.text)) {
                         nonVerbalResults.set(String(entry.id), entry.text)
@@ -1200,7 +1239,8 @@ export const TaskService = {
                         config.translationMode === 'stream',
                         '块 #' + (index + 1),
                         signal,
-                        translationContext
+                        translationContext,
+                        nextContext
                     )
 
                     diagnosticsCollection.push(chunkResult.diagnostics)

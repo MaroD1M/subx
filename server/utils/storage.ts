@@ -9,7 +9,7 @@
 
 import { existsSync } from 'fs'
 import { lstat, readdir, rm, statfs, unlink } from 'fs/promises'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { tmpdir } from 'os'
 import { useDb } from './db'
 import { isPathInside } from './pathSafety'
@@ -59,6 +59,7 @@ const ASR_AUDIO_DIR = join(TEMP_ROOT, 'asr-audio')
 const AI_LOGS_DIR = join(TEMP_ROOT, 'ai-logs')
 const TASK_LOG_DIR = join(process.cwd(), 'db', 'logs')
 const MODEL_DIR = process.env.ASR_MODEL_DIR || '/models'
+const OCR_TEMP_DIR = resolve(process.env.OCR_TEMP_DIR || join(TEMP_ROOT, 'ocr'))
 const OCR_TEMP_PREFIXES = ['subx-ocr-', 'subx-preprocess-']
 const TEMP_FILE_PATTERN = /^(?:download_orig_|clip_)|\.(?:partial|srt|mp3|wav)$/i
 const MIN_SAFE_AGE_MS = 5 * 60 * 1000
@@ -108,21 +109,29 @@ async function scanFiles(dir: string, options: { recursive?: boolean, match?: (n
   return { bytes, files, paths }
 }
 
+function ocrTempRoots(): string[] {
+  const roots = [OCR_TEMP_DIR]
+  const legacy = tmpdir()
+  if (resolve(legacy) !== resolve(OCR_TEMP_DIR)) roots.push(legacy)
+  return roots
+}
+
 async function scanOcrTemp() {
   let bytes = 0
   let files = 0
   const paths: string[] = []
-  const root = tmpdir()
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    if (!OCR_TEMP_PREFIXES.some(prefix => entry.name.startsWith(prefix))) continue
-    const full = join(root, entry.name)
-    if (!isPathInside(root, full)) continue
-    const scanned = await scanFiles(full)
-    bytes += scanned.bytes
-    files += scanned.files
-    paths.push(full)
+  for (const root of ocrTempRoots()) {
+    const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      if (!OCR_TEMP_PREFIXES.some(prefix => entry.name.startsWith(prefix))) continue
+      const full = join(root, entry.name)
+      if (!isPathInside(root, full)) continue
+      const scanned = await scanFiles(full)
+      bytes += scanned.bytes
+      files += scanned.files
+      paths.push(full)
+    }
   }
   return { bytes, files, paths }
 }
@@ -177,7 +186,7 @@ export const StorageService = {
     const translationCache = translationCacheStats()
     const categories: StorageCategory[] = [
       category('asrAudio', 'ASR 音频缓存', '语音识别提取的 WAV，失败重试会复用。', asrAudio, ASR_AUDIO_DIR, true, asrAudioDefaultDays()),
-      category('ocrTemp', 'OCR 临时图像', 'OCR 抽 frame 的临时目录；异常退出时可能残留。', ocrTemp, tmpdir(), true, 1),
+      category('ocrTemp', 'OCR 临时图像', 'OCR 抽帧临时目录，默认位于 temp/ocr；兼容清理旧 /tmp 残留。', ocrTemp, OCR_TEMP_DIR, true, 1),
       category('taskTemp', '任务临时文件', '字幕临时文件、音频片段、分块 partial 等。', taskTemp, TEMP_ROOT),
       category('aiLogs', 'AI 请求日志', '每次翻译请求的请求/响应调试日志。', aiLogs, AI_LOGS_DIR),
       category('taskLogs', '任务日志文件', 'db/logs 下的任务文本日志。', taskLogs, TASK_LOG_DIR),
@@ -251,20 +260,21 @@ export const StorageService = {
         } else if (target === 'taskLogs') {
           await cleanDirectoryFiles(TASK_LOG_DIR, 'taskLogs', name => name.startsWith('task_') && name.endsWith('.log') && !belongsToActiveTask(name))
         } else if (target === 'ocrTemp') {
-          const root = tmpdir()
-          const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
-          for (const entry of entries) {
-            if (!entry.isDirectory()) continue
-            if (!OCR_TEMP_PREFIXES.some(prefix => entry.name.startsWith(prefix))) continue
-            const full = join(root, entry.name)
-            if (!isPathInside(root, full)) continue
-            const info = await lstat(full).catch(() => null)
-            if (!info || info.isSymbolicLink() || !info.isDirectory()) continue
-            if (info.mtimeMs > cutoffFor('ocrTemp')) continue
-            const scanned = await scanFiles(full)
-            await rm(full, { recursive: true, force: true })
-            result.deletedFiles += scanned.files
-            result.deletedBytes += scanned.bytes
+          for (const root of ocrTempRoots()) {
+            const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
+            for (const entry of entries) {
+              if (!entry.isDirectory()) continue
+              if (!OCR_TEMP_PREFIXES.some(prefix => entry.name.startsWith(prefix))) continue
+              const full = join(root, entry.name)
+              if (!isPathInside(root, full)) continue
+              const info = await lstat(full).catch(() => null)
+              if (!info || info.isSymbolicLink() || !info.isDirectory()) continue
+              if (info.mtimeMs > cutoffFor('ocrTemp')) continue
+              const scanned = await scanFiles(full)
+              await rm(full, { recursive: true, force: true })
+              result.deletedFiles += scanned.files
+              result.deletedBytes += scanned.bytes
+            }
           }
         } else if (target === 'translationCache') {
           const db = useDb()

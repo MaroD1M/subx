@@ -32,6 +32,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 MEDIA_ROOT = Path(os.getenv("OCR_MEDIA_ROOT", "/media")).resolve()
+OCR_TEMP_DIR = Path(os.getenv("OCR_TEMP_DIR", "/app/temp/ocr")).resolve()
+OCR_TEMP_DIR.mkdir(parents=True, exist_ok=True)
 PGSRIP_BIN = shutil.which("pgsrip")
 DEFAULT_LANGUAGE = os.getenv("OCR_LANGUAGE", "en")
 MAX_SECONDS = int(os.getenv("OCR_MAX_SECONDS", "7200"))
@@ -92,7 +94,7 @@ def probe(path: Path, track_index: int) -> dict[str, Any]:
     ffprobe = require_tool("ffprobe")
     result = subprocess.run([
         ffprobe, "-v", "error", "-show_entries",
-        "format=duration:stream=index,codec_name,codec_type,width,height:stream_disposition=default",
+        "format=duration:stream=index,codec_name,codec_type,width,height:stream_tags=language,title:stream_disposition=default,forced",
         "-of", "json", str(path)
     ], check=True, capture_output=True, text=True)
     data = json.loads(result.stdout)
@@ -114,11 +116,17 @@ def probe(path: Path, track_index: int) -> dict[str, Any]:
     height = int(video.get("height") or 720)
     width = max(1280, min(1920, width))
     height = max(720, min(1080, height))
+    tags = match.get("tags") or {}
+    disposition = match.get("disposition") or {}
     return {
         "duration": float(data.get("format", {}).get("duration", 0) or 0),
         "codec": str(match.get("codec_name", "")),
         "stream_index": int(match.get("index", track_index)),
         "subtitle_index": subtitle_index,
+        "language": str(tags.get("language") or "und"),
+        "title": str(tags.get("title") or ""),
+        "is_forced": bool(disposition.get("forced")),
+        "is_default": bool(disposition.get("default")),
         "width": width,
         "height": height,
     }
@@ -178,6 +186,8 @@ def extract_pgs(path: Path, stream_index: int, workdir: Path) -> Path:
         ], check=True, capture_output=True, text=True, timeout=600)
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(f"PGS 提取失败：{process_error_detail(exc)}") from exc
+    if not output.is_file() or output.stat().st_size == 0:
+        raise RuntimeError("PGS 提取失败：生成的 .sup 为空")
     return output
 
 
@@ -196,12 +206,13 @@ def rip_pgs(sup_path: Path, language: str, workdir: Path, engine: str | None = N
         command.extend(["--engine", resolved_engine])
     command.append(str(sup_path))
     try:
-        subprocess.run(command, cwd=workdir, check=True, capture_output=True, text=True, timeout=60 * 60)
+        completed = subprocess.run(command, cwd=workdir, check=True, capture_output=True, text=True, timeout=60 * 60)
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(f"pgsrip 识别失败：{process_error_detail(exc)}") from exc
-    candidates = sorted(workdir.glob("*.srt"))
+    candidates = sorted(workdir.rglob("*.srt"))
     if not candidates:
-        raise RuntimeError("PGS OCR 未生成 SRT")
+        detail = (completed.stderr or completed.stdout or "").strip()[-2000:]
+        raise RuntimeError(f"PGS OCR 未生成 SRT：{detail or 'pgsrip 没有输出'}")
     return candidates[0]
 
 
@@ -410,7 +421,7 @@ def ocr_frames(
         progress(8, "正在抽取图像字幕帧")
     # PGS/VobSub/DVD 是位图字幕，不能用 subtitles 文本滤镜。
     # 用黑色背景 + overlay 位图字幕流，按固定 FPS 输出，保持时间轴可映射。
-    filter_complex = f"[1:v][0:s:{subtitle_index}]overlay[out]"
+    filter_complex = f"[0:s:{subtitle_index}][1:v]scale2ref[sub][bg];[bg][sub]overlay[out]"
     command = [
         ffmpeg, "-y", "-v", "error",
         "-i", str(source),
@@ -541,7 +552,7 @@ def ocr_frames(
 def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None = None, cancelled: Callable[[], bool] | None = None) -> dict[str, Any]:
     started = time.perf_counter()
     path = safe_path(request.path)
-    workdir = Path(tempfile.mkdtemp(prefix="subx-ocr-"))
+    workdir = Path(tempfile.mkdtemp(prefix="subx-ocr-", dir=str(OCR_TEMP_DIR)))
     try:
         if progress:
             progress(3, "正在分析字幕轨道")
@@ -556,6 +567,10 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
             "mode": "pgsrip" if engine == "pgsrip" else "frames",
             "codec": codec,
             "subtitleIndex": int(info["subtitle_index"]),
+            "trackLanguage": info.get("language") or "und",
+            "trackTitle": info.get("title") or "",
+            "isForced": bool(info.get("is_forced")),
+            "isDefault": bool(info.get("is_default")),
             "requestedEngine": normalize_engine(request.engine),
             "renderSize": f"{info['width']}x{info['height']}",
         }
@@ -613,6 +628,11 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
 
         if not segments:
             raise RuntimeError("OCR 未生成有效字幕")
+        if duration >= 600 and len(segments) < 10:
+            track_desc = f"{info.get('language') or 'und'}{(' ' + str(info.get('title'))) if info.get('title') else ''} {'强制' if info.get('is_forced') else '非强制'}"
+            raise RuntimeError(
+                f"OCR 仅识别到 {len(segments)} 条字幕（视频时长 {duration:.0f}s，轨道 {track_desc}），可能选错字幕轨、字幕未渲染到画面，或 OCR 语言/引擎配置不正确；请选择完整字幕轨后重试"
+            )
         if progress:
             progress(95, "正在整理 OCR 结果")
         text = " ".join(segment["text"] for segment in segments)

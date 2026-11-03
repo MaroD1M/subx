@@ -1,7 +1,7 @@
 <template>
   <aside
     class="sticky top-0 z-40 hidden h-screen shrink-0 flex-col border-r border-gray-200/80 bg-white/85 backdrop-blur-xl transition-[width] duration-200 dark:border-gray-800/80 dark:bg-gray-950/80 xl:flex"
-    :class="collapsed ? 'w-16' : 'w-60'"
+    :class="collapsed ? 'w-16' : 'w-[248px]'"
   >
     <div class="flex h-16 shrink-0 items-center border-b border-gray-100/90 px-3 dark:border-gray-800/80">
       <NuxtLink to="/" class="flex min-w-0 items-center gap-2.5" aria-label="SubX 首页">
@@ -13,30 +13,30 @@
         icon="i-lucide-panel-left-close"
         variant="ghost"
         color="neutral"
-        size="xs"
-        class="ml-auto"
+        size="sm"
+        class="ml-auto h-8 w-8 p-0"
         title="收起侧栏"
         aria-label="收起侧栏"
         @click="emit('toggle')"
       />
     </div>
 
-    <nav class="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-3" aria-label="主导航">
+    <nav class="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2 py-3" aria-label="主导航">
       <NuxtLink
         v-for="item in navItems"
         :key="item.to"
         :to="item.to"
         :title="collapsed ? item.label : undefined"
         :aria-label="item.label"
-        class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
+        class="group relative flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-medium leading-[22px] transition-colors"
         :class="isActive(item.to)
           ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white'"
         :aria-current="isActive(item.to) ? 'page' : undefined"
       >
+        <span v-if="isActive(item.to)" class="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-primary-500" />
         <UIcon :name="item.icon" class="h-5 w-5 shrink-0" />
         <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
-        <span v-if="!collapsed && isActive(item.to)" class="ml-auto h-1.5 w-1.5 rounded-full bg-primary-500" />
       </NuxtLink>
     </nav>
 

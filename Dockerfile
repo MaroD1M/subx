@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# SubX v2.6.2 all-in-one image
+# SubX v2.7.0 all-in-one image
 # 主应用 + ASR + OCR 运行在同一个容器内。
 # Whisper 模型不打进镜像，首次在设置页手动下载。
 # ============================================================
@@ -148,6 +148,7 @@ ENV TZ=Asia/Shanghai \
     ASR_AUTO_DOWNLOAD=false \
     ASR_INTERNAL_PORT=8000 \
     OCR_INTERNAL_PORT=8001 \
+    OCR_TEMP_DIR=/app/temp/ocr \
     OCR_MEDIA_ROOT=/media \
     OCR_ENGINE=auto \
     OCR_LANGUAGE=en \

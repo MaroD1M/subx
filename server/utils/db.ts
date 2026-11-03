@@ -26,7 +26,8 @@ export function useDb() {
     _db.exec(readFileSync(schemaPath, 'utf-8'))
     for (const statement of [
       'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS step_progress INTEGER NOT NULL DEFAULT 0',
-      'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS step_message TEXT'
+      'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS step_message TEXT',
+      'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS track_policy_json TEXT NOT NULL DEFAULT \'{}\''
     ]) {
       try { _db.exec(statement) } catch { /* column already exists */ }
     }
@@ -81,6 +82,7 @@ export function useDb() {
       progress INTEGER NOT NULL DEFAULT 0,
       step_progress INTEGER NOT NULL DEFAULT 0,
       step_message TEXT,
+      track_policy_json TEXT NOT NULL DEFAULT '{}',
       total_chunks INTEGER DEFAULT 0,
       done_chunks INTEGER DEFAULT 0,
       output_path TEXT,
@@ -394,6 +396,10 @@ export function useDb() {
 
   try {
     _db.exec(`ALTER TABLE tasks ADD COLUMN step_message TEXT`)
+  } catch { /* column already exists */ }
+
+  try {
+    _db.exec(`ALTER TABLE tasks ADD COLUMN track_policy_json TEXT NOT NULL DEFAULT '{}'`)
   } catch { /* column already exists */ }
 
   try {

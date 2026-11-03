@@ -2,6 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     OCR_MEDIA_ROOT=/media \
+    OCR_TEMP_DIR=/app/temp/ocr \
     OCR_LANGUAGE=en \
     OCR_MAX_SECONDS=7200 \
     OCR_MIN_CONFIDENCE=25 \
@@ -47,6 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+RUN mkdir -p /app/temp/ocr
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .

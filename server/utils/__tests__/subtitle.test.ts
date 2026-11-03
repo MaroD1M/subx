@@ -362,7 +362,8 @@ world
     const glossaryChanged = SubtitleService.computeCacheHash('hello', 'gpt', 'zh-CN', { glossary: { A: '乙' }, stylePrompt: 's1', promptVersion: 1 })
     const styleChanged = SubtitleService.computeCacheHash('hello', 'gpt', 'zh-CN', { glossary: { A: '甲' }, stylePrompt: 's2', promptVersion: 1 })
     const promptChanged = SubtitleService.computeCacheHash('hello', 'gpt', 'zh-CN', { glossary: { A: '甲' }, stylePrompt: 's1', promptVersion: 2 })
-    expect(new Set([base, glossaryChanged, styleChanged, promptChanged]).size).toBe(4)
+    const contextChanged = SubtitleService.computeCacheHash('hello', 'gpt', 'zh-CN', { glossary: { A: '甲' }, stylePrompt: 's1', promptVersion: 1, context: 'before|after' })
+    expect(new Set([base, glossaryChanged, styleChanged, promptChanged, contextChanged]).size).toBe(5)
   })
 
 })

@@ -59,12 +59,54 @@
         <UButton label="清除筛选" size="xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="searchQuery = ''" />
       </div>
 
+      <div v-if="batchMode" class="mb-3 space-y-2.5 rounded-xl border border-primary-100 bg-primary-50/50 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-primary-800 dark:text-primary-200">批量轨道策略</p>
+            <p class="text-[11px] leading-relaxed text-primary-800/75 dark:text-primary-200/75">目录勾选只加入视频文件；同名外挂字幕会由视频自动匹配，不会单独重复入队。</p>
+          </div>
+          <UBadge color="primary" variant="subtle" size="sm" class="shrink-0">{{ selectedFileCount }} 个文件</UBadge>
+        </div>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <UFormField label="字幕语言优先">
+            <USelect v-model="batchPolicy.subtitleLanguage" :items="trackLanguageOptions" class="w-full" />
+          </UFormField>
+          <UFormField label="音轨语言优先（ASR）">
+            <USelect v-model="batchPolicy.audioLanguage" :items="trackLanguageOptions" class="w-full" />
+          </UFormField>
+        </div>
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-primary-100/70 bg-white/70 px-3 py-2 dark:border-primary-900/30 dark:bg-gray-950/30">
+          <div class="min-w-0">
+            <p class="text-xs font-medium text-gray-700 dark:text-gray-200">同集多版本自动去重</p>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400">同一目录下相同 SxxExx 只保留体积最大的版本。</p>
+          </div>
+          <USwitch v-model="batchPolicy.dedupeEpisodes" aria-label="同集多版本自动去重" />
+        </div>
+        <details class="rounded-xl border border-primary-100/70 bg-white/60 p-2 dark:border-primary-900/30 dark:bg-gray-950/30">
+          <summary class="cursor-pointer text-[11px] font-medium text-gray-600 dark:text-gray-300">高级轨道选项</summary>
+          <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label class="flex items-center justify-between gap-2 rounded-lg bg-gray-50/70 px-2.5 py-2 text-[11px] text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+              <span>优先默认轨</span>
+              <USwitch v-model="batchPolicy.preferDefault" aria-label="优先默认轨" />
+            </label>
+            <label class="flex items-center justify-between gap-2 rounded-lg bg-gray-50/70 px-2.5 py-2 text-[11px] text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+              <span>允许强制轨</span>
+              <USwitch v-model="batchPolicy.allowForcedSubtitle" aria-label="允许强制字幕轨" />
+            </label>
+            <label class="flex items-center justify-between gap-2 rounded-lg bg-gray-50/70 px-2.5 py-2 text-[11px] text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+              <span>无字幕时 ASR</span>
+              <USwitch v-model="batchPolicy.fallbackToAsr" aria-label="无字幕时自动语音识别" />
+            </label>
+          </div>
+        </details>
+      </div>
+
       <div class="relative flex-1 min-h-0">
         <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-white/70 dark:from-gray-900/65 to-transparent pointer-events-none z-10" />
         <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-white/40 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
         <div role="tree" aria-label="文件目录树" class="h-full overflow-y-auto space-y-1 pr-1 custom-scrollbar">
           <template v-for="node in displayNodes" :key="`${node.rootId || 'group'}:${node.path || node.name}`">
-            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeysArray" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
+            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeysArray" :folder-totals="folderVideoTotals" :scanning-keys="folderScanningKeysArray" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
           </template>
           <div v-if="!loadingFiles && (!displayNodes || !displayNodes.length)" class="h-full min-h-[180px] flex items-center justify-center text-center px-3">
             <div v-if="isRootUnavailable" class="space-y-3">
@@ -339,6 +381,21 @@ function switchMobileTab(tab: 'files' | 'settings') {
   if (tab === 'settings') rightTab.value = 'settings'
 }
 const batchMode = ref(false)
+const batchPolicy = reactive({
+  dedupeEpisodes: true,
+  subtitleLanguage: 'auto',
+  audioLanguage: 'auto',
+  preferDefault: true,
+  allowForcedSubtitle: false,
+  fallbackToAsr: true
+})
+const trackLanguageOptions = [
+  { label: '不指定（默认轨优先）', value: 'auto' },
+  { label: '中文优先', value: 'zh' },
+  { label: '英文优先', value: 'en' },
+  { label: '日文优先', value: 'ja' },
+  { label: '韩文优先', value: 'ko' }
+]
 const showAdvancedOptions = ref(false)
 const selectedNode = ref<FileNode | null>(null)
 const layoutRef = ref<HTMLElement | null>(null)
@@ -358,8 +415,13 @@ const deleteDialogLoading = ref(false)
 const files = ref<FileNode[]>([])
 const loadingFiles = ref(false)
 const selectedFileKeys = ref<Set<string>>(new Set())
+const selectedFileMeta = ref<Map<string, FileNode>>(new Map())
 const selectedFileKeysArray = computed(() => Array.from(selectedFileKeys.value))
 const selectedFileCount = computed(() => selectedFileKeys.value.size)
+const folderVideoTotals = ref<Record<string, number>>({})
+const folderScanningKeys = ref<Set<string>>(new Set())
+const folderScanningKeysArray = computed(() => Array.from(folderScanningKeys.value))
+const selectionGeneration = ref(0)
 const batchLaunching = ref(false)
 const filesError = ref<any>(null)
 
@@ -665,7 +727,9 @@ watch(useAsr, (enabled) => {
   }
 
   if (isSubtitleFile.value || selectedTrackIndex.value !== null) return
-  const fallback = tracks.value.find((track: any) => track.isSupported)
+  const fallback = tracks.value.find((track: any) => track.isSupported && !track.isForced)
+    || tracks.value.find((track: any) => track.isSupported)
+    || tracks.value.find((track: any) => isBitmapCodec(track.codec) && appConfig.value?.ocrEnabled && !track.isForced)
     || tracks.value.find((track: any) => isBitmapCodec(track.codec) && appConfig.value?.ocrEnabled)
   selectedTrackIndex.value = fallback ? fallback.index : null
 })
@@ -691,8 +755,9 @@ function isBitmapCodec(codec: string) {
 }
 const trackOptions = computed(() => tracks.value.map((t: any) => {
   const ocrAvailable = isBitmapCodec(t.codec) && appConfig.value?.ocrEnabled
+  const flags = `${t.isForced ? ' [强制]' : t.isDefault ? ' [默认]' : ''}`
   return {
-    label: `轨道 #${t.index} (${t.codec}) - ${t.language} ${t.title ? `[${t.title}]` : ''}${!t.isSupported && !ocrAvailable ? ' [全图像字幕/格式不支持]' : ''}${ocrAvailable ? ' [OCR]' : ''}`,
+    label: `轨道 #${t.index} (${t.codec}) - ${t.language} ${t.title ? `[${t.title}]` : ''}${flags}${!t.isSupported && !ocrAvailable ? ' [全图像字幕/格式不支持]' : ''}${ocrAvailable ? ' [OCR]' : ''}`,
     value: t.index,
     disabled: !t.isSupported && !ocrAvailable
   }
@@ -763,12 +828,15 @@ async function onSelect(node: FileNode) {
     const res = await $fetch('/api/tracks', { query: { path: node.path, rootId: node.rootId || activeRootId.value } })
     tracks.value = res.tracks || []
     audioTracks.value = res.audioTracks || []
-    const firstSupported = tracks.value.find((t: any) => t.isSupported)
-    const firstBitmap = tracks.value.find((t: any) => isBitmapCodec(t.codec) && appConfig.value?.ocrEnabled)
-    selectedTrackIndex.value = firstSupported ? firstSupported.index : firstBitmap ? firstBitmap.index : null
+    const fullTextTrack = tracks.value.find((t: any) => t.isSupported && !t.isForced)
+    const fallbackTextTrack = tracks.value.find((t: any) => t.isSupported)
+    const fullBitmapTrack = tracks.value.find((t: any) => isBitmapCodec(t.codec) && appConfig.value?.ocrEnabled && !t.isForced)
+    const fallbackBitmapTrack = tracks.value.find((t: any) => isBitmapCodec(t.codec) && appConfig.value?.ocrEnabled)
+    const preferredTrack = fullTextTrack || fullBitmapTrack || fallbackTextTrack || fallbackBitmapTrack
+    selectedTrackIndex.value = preferredTrack ? preferredTrack.index : null
     const firstAudio = audioTracks.value.find((t: any) => t.isDefault) || audioTracks.value[0]
     selectedAudioTrackIndex.value = firstAudio ? firstAudio.index : null
-    useAsr.value = !firstSupported && !firstBitmap && Boolean(firstAudio) && Boolean(appConfig.value?.asrEnabled)
+    useAsr.value = !preferredTrack && Boolean(firstAudio) && Boolean(appConfig.value?.asrEnabled)
   } catch {
     toast.add({ title: toastText.error, description: '无法分析视频轨道', color: 'error' })
   } finally {
@@ -855,32 +923,130 @@ async function confirmDeleteNode() {
   }
 }
 
+const BATCH_VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.ts', '.m2ts', '.mts', '.mov']
+
 function fileSelectionKey(node: FileNode) {
   return `${node.rootId || activeRootId.value || 'default'}:${node.path}`
 }
 
-function toggleFileSelection(node: FileNode) {
-  if (!node || node.isDir) return
+function isVideoSelectionKey(key: string) {
+  const separator = key.indexOf(':')
+  const path = (separator >= 0 ? key.slice(separator + 1) : key).toLowerCase()
+  return BATCH_VIDEO_EXTENSIONS.some(extension => path.endsWith(extension))
+}
+
+function countLoadedBatchVideos(node: FileNode): number {
+  if (!node.isDir) {
+    const name = String(node.name || '').toLowerCase()
+    return BATCH_VIDEO_EXTENSIONS.some(extension => name.endsWith(extension)) ? 1 : 0
+  }
+  if (!node.loaded) return 0
+  return (node.children || []).reduce((total, child) => total + countLoadedBatchVideos(child), 0)
+}
+
+function treeFullyLoadedBatch(node: FileNode): boolean {
+  if (!node.isDir) return true
+  if (!node.loaded) return false
+  return (node.children || []).every(child => !child.isDir || treeFullyLoadedBatch(child))
+}
+
+function folderSelectionTotal(node: FileNode): number | null {
+  const rootId = node.rootId || activeRootId.value || 'default'
+  const scanned = folderVideoTotals.value[buildNodeKey(node.path, rootId)]
+  if (typeof scanned === 'number') return scanned
+  return treeFullyLoadedBatch(node) ? countLoadedBatchVideos(node) : null
+}
+
+function updateFolderTotalsFromScan(node: FileNode, files: any[]) {
+  const rootId = node.rootId || activeRootId.value || 'default'
+  const basePath = node.path || ''
+  const baseKey = buildNodeKey(basePath, rootId)
+  const counts: Record<string, number> = { [baseKey]: 0 }
+  for (const file of files) {
+    const prefix = basePath ? `${basePath}/` : ''
+    const relativePath = String(file.path || '').startsWith(prefix) ? String(file.path).slice(prefix.length) : String(file.path || '')
+    const segments = relativePath.split('/').filter(Boolean)
+    counts[baseKey] = (counts[baseKey] || 0) + 1
+    let current = basePath
+    for (const segment of segments.slice(0, -1)) {
+      current = current ? `${current}/${segment}` : segment
+      const key = buildNodeKey(current, rootId)
+      counts[key] = (counts[key] || 0) + 1
+    }
+  }
+  folderVideoTotals.value = { ...folderVideoTotals.value, ...counts }
+}
+
+async function toggleFolderSelection(node: FileNode) {
+  const rootId = node.rootId || activeRootId.value || 'default'
+  const key = buildNodeKey(node.path, rootId)
+  const prefix = `${key}/`
+  const total = folderSelectionTotal(node)
+  const selected = Array.from(selectedFileKeys.value).filter(fileKey => fileKey.startsWith(prefix) && isVideoSelectionKey(fileKey)).length
+
+  if (total !== null && total > 0 && selected >= total) {
+    for (const fileKey of Array.from(selectedFileKeys.value)) {
+      if (!fileKey.startsWith(prefix)) continue
+      selectedFileKeys.value.delete(fileKey)
+      selectedFileMeta.value.delete(fileKey)
+    }
+    return
+  }
+
+  if (folderScanningKeys.value.has(key)) return
+  const generation = selectionGeneration.value
+  folderScanningKeys.value.add(key)
+  try {
+    const res = await $fetch<any>('/api/files/scan', { query: { rootId, path: node.path } })
+    if (generation !== selectionGeneration.value) return
+    const scannedFiles = Array.isArray(res.files) ? res.files : []
+    for (const file of scannedFiles) {
+      const fileKey = buildNodeKey(file.path, file.rootId || rootId)
+      selectedFileKeys.value.add(fileKey)
+      selectedFileMeta.value.set(fileKey, file)
+    }
+    updateFolderTotalsFromScan(node, scannedFiles)
+    if (res.truncated) {
+      toast.add({ title: '目录内容较多', description: '已达到单次扫描上限，仅加入前 5000 个视频文件。', color: 'warning' })
+    }
+  } catch (e: any) {
+    toast.add({ title: '目录扫描失败', description: e?.data?.message || e?.message || '无法读取目录内容', color: 'error' })
+  } finally {
+    folderScanningKeys.value.delete(key)
+  }
+}
+
+async function toggleFileSelection(node: FileNode) {
+  if (!node) return
+  if (node.isDir) {
+    await toggleFolderSelection(node)
+    return
+  }
   const key = fileSelectionKey(node)
-  if (selectedFileKeys.value.has(key)) selectedFileKeys.value.delete(key)
-  else selectedFileKeys.value.add(key)
+  if (selectedFileKeys.value.has(key)) {
+    selectedFileKeys.value.delete(key)
+    selectedFileMeta.value.delete(key)
+  } else {
+    selectedFileKeys.value.add(key)
+    selectedFileMeta.value.set(key, node)
+  }
 }
 
 function clearFileSelection() {
+  selectionGeneration.value += 1
   selectedFileKeys.value.clear()
+  selectedFileMeta.value.clear()
+  folderVideoTotals.value = {}
+  folderScanningKeys.value.clear()
 }
 
 function collectSelectedFiles(): FileNode[] {
-  const keys = selectedFileKeys.value
   const found: FileNode[] = []
-  const walk = (nodes: FileNode[]) => {
-    for (const node of nodes) {
-      if (!node.isDir && keys.has(fileSelectionKey(node))) found.push(node)
-      if (node.children?.length) walk(node.children)
-    }
+  for (const key of selectedFileKeys.value) {
+    const meta = selectedFileMeta.value.get(key)
+    if (meta) found.push(meta)
   }
-  walk(files.value)
-  return found
+  return found.sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'))
 }
 
 async function startBatchTasks() {
@@ -888,14 +1054,24 @@ async function startBatchTasks() {
   if (!selected.length) return
   batchLaunching.value = true
   try {
-    const res = await $fetch('/api/task', {
+    const res = await $fetch<any>('/api/task', {
       method: 'POST',
       body: {
         files: selected.map(node => ({ path: node.path, rootId: node.rootId || activeRootId.value })),
+        dedupeEpisodes: batchPolicy.dedupeEpisodes,
+        trackPolicy: {
+          subtitleLanguage: batchPolicy.subtitleLanguage === 'auto' ? undefined : batchPolicy.subtitleLanguage,
+          audioLanguage: batchPolicy.audioLanguage === 'auto' ? undefined : batchPolicy.audioLanguage,
+          preferDefault: batchPolicy.preferDefault,
+          allowForcedSubtitle: batchPolicy.allowForcedSubtitle,
+          fallbackToAsr: batchPolicy.fallbackToAsr
+        },
         ...options.value
       }
     })
-    toast.add({ title: '已加入队列', description: `共创建 ${res.taskIds?.length || selected.length} 个任务`, color: 'success' })
+    const skipped = Number(res.skippedDuplicates || 0)
+    const description = `共创建 ${res.taskIds?.length || selected.length} 个任务${skipped ? `，跳过 ${skipped} 个同集重复版本` : ''}`
+    toast.add({ title: '已加入队列', description, color: 'success' })
     clearFileSelection()
     navigateTo('/history')
   } catch (e: any) {

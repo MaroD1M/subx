@@ -48,7 +48,8 @@ export const VideoService = {
                         language: s.tags?.language ?? 'und',
                         title: s.tags?.title ?? '',
                         isSupported: SUPPORTED_TEXT_CODECS.includes(s.codec_name ?? ''),
-                        isDefault: Boolean((s as any).disposition?.default)
+                        isDefault: Boolean((s as any).disposition?.default),
+                        isForced: Boolean((s as any).disposition?.forced)
                     }))
 
                 const audioTracks: TrackInfo[] = streams

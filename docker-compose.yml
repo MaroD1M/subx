@@ -1,5 +1,5 @@
 # ============================================================
-# SubX v2.6.2 - 单镜像开箱即用
+# SubX v2.7.0 - 单镜像开箱即用
 # ============================================================
 # 默认只启动一个 subx 容器，内部包含：
 #   - Web / 翻译主应用
@@ -16,7 +16,7 @@
 # 「设置 → 语音识别 → 本地模型管理」手动开始下载，
 # 支持进度、速度、剩余时间、暂停、续传、取消、重试、卸载和代理。
 #
-# 镜像体积（v2.6.2，不含模型）：
+# 镜像体积参考（v2.6.x 实测，v2.7.0 预计接近，不含模型）：
 #   amd64 下载约 586 MiB，解压后约 1.57 GiB
 #   arm64 下载约 520 MiB
 #   ASR 模型另算，建议 /models 预留 10–20GB
@@ -31,7 +31,7 @@ services:
   subx:
     # 固定版本，避免 latest 自动升级带来意外。
     # 想跟随最新版可改成 ghcr.io/marod1m/subx:latest
-    image: ghcr.io/marod1m/subx:v2.6.2
+    image: ghcr.io/marod1m/subx:v2.7.0
 
     # 容器名称，便于 docker logs / docker exec 使用。
     container_name: subx
@@ -167,6 +167,8 @@ services:
       # ---------------- 内置 OCR ----------------
       # OCR 可访问的媒体根目录，必须与 /media 卷一致。
       OCR_MEDIA_ROOT: /media
+      # OCR 临时抽帧目录；与主应用 ./data/temp 保持一致，便于存储页统计和清理。
+      OCR_TEMP_DIR: /app/temp/ocr
 
       # 默认 OCR 语言，例如 en / zh-CN / ja。
       OCR_LANGUAGE: ${OCR_LANGUAGE:-en}
@@ -292,7 +294,7 @@ services:
     profiles: ["asr"]
 
     # 优先使用预构建镜像；本地没有时会按 asr-service 构建。
-    image: ghcr.io/marod1m/subx-asr:v2.6.2
+    image: ghcr.io/marod1m/subx-asr:v2.7.0
     build:
       context: ./asr-service
 
@@ -423,7 +425,7 @@ services:
     profiles: ["ocr"]
 
     # 优先使用预构建镜像；本地没有时会按 ocr-service 构建。
-    image: ghcr.io/marod1m/subx-ocr:v2.6.2
+    image: ghcr.io/marod1m/subx-ocr:v2.7.0
     build:
       context: ./ocr-service
 
@@ -433,6 +435,7 @@ services:
     environment:
       # OCR 可访问的媒体根目录，必须与主应用挂载路径一致。
       OCR_MEDIA_ROOT: /media
+      OCR_TEMP_DIR: /app/temp/ocr
       # 默认 OCR 语言，例如 en / zh-CN / ja。
       OCR_LANGUAGE: ${OCR_LANGUAGE:-en}
       # 可选 OCR 鉴权；设置后需在 SubX 设置页填写相同 Key。
@@ -451,6 +454,8 @@ services:
     volumes:
       # 必须与主应用媒体路径一致；只读即可。
       - /path/to/your/media:/media:ro
+      # 与主应用共享临时目录，便于主应用存储页管理和清理。
+      - ./data/temp/ocr:/app/temp/ocr
 
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" >/dev/null || exit 1"]

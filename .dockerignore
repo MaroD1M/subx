@@ -45,8 +45,6 @@ logs/
 *.log
 npm-debug.log*
 
-# ---- 归档文档与旧设计稿（不需要进入镜像）----
-docs/archive/
 
 # ---- 文档 ----
 README.md

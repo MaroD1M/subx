@@ -88,6 +88,11 @@
                 @click="copyPath(row.original.filePath)"
               />
             </div>
+            <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+              <UBadge :color="outputModeColor(row.original.outputMode)" variant="subtle" size="sm">{{ outputModeLabel(row.original.outputMode) }}</UBadge>
+              <UBadge color="neutral" variant="subtle" size="sm">{{ subtitleFormatLabel(row.original.subtitleFormat || row.original.subtitle_format) }}</UBadge>
+              <span class="whitespace-nowrap">{{ targetLanguageLabel(row.original.targetLanguage) }}</span>
+            </div>
           </div>
         </template>
 
@@ -153,6 +158,11 @@
           <div class="min-w-0">
             <p class="break-all text-sm font-semibold text-gray-900 dark:text-white">{{ fileName(task.filePath) }}</p>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ task.rootName || '默认媒体库' }} · {{ formatDate(task.createdAt) }}</p>
+            <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+              <UBadge :color="outputModeColor(task.outputMode)" variant="subtle" size="sm">{{ outputModeLabel(task.outputMode) }}</UBadge>
+              <UBadge color="neutral" variant="subtle" size="sm">{{ subtitleFormatLabel(task.subtitleFormat || task.subtitle_format) }}</UBadge>
+              <span>{{ targetLanguageLabel(task.targetLanguage) }}</span>
+            </div>
             <p v-if="task.content_title" class="mt-1 text-xs text-primary-700">{{ task.content_title }}</p>
           </div>
           <AppStatusBadge :status="task.status" class="shrink-0" />
@@ -393,6 +403,44 @@ function formatDate(value) {
 
 function isActiveStatus(status) {
   return ['queued', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(String(status || ''))
+}
+
+const outputModeLabels = {
+  translated: '仅译文',
+  bilingual: '双语',
+  original: '仅原文字幕'
+}
+
+const subtitleFormatLabels = {
+  srt: 'SRT',
+  ass: 'ASS',
+  both: 'SRT + ASS'
+}
+
+const targetLanguageLabels = {
+  'zh-CN': '简体中文',
+  'zh-TW': '繁体中文',
+  en: '英语',
+  ja: '日语',
+  ko: '韩语'
+}
+
+function outputModeLabel(value) {
+  return outputModeLabels[String(value || 'translated')] || value || '仅译文'
+}
+
+function outputModeColor(value) {
+  if (value === 'bilingual') return 'success'
+  if (value === 'original') return 'warning'
+  return 'primary'
+}
+
+function subtitleFormatLabel(value) {
+  return subtitleFormatLabels[String(value || 'srt')] || value || 'SRT'
+}
+
+function targetLanguageLabel(value) {
+  return targetLanguageLabels[String(value || '')] || value || '自动'
 }
 
 const columns = [

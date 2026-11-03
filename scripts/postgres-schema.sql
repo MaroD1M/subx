@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   progress INTEGER NOT NULL DEFAULT 0,
   step_progress INTEGER NOT NULL DEFAULT 0,
   step_message TEXT,
+  track_policy_json TEXT NOT NULL DEFAULT '{}',
   total_chunks INTEGER DEFAULT 0,
   done_chunks INTEGER DEFAULT 0,
   output_path TEXT,

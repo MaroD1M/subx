@@ -265,6 +265,7 @@ test('storage summary and targeted cleanup endpoints work', async ({ page }) => 
   const payload = await summary.json()
   expect(Array.isArray(payload.categories)).toBeTruthy()
   expect(payload.categories.some((item: any) => item.key === 'asrAudio')).toBeTruthy()
+  expect(String(payload.categories.find((item: any) => item.key === 'ocrTemp')?.path || '')).toContain('temp/ocr')
   const cleaned = await page.request.post('/api/storage/cleanup', {
     data: { targets: ['translationCache'], all: true }
   })

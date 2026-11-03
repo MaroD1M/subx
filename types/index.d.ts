@@ -65,6 +65,7 @@ export interface TranslationTask {
   subtitleFormat?: 'srt' | 'ass' | 'both'
   subtitleStylePreset?: string
   bilingualLayout?: 'translated_first' | 'original_first'
+  trackPolicy?: TrackPolicy
   forceRetranslate?: boolean
   status: TaskStatus
   progress: number             // 0-100
@@ -250,6 +251,16 @@ export interface FileNode {
   loaded?: boolean
   rootId?: string
   rootName?: string
+  size?: number
+}
+
+/** 批量任务的字幕/音轨选择策略 */
+export interface TrackPolicy {
+  subtitleLanguage?: string          // 字幕语言优先，如 zh/en/ja/ko；留空按默认轨
+  audioLanguage?: string             // ASR 音轨语言优先；留空按默认轨
+  preferDefault?: boolean            // 是否优先默认轨
+  allowForcedSubtitle?: boolean      // 是否允许使用强制字幕轨
+  fallbackToAsr?: boolean            // 无可用字幕时是否回退到 ASR
 }
 
 /** 轨道信息 */
@@ -262,6 +273,7 @@ export interface TrackInfo {
   channels?: number
   sampleRate?: number
   isDefault?: boolean
+  isForced?: boolean
 }
 
 /** SSE 进度更新数据 */

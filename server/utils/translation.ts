@@ -9,6 +9,8 @@ const STREAM_REQUEST_TIMEOUT_MS = 5 * 60 * 1000
 const RAW_RESPONSE_MAX_CHARS = 12000
 export const TRANSLATION_PROMPT_VERSION = 3
 
+export const TRANSLATION_CONTEXT_WINDOW = 4
+
 export interface TranslationContext {
     title?: string
     background?: string
@@ -34,6 +36,7 @@ function buildTranslationPrompt(
     targetLanguage: string,
     glossaryText: string,
     contextText: string,
+    nextContextText: string,
     styleBlock: string,
     productionContext: string
 ): string {
@@ -70,8 +73,11 @@ ${productionContext}
 术语表：
 ${glossaryText}
 
-前文背景：
-${contextText}
+前文语境：
+${contextText || '（无）'}
+
+后文语境（仅供理解，不要翻译，不要输出后文内容）：
+${nextContextText || '（无）'}
 
 待翻译：
 ${inputLines}`
@@ -316,15 +322,21 @@ export const TranslationService = {
         attempt: number = 0,
         useStreaming: boolean = false,
         signal?: AbortSignal,
-        translationContext?: TranslationContext
+        translationContext?: TranslationContext,
+        nextContext: SubtitleEntry[] = []
     ): Promise<SubtitleEntry[]> {
         const glossaryText = Object.entries(glossary)
             .map(([key, value]) => `${key} -> ${value}`)
             .join('\n')
 
         const contextText = previousContext
-            .slice(-5)
+            .slice(-TRANSLATION_CONTEXT_WINDOW)
             .map(entry => `ID:${entry.id} Context: ${entry.translatedText || entry.text}`)
+            .join('\n')
+
+        const nextContextText = nextContext
+            .slice(0, TRANSLATION_CONTEXT_WINDOW)
+            .map(entry => `ID:${entry.id} Source: ${entry.text}`)
             .join('\n')
 
         const styleBlock = stylePrompt
@@ -333,7 +345,7 @@ export const TranslationService = {
 
         const productionContext = buildProductionContext(translationContext)
 
-        const prompt = buildTranslationPrompt(chunk, targetLanguage, glossaryText, contextText, styleBlock, productionContext)
+        const prompt = buildTranslationPrompt(chunk, targetLanguage, glossaryText, contextText, nextContextText, styleBlock, productionContext)
 
         const partialPath = taskId
             ? join(process.cwd(), 'temp', `${taskId}.chunk-${chunkIndex ?? 0}.partial`)

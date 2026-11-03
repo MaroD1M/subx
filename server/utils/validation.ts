@@ -5,11 +5,21 @@ const outputModeSchema = z.enum(['translated', 'bilingual', 'original'])
 const subtitleFormatSchema = z.enum(['srt', 'ass', 'both'])
 const bilingualLayoutSchema = z.enum(['translated_first', 'original_first'])
 
+const trackPolicySchema = z.object({
+  subtitleLanguage: z.string().max(20).optional(),
+  audioLanguage: z.string().max(20).optional(),
+  preferDefault: z.boolean().optional(),
+  allowForcedSubtitle: z.boolean().optional(),
+  fallbackToAsr: z.boolean().optional()
+}).optional()
+
 export const taskCreateSchema = z.object({
   filePath: z.string().optional(),
   rootId: z.string().optional(),
   sourceType: z.enum(['auto', 'embedded', 'external', 'asr', 'ocr']).optional(),
   trackIndex: z.coerce.number().int().min(0).optional(),
+  trackPolicy: trackPolicySchema,
+  dedupeEpisodes: z.boolean().optional(),
   targetLanguage: z.string().min(1).optional(),
   outputMode: outputModeSchema.optional(),
   model: z.string().optional(),

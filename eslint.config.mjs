@@ -11,8 +11,7 @@ export default tseslint.config(
       '.test-artifacts/**',
       'test-results/**',
       'playwright-report/**',
-      'coverage/**',
-      'docs/archive/diagnostic-samples/**'
+      'coverage/**'
     ]
   },
   js.configs.recommended,

@@ -13,7 +13,7 @@ export default defineEventHandler(() => {
     openapi: '3.1.0',
     info: {
       title: 'SubX API',
-      version: '2.6.2',
+      version: '2.7.0',
       description: 'SubX 任务、目录监控、通知与 API Token 接口。使用 Authorization: Bearer <token> 或 X-API-Token。'
     },
     servers: [{ url: '/' }],
@@ -37,7 +37,18 @@ export default defineEventHandler(() => {
             model: { type: 'string' },
             stylePreset: { type: 'string' },
             subtitleFormat: { type: 'string', enum: ['srt', 'ass', 'both'] },
-            files: { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'object' }] } }
+            files: { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'object' }] } },
+            dedupeEpisodes: { type: 'boolean', description: '批量任务按 SxxExx 去重，保留体积最大的版本' },
+            trackPolicy: {
+              type: 'object',
+              properties: {
+                subtitleLanguage: { type: 'string', description: '字幕语言优先，如 zh/en/ja/ko' },
+                audioLanguage: { type: 'string', description: 'ASR 音轨语言优先，如 zh/en/ja/ko' },
+                preferDefault: { type: 'boolean' },
+                allowForcedSubtitle: { type: 'boolean' },
+                fallbackToAsr: { type: 'boolean' }
+              }
+            }
           }
         },
         WatchFolder: {
@@ -66,6 +77,7 @@ export default defineEventHandler(() => {
     },
     paths: {
       '/api/health': { get: { summary: '健康检查', security: [], responses: { '200': jsonResponse({ ok: true }) } } },
+      '/api/files/scan': { get: { summary: '递归扫描目录内的视频文件', parameters: [{ name: 'rootId', in: 'query', required: true, schema: { type: 'string' } }, { name: 'path', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
       '/api/task': { post: { summary: '创建任务', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TaskCreate' } } } }, responses: { '200': jsonResponse({ taskId: 'uuid' }) } } },
       '/api/tasks': { get: { summary: '任务列表', parameters: [{ name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'pageSize', in: 'query', schema: { type: 'integer' } }, { name: 'status', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
       '/api/tasks/{id}': { get: { ...taskPath.get, parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }] }, delete: { summary: '删除任务', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': jsonResponse({ success: true }) } } },

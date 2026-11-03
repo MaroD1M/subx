@@ -9,7 +9,7 @@
             ? 'text-gray-600 dark:text-gray-400 font-medium hover:bg-gray-50 dark:hover:bg-gray-800/40'
             : 'text-gray-500 dark:text-gray-400 hover:bg-primary-50 hover:text-primary-800 dark:hover:bg-primary-900/30')
       ]"
-      :style="{ paddingLeft: `${indentPx}px`, paddingRight: '0.75rem', paddingTop: '0.5rem', paddingBottom: '0.5rem' }"
+      :style="{ paddingLeft: `${indentPx}px`, paddingRight: '0.75rem', paddingTop: '0.625rem', paddingBottom: '0.625rem' }"
       :title="fullLabel"
       role="treeitem"
       :aria-expanded="node.isDir ? isOpen : undefined"
@@ -24,23 +24,30 @@
         class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-primary-500"
       />
       <UCheckbox
-        v-if="selectable && !node.isDir"
-        :model-value="isChecked"
-        :aria-label="`选择 ${node.name}`"
+        v-if="selectable"
+        :model-value="checkboxValue"
+        :disabled="isFolderScanning"
+        :aria-label="node.isDir ? `选择目录 ${node.name} 内的全部视频` : `选择 ${node.name}`"
+        :title="node.isDir ? '选择目录内全部视频；外挂字幕不会单独入队' : undefined"
         class="shrink-0"
         @click.stop
         @keydown.stop
         @update:model-value="$emit('toggle-select', node)"
       />
       <UIcon
-        v-if="node.isDir"
+        v-if="node.isDir && isFolderScanning"
+        name="i-lucide-loader-2"
+        class="w-4 h-4 shrink-0 animate-spin text-primary-500"
+      />
+      <UIcon
+        v-else-if="node.isDir"
         :name="isOpen ? 'i-lucide-folder-open' : 'i-lucide-folder'"
         class="w-4 h-4 shrink-0"
       />
       <UIcon v-else :name="fileIcon" class="w-4 h-4 shrink-0" />
       <div class="min-w-0 flex-1">
         <span class="block text-sm truncate" :title="node.name">{{ displayName }}</span>
-        <span v-if="showSecondaryPath" class="block text-[10px] text-gray-400 dark:text-gray-500 truncate" :title="node.path">{{ node.path }}</span>
+        <span v-if="showSecondaryPath" class="block text-[11px] text-gray-400 dark:text-gray-500 truncate" :title="node.path">{{ node.path }}</span>
       </div>
     </div>
 
@@ -54,6 +61,8 @@
           :expanded-keys="expandedKeys"
           :selectable="selectable"
           :selected-keys="selectedKeys"
+          :folder-totals="folderTotals"
+          :scanning-keys="scanningKeys"
           :depth="depth + 1"
           @select="$emit('select', $event)"
           @toggle-dir="$emit('toggle-dir', $event)"
@@ -71,6 +80,8 @@ const props = defineProps({
   expandedKeys: { type: Array as () => string[], default: () => [] },
   selectable: { type: Boolean, default: false },
   selectedKeys: { type: Array as () => string[], default: () => [] },
+  folderTotals: { type: Object as () => Record<string, number>, default: () => ({}) },
+  scanningKeys: { type: Array as () => string[], default: () => [] },
   depth: { type: Number, default: 0 }
 })
 const emit = defineEmits(['select', 'toggle-dir', 'toggle-select'])
@@ -79,6 +90,50 @@ const nodeKey = computed(() => `${props.node.rootId || 'default'}:${props.node.p
 const isSelected = computed(() => !!props.selectedPath && props.selectedPath === nodeKey.value)
 const isChecked = computed(() => props.selectedKeys.includes(nodeKey.value))
 const isOpen = computed(() => props.node.isDir && props.expandedKeys.includes(nodeKey.value))
+const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.ts', '.m2ts', '.mts', '.mov']
+
+function pathFromKey(key: string) {
+  const separator = key.indexOf(':')
+  return separator >= 0 ? key.slice(separator + 1) : key
+}
+
+function isVideoKey(key: string) {
+  const path = pathFromKey(key).toLowerCase()
+  return VIDEO_EXTENSIONS.some(extension => path.endsWith(extension))
+}
+
+function countLoadedVideos(node: any): number {
+  if (!node) return 0
+  if (!node.isDir) {
+    return node.name && VIDEO_EXTENSIONS.some((extension: string) => String(node.name).toLowerCase().endsWith(extension)) ? 1 : 0
+  }
+  if (!node.loaded) return 0
+  return (node.children || []).reduce((total: number, child: any) => total + countLoadedVideos(child), 0)
+}
+
+function treeFullyLoaded(node: any): boolean {
+  if (!node?.isDir) return true
+  if (!node.loaded) return false
+  return (node.children || []).every((child: any) => !child.isDir || treeFullyLoaded(child))
+}
+
+const folderTotal = computed<number | null>(() => {
+  const scanned = props.folderTotals[nodeKey.value]
+  if (typeof scanned === 'number') return scanned
+  return treeFullyLoaded(props.node) ? countLoadedVideos(props.node) : null
+})
+const selectedVideoCount = computed(() => {
+  if (!props.node.isDir) return 0
+  const prefix = `${nodeKey.value}/`
+  return props.selectedKeys.filter(key => key.startsWith(prefix) && isVideoKey(key)).length
+})
+const isFolderChecked = computed(() => props.node.isDir && folderTotal.value !== null && folderTotal.value > 0 && selectedVideoCount.value >= folderTotal.value)
+const isFolderIndeterminate = computed(() => props.node.isDir && selectedVideoCount.value > 0 && !isFolderChecked.value)
+const isFolderScanning = computed(() => props.node.isDir && props.scanningKeys.includes(nodeKey.value))
+const checkboxValue = computed(() => {
+  if (!props.node.isDir) return isChecked.value
+  return isFolderIndeterminate.value ? 'indeterminate' : isFolderChecked.value
+})
 const indentPx = computed(() => 12 + props.depth * 12)
 const fullLabel = computed(() => props.node?.path || props.node?.name || '')
 const showSecondaryPath = computed(() => !!props.node?.path && props.depth >= 2)

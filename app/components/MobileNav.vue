@@ -6,7 +6,7 @@
         :key="item.to"
         :to="item.to"
         :aria-current="isActive(item.to) ? 'page' : undefined"
-        class="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium transition-colors"
+        class="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-xs font-medium transition-colors"
         :class="isActive(item.to) ? 'text-primary-700 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
       >
         <UIcon :name="item.icon" class="h-5 w-5" />

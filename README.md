@@ -2,7 +2,7 @@
 
 > 把 NAS 里的生肉视频，变成能直接看的双语字幕。
 
-当前版本：**v2.6.2** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.7.0** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
 
 [项目地址](https://github.com/MaroD1M/subx) · [问题反馈](https://github.com/MaroD1M/subx/issues)
 
@@ -10,45 +10,20 @@
 
 ---
 
-## v2.6.2 新东西
+## ✨ v2.7.0 新东西
 
-- **长音频不再被固定总时长误杀**：ASR 改用任务式接口，按进度判断是否卡住，并提供 6 小时绝对上限，识别期间持续上报真实进度。
-- **任务进度更清楚**：任务详情显示当前阶段、阶段进度和实时说明，长任务不再长时间停在固定百分比。
-- **失败重试不再重复提取音频**：ASR 音频按媒体文件和音轨缓存，默认保留 14 天，失败任务会直接复用。
-- **首页 ASR 开关不再“消失”**：关闭语音识别后卡片和轨道选择保持可见，视频不会被取消选中；没有可用字幕源时会禁用开始按钮并说明原因。
-- **文档与预览图同步更新**：补充 ASR 音频缓存位置、保留策略和最新界面截图。
+- 📁 **目录级批量选择**：多选模式可直接勾选目录，递归扫描子目录；默认只加入视频，同名外挂字幕不会重复入队。
+- 🎯 **批量轨道策略**：字幕/音轨语言优先、默认轨优先、强制轨开关、无字幕回退 ASR，策略会随任务保存。
+- 🧹 **同集版本去重**：同一目录下相同 `SxxExx` 自动保留体积最大的版本，避免 FLUX / PTERWEB 等版本重复翻译。
+- 🔔 **通知内容更完整**：输出模式、字幕格式、双语排版、字幕来源、模型、耗时和输出路径都会进入通知。
+- 🧾 **历史与任务详情更清楚**：直接显示仅译文 / 双语 / 仅原文字幕，长模型名不再挤压目标语言等字段。
+- 🛠️ **自动化与 OCR 更稳**：包含/排除正则增加说明和模板；OCR 位图字幕识别、PGS 完整性校验和诊断日志同步增强。
 
-## v2.6.1 新东西
-
-- **登录页不再“点了没反应”**：「获取帮助」现在会打开内置帮助弹窗，忘记口令、HTTPS、文档和反馈入口都在里面。
-- **口令规则终于说人话**：统一 8 位，前端提示、后端校验和文档不再三方打架。
-- **登录/退出不再犯迷糊**：已登录访问 `/login` 自动回首页；退出接口失败也不会卡在“看起来还登录着”。
-- **Telegram 通知修好了**：改用 undici fetch，渠道代理和环境变量代理都能生效，支持 NO_PROXY，报错会告诉你真实原因。
-- **ASR 更抗折腾**：服务没就绪会等、识别失败会重试、旧地址不可达会尝试内置地址，错误里直接写试过哪些地址。
-- **文档排障更直接**：新增「忘记口令」、Telegram/通知代理排障和 ASR 服务排查步骤。
-
-## v2.6.0 新东西
-
-- **有字幕也能重新听写**：视频已有文本字幕时，右侧「语音识别」卡片可选；打开开关就忽略现有字幕，改用音频重新识别。
-- **ASR 设置真正生效**：「运行设备」和「计算精度」现在会随请求传给 ASR 服务，不再只是改 UI。
-- **配置不会自己“变回去”**：单镜像旧 sidecar 地址只迁移一次；之后你保存的 ASR/OCR 地址不会被反复覆盖。
-- **保存后立即生效**：设置页保存后会清掉 Nuxt 配置缓存，返回首页就能看到新的 ASR/OCR 开关状态。
-- **Compose 和环境变量说人话**：每个变量、端口、卷、健康检查、资源限制和 profile 都有中文注释；部署文档按主镜像 / ASR / OCR / 数据库 / 高级参数分组。
-- **文档减负**：README、部署、使用、ASR/OCR README 统一补齐，少绕弯子，直接告诉你该改哪一行。
-
-## v2.5.0 新东西
-
-- **单镜像开箱即用**：主应用、ASR、OCR 合并进 `ghcr.io/marod1m/subx`，默认只需一个容器。
-- **模型不再静默下载**：Whisper 模型不打包进镜像，进入设置页手动开始下载。
-- **完整下载管理**：显示进度、速度、剩余时间，支持暂停、续传、取消、重试和卸载。
-- **下载代理与镜像站**：模型下载支持 HTTP(S) 代理和 `ASR_HF_ENDPOINT` 镜像站。
-- **镜像拉取体验**：新增 `scripts/pull-image.sh`，显示 Docker 原生进度，Ctrl+C 暂停后可续传，并支持代理提示。
-- **OCR 零下载**：Tesseract 语言包和 RapidOCR 已内置，启用后即可处理 PGS/VobSub/DVD。
-- **拆分部署仍可选**：独立 ASR/OCR sidecar、增强版和 GPU 版继续保留，供扩容或特殊硬件使用。
+> 更早版本的变化见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
-## 界面预览
+## 🖼️ 界面预览
 
 | 首页工作台 | 翻译历史 |
 | --- | --- |
@@ -70,7 +45,7 @@
 
 ---
 
-## 它适合谁
+## 👤 它适合谁
 
 - NAS 里存了一堆剧集，却懒得逐部找字幕。
 - 想让翻译保留人物语气、剧情上下文和专有名词。
@@ -79,14 +54,14 @@
 
 ---
 
-## 30 秒跑起来
+## 🚀 30 秒跑起来
 
 把下面这段放进 `docker-compose.yml`，改一行媒体路径：
 
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.6.2
+    image: ghcr.io/marod1m/subx:v2.7.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -114,7 +89,7 @@ docker compose up -d
 
 访问 `http://NAS_IP:3000`，第一次进入先设置至少 8 位访问口令。
 
-> 单镜像实测（v2.6.2，不含模型）：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
+> 镜像体积参考：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.7.0 预计接近）。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
 >
 > 根目录 [`docker-compose.yml`](docker-compose.yml) 已逐项注释端口、卷、环境变量、健康检查、资源限制和 profiles；完整变量表见 [部署文档第 4 节](docs/deployment.md#4-环境变量与参数)。
 
@@ -134,7 +109,7 @@ docker compose up -d
 
 ---
 
-## 功能一览
+## 🧩 功能一览
 
 | 区域 | 能做什么 |
 | --- | --- |
@@ -153,13 +128,13 @@ docker compose up -d
 
 - 多套媒体库，支持默认库、排序、启用/停用和路径检测。
 - 目录树懒加载、展开状态记忆、路径复制。
-- 文件多选和批量加入翻译队列。
+- 文件/目录多选、递归扫描、同集版本去重和批量轨道策略。
 - 桌面分栏，移动端「文件 / 翻译设置」切换。
 
 ### AI 翻译
 
 - 兼容 OpenAI 协议，也支持 Anthropic、Gemini 原生协议。
-- 纯 Token 估算分块，带前文上下文，取消即时中止。
+- 纯 Token 估算分块，跨块带前 4 条 + 后 4 条语境，取消即时中止。
 - 内置翻译风格，也能自定义 Prompt。
 - 任务级片名、剧情背景、人物关系和额外要求。
 - 术语表、翻译缓存、非语言字幕跳过、自动重试与回退。
@@ -174,7 +149,7 @@ docker compose up -d
 
 ---
 
-## NAS 本地模型
+## 🧠 NAS 本地模型
 
 SubX 支持通过 OpenAI 兼容接口接入本地模型，适合隐私优先和零 API 费用场景。
 
@@ -192,7 +167,7 @@ SubX 支持通过 OpenAI 兼容接口接入本地模型，适合隐私优先和�
 
 ---
 
-## 无字幕视频 / 本地 ASR
+## 🎙️ 无字幕视频 / 本地 ASR
 
 单镜像已经内置 ASR，不需要额外启动 sidecar。首次使用只需下载模型：
 
@@ -229,11 +204,11 @@ ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/a
 >
 > 需要拆分部署时仍可使用独立 CPU sidecar：`docker compose --profile asr up -d asr`，地址改为 `http://subx-asr:8000`。
 >
-> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.6.2`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
+> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.7.0`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
 
 ---
 
-## 自动化与 API
+## 🤖 自动化与 API
 
 进入「自动化」页面可以配置：
 
@@ -267,7 +242,7 @@ curl -H "Authorization: Bearer subx_xxx" \
 
 ---
 
-## 权限与常见坑
+## 🔐 权限与常见坑
 
 > [!IMPORTANT]
 > `SQLITE_CANTOPEN` 多半不是数据库坏了，而是 `/app/db` 对容器用户不可写。
@@ -282,32 +257,30 @@ curl -H "Authorization: Bearer subx_xxx" \
 
 ---
 
-## 升级到 v2.6.2
+## ⬆️ 升级到 v2.7.0
 
 ```bash
 docker compose pull
 docker compose up -d --force-recreate
 ```
 
-本版是 ASR 可靠性与首页交互修复补丁。从 v2.6.1 升级无需调整卷或环境变量；如果从 v2.6.0 或更早版本升级，请继续参考下面的模型卷、sidecar 地址和登录会话说明。
+本版新增目录级批量选择、同集多版本去重、批量轨道策略、通知详情和 OCR 稳定性改进。从 v2.6.2 升级无需调整卷或环境变量，重新拉取镜像即可。
 
 升级说明：
 
-- v2.6.2 单镜像继续包含主应用、ASR 和 OCR；旧的 `--profile asr` / `--profile ocr` 不再需要。
+- 数据库会自动新增 `track_policy_json` 字段，无需手动迁移；旧任务没有策略时会继续使用原来的自动选轨逻辑。
+- 批量目录扫描默认只加入视频文件；同名外挂字幕由视频自动匹配，不再单独重复入队。
+- v2.7.0 单镜像继续包含主应用、ASR 和 OCR；旧的 `--profile asr` / `--profile ocr` 不再需要。
 - 新镜像启动时会等 ASR/OCR 健康检查通过，低配机器首次启动可能多等 10–30 秒，这是正常的。
-- Telegram/通知代理已改用 undici fetch；如果渠道里填了 `127.0.0.1`，请改成宿主机局域网 IP。
-- 登录口令统一为至少 8 位；已有口令不受影响，只有新建实例和修改提示生效。
 - 新增 `./data/models:/models` 卷；模型需要在设置页手动下载，或复用旧的模型缓存。
 - 旧的 `http://subx-asr:8000` / `http://subx-ocr:8000` 地址会一次性迁移到 `127.0.0.1`；迁移后以设置页保存的地址为准。如需继续连接外部 sidecar，设置 `SUBX_KEEP_LEGACY_SIDECAR_URLS=true`。
-- 主应用、ASR、OCR 镜像建议同步升级到 v2.6.2。
-- 未设置 `DATABASE_URL` 时继续使用 SQLite。
-- PostgreSQL 同步桥仍是低并发方案；生产高并发建议等待异步 DB 层。
-- 旧 Session 会失效，需要重新登录。
+- 主应用、ASR、OCR 镜像建议同步升级到 v2.7.0。
+- 未设置 `DATABASE_URL` 时继续使用 SQLite；PostgreSQL 会自动补充新字段，但仍建议使用低并发同步桥或等待异步 DB 层。
 - 建议升级前备份 `./data/db`、`./data/models` 与 PostgreSQL 数据库。
 
 ---
 
-## 安全说明
+## 🛡️ 安全说明
 
 - 首次初始化完成前，只开放登录/初始化相关接口。
 - 口令使用 `scrypt` 加盐哈希。
@@ -318,7 +291,7 @@ docker compose up -d --force-recreate
 
 ---
 
-## 技术栈
+## 🛠️ 技术栈
 
 - **前端**：Nuxt 4 + Vue 3 + Nuxt UI + Tailwind CSS
 - **服务端**：Nitro
@@ -334,7 +307,7 @@ docker compose up -d --force-recreate
 
 ---
 
-## 本地开发
+## 💻 本地开发
 
 环境要求：Node.js 18+、FFmpeg / FFprobe。
 
@@ -370,17 +343,14 @@ FFPROBE_PATH=/usr/bin/ffprobe
 
 ---
 
-## 文档与致谢
+## 📚 文档与致谢
 
-- [使用文档](docs/usage.md)：翻译设置、模型下载、自定义风格、核对页、字幕格式、日志排查。
-- [部署文档](docs/deployment.md)：单镜像、模型下载、镜像拉取、NAS、反向代理、升级备份、常见问题。
+- [使用文档](docs/usage.md)：批量选择、轨道策略、翻译设置、模型下载、核对页、字幕格式和日志排查。
+- [部署文档](docs/deployment.md)：单镜像、模型下载、镜像拉取、NAS、反向代理、升级备份和常见问题。
 - [更新日志](CHANGELOG.md)：版本变更和升级注意事项。
-- [ASR 自动化技术方案](docs/asr-automation-plan.md)：无字幕视频、语音识别、目录监控与通知规划。
-- [技术交接文档](docs/PROJECT_HANDOVER.md)：架构、已完成、未完成、路线图、维护约定。
 - [ASR 11 语言基准](docs/asr-benchmark.md)：基准脚本、样本规范与报告模板。
-- [PostgreSQL 迁移评估](docs/postgresql-evaluation.md)：PG 运行时、同步桥限制与数据迁移。
+- [PostgreSQL 运行时与迁移](docs/postgresql-evaluation.md)：PG 运行时、同步桥限制与数据迁移。
 - [实测指南](docs/testing-guide.md)：单镜像模型下载、真实 NAS、OCR、PG 和多 Worker 回归清单。
-- [开发 TODO](TODO.md)：分阶段任务清单和验收标准。
 
 本项目基于 [chao-eng/subx](https://github.com/chao-eng/subx) 开发，原项目已停止维护。
 
