@@ -6,6 +6,8 @@ OCR_PORT="${OCR_INTERNAL_PORT:-8001}"
 export PYTHONUNBUFFERED=1
 export ASR_INTERNAL_URL="${ASR_INTERNAL_URL:-http://127.0.0.1:${ASR_PORT}}"
 export OCR_INTERNAL_URL="${OCR_INTERNAL_URL:-http://127.0.0.1:${OCR_PORT}}"
+export TZ="${TZ:-Asia/Shanghai}"
+export NUXT_PUBLIC_TIME_ZONE="${NUXT_PUBLIC_TIME_ZONE:-$TZ}"
 
 echo "[subx] starting built-in ASR on 127.0.0.1:${ASR_PORT}" >&2
 cd /app/asr-service || exit 1

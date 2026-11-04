@@ -186,7 +186,7 @@ volumes:
 | `VIDEO_DIR` | `/media` | 默认媒体目录；未配置媒体库时作为回退 |
 | `DB_PATH` | `/app/db/subx.db` | SQLite 数据库路径；设置 `DATABASE_URL` 后不生效 |
 | `SUBX_SECRET_KEY` | 自动生成 | API Key 加密主密钥；未设置时自动生成 `db/.secret`；更换后旧 Key 需重填 |
-| `TZ` | `Asia/Shanghai` | 容器时区 |
+| `TZ` | `Asia/Shanghai` | 容器时区；界面时间、任务日志和通知均按此时区显示 |
 | `PUID` / `PGID` | `1001` | 容器运行用户；建议与媒体所有者一致 |
 | `CHOWN_MEDIA` | `false` | 启动时递归修复媒体目录权限；大目录会较慢 |
 | `CHOWN_MODELS` | `false` | 启动时递归修复 `/models` 权限；从旧 sidecar 迁移时可用 |

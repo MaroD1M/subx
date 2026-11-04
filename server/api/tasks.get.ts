@@ -1,11 +1,7 @@
+import { toUtcIsoString } from '~~/shared/time'
 import { useDb } from '../utils/db'
 import { getMediaRoot } from '../utils/mediaRoots'
 import { taskListQuerySchema } from '../utils/validation'
-
-function toUtcIsoString(value: string | null | undefined) {
-  if (!value) return value || ''
-  return value.includes('T') ? value : value.replace(' ', 'T') + 'Z'
-}
 
 function isSubtitlePath(value: unknown) {
   return /\.(?:srt|ass|ssa|vtt)$/i.test(String(value || ''))

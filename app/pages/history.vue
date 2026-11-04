@@ -235,6 +235,8 @@
 </template>
 
 <script setup>
+import { formatDateTime } from '~~/shared/time'
+
 useHead({
   title: '翻译历史 - SubX'
 })
@@ -245,6 +247,7 @@ const retryingTaskId = ref('')
 const deletingTaskId = ref('')
 const toast = useToast()
 const { confirm } = useConfirm()
+const timeZone = useTimeZone()
 
 const page = ref(1)
 const pageSize = ref(50)
@@ -394,17 +397,7 @@ function fileName(filePath) {
 }
 
 function formatDate(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+  return formatDateTime(value, timeZone)
 }
 
 function isActiveStatus(status) {

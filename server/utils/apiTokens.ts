@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'crypto'
 import type { H3Event } from 'h3'
 import type { ApiTokenSummary } from '../../types'
 import { useDb } from './db'
+import { toUtcIsoString } from '~~/shared/time'
 
 export const API_TOKEN_SCOPES = [
   'tasks:read',
@@ -59,10 +60,10 @@ export const ApiTokenService = {
       name: String(row.name),
       prefix: String(row.prefix),
       scopes: JSON.parse(row.scopes_json || '[]'),
-      expiresAt: row.expires_at || null,
-      lastUsedAt: row.last_used_at || null,
-      createdAt: row.created_at,
-      revokedAt: row.revoked_at || null
+      expiresAt: row.expires_at ? toUtcIsoString(row.expires_at) : null,
+      lastUsedAt: row.last_used_at ? toUtcIsoString(row.last_used_at) : null,
+      createdAt: toUtcIsoString(row.created_at),
+      revokedAt: row.revoked_at ? toUtcIsoString(row.revoked_at) : null
     }))
   },
 
@@ -110,7 +111,7 @@ export const ApiTokenService = {
       path: String(row.path),
       statusCode: Number(row.status_code || 0),
       ip: String(row.ip || ''),
-      createdAt: row.created_at
+      createdAt: toUtcIsoString(row.created_at)
     }))
   },
 

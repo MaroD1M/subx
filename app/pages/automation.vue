@@ -622,11 +622,13 @@
 import type { ApiTokenSummary, NotificationChannel, NotificationChannelType, NotificationEvent, WatchEvent, WatchFolder, WatchOutputPolicy, WatchRules } from '~~/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { AUTOMATION_TEMPLATES } from '~~/shared/automationTemplates'
+import { formatDateTime } from '~~/shared/time'
 
 useHead({ title: '自动化 - SubX' })
 
 const toast = useToast()
 const route = useRoute()
+const timeZone = useTimeZone()
 const tabs = [
   { value: 'folders', label: '监控目录', icon: 'i-lucide-folder-search' },
   { value: 'events', label: '事件记录', icon: 'i-lucide-list-video' },
@@ -1170,9 +1172,7 @@ async function refreshAll() {
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return '-'
-  const date = new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
+  return formatDateTime(value, timeZone)
 }
 function formatSize(bytes: number) {
   if (!bytes) return '0 B'

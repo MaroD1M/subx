@@ -11,6 +11,7 @@ import { existsSync } from 'fs'
 import { isAbsolute, join, normalize } from 'path'
 import { basename as pathBasename } from 'path'
 import { useDb } from './db'
+import { toUtcIsoString } from '~~/shared/time'
 import { ConfigService } from './config'
 import { getMediaRoots } from './mediaRoots'
 import { isPathInside, resolveInsideRoot } from './pathSafety'
@@ -177,7 +178,7 @@ export const IntegrationService = {
       taskId: row.task_id || '',
       status: String(row.status),
       error: row.error || '',
-      createdAt: row.created_at
+      createdAt: toUtcIsoString(row.created_at)
     }))
   }
 }

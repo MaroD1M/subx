@@ -1,4 +1,5 @@
 import { useDb } from '../../../utils/db'
+import { toUtcIsoString } from '~~/shared/time'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -38,7 +39,7 @@ export default defineEventHandler(async (event) => {
       durationMs: run.duration_ms,
       rtf: run.rtf,
       confidence: run.confidence,
-      createdAt: run.created_at
+      createdAt: toUtcIsoString(run.created_at)
     },
     segments: segments.map(segment => ({
       id: segment.id,

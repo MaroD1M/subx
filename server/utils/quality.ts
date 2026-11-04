@@ -8,6 +8,7 @@
 
 import type { SubtitleEntry } from '../../types'
 import { useDb } from './db'
+import { toUtcIsoString } from '~~/shared/time'
 import { createProvider, normalizeProviderType } from './providers/registry'
 import type { BoundTranslationProvider } from './providers/types'
 import type { TranslationContext } from './translation'
@@ -213,7 +214,7 @@ export const QualityService = {
       avgScore: Number(run.avg_score || 0),
       issueSummary: JSON.parse(run.issues_json || '{}'),
       error: run.error || '',
-      createdAt: run.created_at,
+      createdAt: toUtcIsoString(run.created_at),
       entries: entries.map(entry => ({
         subtitleId: String(entry.subtitle_id),
         score: Number(entry.score || 0),

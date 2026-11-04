@@ -14,6 +14,7 @@ import { lstat, readdir, stat } from 'fs/promises'
 import { dirname, join, relative } from 'path'
 import type { WatchEvent, WatchFolder } from '../../types'
 import { useDb } from './db'
+import { toUtcIsoString } from '~~/shared/time'
 import { ConfigService } from './config'
 import { getMediaRoot, getMediaRoots } from './mediaRoots'
 import { resolveInsideRoot } from './pathSafety'
@@ -52,8 +53,8 @@ function rowToFolder(row: any, rootName = ''): WatchFolder {
     mode: ['new', 'backfill', 'both'].includes(String(row.mode)) ? String(row.mode) as WatchFolder['mode'] : 'new',
     rules: sanitizeWatchRules(parseJson(row.rules_json, {})),
     outputPolicy: sanitizeOutputPolicy(parseJson(row.output_policy_json, {})),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: toUtcIsoString(row.created_at),
+    updatedAt: toUtcIsoString(row.updated_at),
     pendingEvents: Number(row.pending_events || 0),
     failedEvents: Number(row.failed_events || 0)
   }
@@ -70,8 +71,8 @@ function rowToEvent(row: any, folderLabel = ''): WatchEvent {
     status: String(row.status) as WatchEvent['status'],
     taskId: row.task_id || undefined,
     error: row.error || undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    createdAt: toUtcIsoString(row.created_at),
+    updatedAt: toUtcIsoString(row.updated_at)
   }
 }
 
@@ -230,8 +231,8 @@ export const WatchService = {
       attempts: Number(row.attempts || 0),
       maxAttempts: Number(row.max_attempts || 3),
       lastError: row.last_error || '',
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+      createdAt: toUtcIsoString(row.created_at),
+      updatedAt: toUtcIsoString(row.updated_at)
     }))
   },
 

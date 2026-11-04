@@ -1,4 +1,5 @@
 import { useDb } from '../../utils/db'
+import { toUtcIsoString } from '~~/shared/time'
 
 export default defineEventHandler(() => {
   const db = useDb()
@@ -51,7 +52,7 @@ export default defineEventHandler(() => {
       durationMs: Number(row.duration_ms || 0),
       rtf: Number(row.rtf || 0),
       confidence: Number(row.confidence || 0),
-      createdAt: row.created_at
+      createdAt: toUtcIsoString(row.created_at)
     }))
   }
 })

@@ -26,6 +26,7 @@
         v-for="item in navItems"
         :key="item.to"
         :to="item.to"
+        no-prefetch
         :title="collapsed ? item.label : undefined"
         :aria-label="item.label"
         class="group relative flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-medium leading-[22px] transition-colors"
@@ -109,7 +110,8 @@ const emit = defineEmits<{
   toggle: []
 }>()
 
-const route = useRoute()
+const router = useRouter()
+const currentPath = computed(() => router.currentRoute.value.path)
 const colorMode = useColorMode()
 const { authenticated, logout } = useAuth()
 
@@ -122,11 +124,12 @@ const navItems = [
 ]
 
 function isActive(path: string) {
-  if (path === '/') return route.path === '/'
+  const routePath = currentPath.value
+  if (path === '/') return routePath === '/'
   if (path === '/history') {
-    return route.path.startsWith('/history') || route.path.startsWith('/task') || route.path.startsWith('/review')
+    return routePath.startsWith('/history') || routePath.startsWith('/task') || routePath.startsWith('/review')
   }
-  return route.path.startsWith(path)
+  return routePath.startsWith(path)
 }
 
 const versionTitle = computed(() => {

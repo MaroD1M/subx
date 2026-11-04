@@ -2,6 +2,7 @@ import type { SubtitleEntry } from '../../types'
 import type { BoundTranslationProvider } from './providers/types'
 import { useDb } from './db'
 import { SubtitleService } from './subtitle'
+import { formatLogTimestamp } from '~~/shared/time'
 import { appendFileSync, existsSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
@@ -387,7 +388,7 @@ Model: ${model}
 Target: ${targetLanguage}
 Translation Mode: ${effectiveStreaming ? 'STREAM' : 'NON_STREAM'}
 Stream Usage Toggle: ${streamUsage ? 'ON' : 'OFF'}
-Timestamp: ${new Date().toISOString()}
+Timestamp: ${formatLogTimestamp(new Date())}
 
 === REQUEST OPTIONS ===
 ${JSON.stringify(requestOptions, null, 2)}
@@ -468,7 +469,7 @@ ${prompt}
             // 写入结束日志
             appendFileSync(logFile, `\n\n=== SUMMARY ===
 Tokens: ${usage.totalTokens} (P: ${usage.promptTokens}, C: ${usage.completionTokens})
-End Time: ${new Date().toISOString()}
+End Time: ${formatLogTimestamp(new Date())}
 `)
 
             console.log(`[${effectiveStreaming ? 'Stream' : 'NonStream'}] Task ${taskId} chunk ${chunkIndex} complete, total ${fullContent.length} bytes, tokens: ${usage.totalTokens} (prompt: ${usage.promptTokens}, completion: ${usage.completionTokens})`)

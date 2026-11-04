@@ -1,9 +1,5 @@
+import { toUtcIsoString } from '~~/shared/time'
 import { useDb } from '../../../utils/db'
-
-function toUtcIsoString(value: string | null | undefined) {
-  if (!value) return value || ''
-  return value.includes('T') ? value : value.replace(' ', 'T') + 'Z'
-}
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')

@@ -64,8 +64,9 @@ services:
 
     environment:
       # ---------------- 基础 ----------------
-      # 容器时区，影响日志和任务时间显示。
+      # 容器时区，界面时间、日志和通知均按此时区显示。
       TZ: ${TZ:-Asia/Shanghai}
+      NUXT_PUBLIC_TIME_ZONE: ${TZ:-Asia/Shanghai}
 
       # 默认媒体目录。未在「媒体库」中配置时作为回退。
       VIDEO_DIR: /media

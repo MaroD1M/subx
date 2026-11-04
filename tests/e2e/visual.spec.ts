@@ -63,6 +63,15 @@ test('history visual and accessibility', async ({ page }) => {
   await expectNoSeriousA11y(page)
 })
 
+test('client navigation updates active nav and page content', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByText('文件浏览器')).toBeVisible()
+  await page.locator('aside').getByRole('link', { name: '翻译历史' }).click()
+  await expect(page).toHaveURL(/\/history$/)
+  await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
+  await expect(page.locator('aside').getByRole('link', { name: '翻译历史' })).toHaveAttribute('aria-current', 'page')
+})
+
 test('review visual and accessibility', async ({ page }) => {
   const response = page.waitForResponse(item => item.url().includes('/api/tasks/preview-review/review') && item.status() === 200).catch(() => null)
   const previewResponse = page.waitForResponse(item => item.url().includes('/api/tasks/preview-review/review-preview') && item.status() === 200).catch(() => null)

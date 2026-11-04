@@ -1,4 +1,5 @@
 import { useDb } from '../../../utils/db'
+import { toUtcIsoString } from '~~/shared/time'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -118,8 +119,8 @@ export default defineEventHandler(async (event) => {
       taskId: task.task_id,
       status: task.status,
       filePath: task.file_path,
-      createdAt: task.created_at,
-      updatedAt: task.updated_at
+      createdAt: toUtcIsoString(task.created_at),
+      updatedAt: toUtcIsoString(task.updated_at)
     }))
   }
 })

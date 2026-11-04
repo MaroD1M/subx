@@ -5,6 +5,7 @@
         v-for="item in items"
         :key="item.to"
         :to="item.to"
+        no-prefetch
         :aria-current="isActive(item.to) ? 'page' : undefined"
         class="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-xs font-medium transition-colors"
         :class="isActive(item.to) ? 'text-primary-700 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
@@ -17,7 +18,8 @@
 </template>
 
 <script setup lang="ts">
-const route = useRoute()
+const router = useRouter()
+const currentPath = computed(() => router.currentRoute.value.path)
 
 const items = [
   { label: '首页', icon: 'i-lucide-home', to: '/' },
@@ -28,10 +30,11 @@ const items = [
 ]
 
 function isActive(path: string) {
-  if (path === '/') return route.path === '/'
+  const routePath = currentPath.value
+  if (path === '/') return routePath === '/'
   if (path === '/history') {
-    return route.path.startsWith('/history') || route.path.startsWith('/task') || route.path.startsWith('/review')
+    return routePath.startsWith('/history') || routePath.startsWith('/task') || routePath.startsWith('/review')
   }
-  return route.path.startsWith(path)
+  return routePath.startsWith(path)
 }
 </script>

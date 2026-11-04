@@ -1,3 +1,4 @@
+import { toUtcIsoString } from '~~/shared/time'
 import { useDb } from '../../../utils/db'
 import { SubtitleService } from '../../../utils/subtitle'
 import { resolveMediaPath } from '../../../utils/mediaRoots'
@@ -5,11 +6,6 @@ import { existsSync } from 'fs'
 
 function isSubtitlePath(value: unknown) {
   return /\.(?:srt|ass|ssa|vtt)$/i.test(String(value || ''))
-}
-
-function toUtcIsoString(value: string | null | undefined) {
-  if (!value) return value || ''
-  return value.includes('T') ? value : value.replace(' ', 'T') + 'Z'
 }
 
 export default defineEventHandler(async (event) => {

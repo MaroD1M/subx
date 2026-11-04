@@ -86,7 +86,8 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      appVersion: JSON.parse(readFileSync('./package.json', 'utf-8')).version || '0.0.0'
+      appVersion: JSON.parse(readFileSync('./package.json', 'utf-8')).version || '0.0.0',
+      timeZone: process.env.NUXT_PUBLIC_TIME_ZONE || process.env.TZ || 'Asia/Shanghai'
     }
   }
 })

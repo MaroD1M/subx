@@ -11,6 +11,7 @@ import nodemailer from 'nodemailer'
 import { fetch as undiciFetch, ProxyAgent } from 'undici'
 import type { NotificationChannel, NotificationChannelType, NotificationEvent } from '../../types'
 import { useDb } from './db'
+import { formatDateTime, toUtcIsoString } from '~~/shared/time'
 import { ConfigService } from './config'
 import { decryptSecret, encryptSecret, isEncryptedSecret } from './secret'
 import { STYLE_PRESETS } from '../../shared/stylePresets'
@@ -488,8 +489,8 @@ function rowToChannel(row: any): NotificationChannel {
     name: String(row.name),
     config: JSON.parse(row.config_json || '{}'),
     enabled: Number(row.enabled) === 1,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    createdAt: toUtcIsoString(row.created_at),
+    updatedAt: toUtcIsoString(row.updated_at)
   }
 }
 
@@ -736,7 +737,7 @@ export const NotificationService = {
     const payload: NotificationPayload = {
       event: 'test',
       title: 'SubX 测试通知',
-      body: `这是一条来自 SubX 的测试通知。\n时间：${new Date().toLocaleString('zh-CN')}\n渠道：${channel.name}`
+      body: `这是一条来自 SubX 的测试通知。\n时间：${formatDateTime(new Date())}\n渠道：${channel.name}`
     }
     const info = db.prepare(`
       INSERT INTO notification_deliveries (channel_id, event, title, body, status, attempts, dedupe_key)

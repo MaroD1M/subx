@@ -11,6 +11,7 @@ import { join, dirname, basename, relative } from 'path'
 import { existsSync, mkdirSync, rmSync, appendFileSync, readdirSync } from 'fs'
 import { EventEmitter } from 'events'
 import { useDb } from './db'
+import { formatLogTimestamp, toUtcIsoString } from '~~/shared/time'
 import { VideoService } from './video'
 import { SubtitleService } from './subtitle'
 import { getMediaRoot, resolveMediaPath } from './mediaRoots'
@@ -84,7 +85,7 @@ function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'erro
         const logFile = join(process.cwd(), 'db', 'logs', `task_${taskId}.log`)
         const dir = join(process.cwd(), 'db', 'logs')
         if (!existsSync(dir)) { mkdirSync(dir, { recursive: true }) }
-        const ts = new Date().toISOString().replace('T', ' ').substring(0, 19)
+        const ts = formatLogTimestamp(new Date())
         appendFileSync(logFile, `[${ts}] [${level.toUpperCase()}] [${step || '-'}] ${message}\n`)
     } catch {}
 }
@@ -762,8 +763,8 @@ export const TaskService = {
             stepMessage: task.step_message || '',
             totalChunks: task.total_chunks,
             completedChunks: task.done_chunks,
-            createdAt: task.created_at,
-            updatedAt: task.updated_at
+            createdAt: toUtcIsoString(task.created_at),
+            updatedAt: toUtcIsoString(task.updated_at)
         }
     },
 

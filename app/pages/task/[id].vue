@@ -456,7 +456,10 @@
 </template>
 
 <script setup lang="ts">
+import { formatClock as formatClockInZone } from '~~/shared/time'
+
 const route = useRoute()
+const timeZone = useTimeZone()
 
 const activeTab = ref<'overview' | 'logs' | 'diagnostics' | 'asr'>('overview')
 const tabs = computed<Array<{ label: string, value: 'overview' | 'logs' | 'diagnostics' | 'asr' }>>(() => {
@@ -609,8 +612,8 @@ const riskTagLabels: Record<string, string> = {
   long_lines: '长句较多'
 }
 
-function formatClock(date = new Date()) {
-  return date.toLocaleTimeString('zh-CN', { hour12: false })
+function formatClock(date: Date | string = new Date()) {
+  return formatClockInZone(date, timeZone)
 }
 
 const reviewDiagnosticsIssues = computed(() => Array.isArray(task.value.reviewDiagnostics?.issues) ? task.value.reviewDiagnostics.issues : [])
@@ -625,9 +628,7 @@ function riskTagLabel(tag: string) {
 
 function formatTime(value?: string | null) {
   if (!value) return formatClock()
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value)
-  return formatClock(date)
+  return formatClockInZone(value, timeZone)
 }
 
 async function fetchResponses() {
