@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { mkdirSync, rmSync, writeFileSync } from 'fs'
+import Database from 'better-sqlite3'
 import { join } from 'path'
 import { seedTasks, setupAuth } from './helpers'
 
@@ -26,8 +27,11 @@ async function expectNoSeriousA11y(page: import('@playwright/test').Page) {
 }
 
 test('home visual and accessibility', async ({ page }) => {
+  const filesResponse = page.waitForResponse(item => item.url().includes('/api/files') && item.status() === 200).catch(() => null)
   await page.goto('/')
   await expect(page.getByText('文件浏览器')).toBeVisible()
+  await filesResponse
+  await expect(page.getByText('Movies').first()).toBeVisible()
   await expect(page.getByText('选择一个视频开始')).toBeVisible()
   await expect(page).toHaveScreenshot('home.png', {
     fullPage: true
@@ -37,9 +41,12 @@ test('home visual and accessibility', async ({ page }) => {
 
 test('home dark visual and accessibility', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' })
+  const filesResponse = page.waitForResponse(item => item.url().includes('/api/files') && item.status() === 200).catch(() => null)
   await page.goto('/')
   await expect(page.locator('html')).toHaveClass(/dark/)
   await expect(page.getByText('文件浏览器')).toBeVisible()
+  await filesResponse
+  await expect(page.getByText('Movies').first()).toBeVisible()
   await expect(page).toHaveScreenshot('home-dark.png', {
     fullPage: true
   })
@@ -49,6 +56,7 @@ test('home dark visual and accessibility', async ({ page }) => {
 test('history visual and accessibility', async ({ page }) => {
   await page.goto('/history')
   await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '进入核对' }).first()).toBeVisible()
   await expect(page).toHaveScreenshot('history.png', {
     fullPage: true
   })
@@ -56,8 +64,14 @@ test('history visual and accessibility', async ({ page }) => {
 })
 
 test('review visual and accessibility', async ({ page }) => {
+  const response = page.waitForResponse(item => item.url().includes('/api/tasks/preview-review/review') && item.status() === 200).catch(() => null)
+  const previewResponse = page.waitForResponse(item => item.url().includes('/api/tasks/preview-review/review-preview') && item.status() === 200).catch(() => null)
   await page.goto('/review/preview-review')
+  await response
+  await previewResponse
   await expect(page.getByRole('heading', { name: '字幕核对' })).toBeVisible()
+  await expect(page.getByText('Good evening, Minister.').first()).toBeVisible()
+  await page.waitForTimeout(300)
   await expect(page).toHaveScreenshot('review.png', {
     fullPage: true
   })
@@ -131,6 +145,64 @@ test('monitor folder triggers on a new stable video', async ({ page }) => {
   }
 })
 
+test('original-only export creates review entries and output fallback works', async ({ page }) => {
+  const file = join(process.cwd(), '.test-artifacts', 'media', 'ReviewOriginal.srt')
+  const output = join(process.cwd(), '.test-artifacts', 'media', 'ReviewOriginal.original.srt')
+  const subtitle = '1\n00:00:01,000 --> 00:00:02,000\nHello\n\n2\n00:00:03,000 --> 00:00:04,000\nWorld\n'
+  writeFileSync(file, subtitle)
+  let taskId = ''
+  try {
+    const create = await page.request.post('/api/task', {
+      data: {
+        filePath: 'ReviewOriginal.srt',
+        rootId: 'default',
+        sourceType: 'external',
+        trackIndex: 0,
+        outputMode: 'original',
+        subtitleFormat: 'srt',
+        targetLanguage: 'zh-CN',
+        model: 'deepseek-chat'
+      }
+    })
+    expect(create.ok()).toBeTruthy()
+    const created = await create.json()
+    taskId = String(created.taskId || '')
+    expect(taskId).toBeTruthy()
+
+    await expect.poll(async () => {
+      const response = await page.request.get(`/api/tasks/${taskId}`)
+      const payload = await response.json()
+      return payload.task?.status
+    }, { timeout: 20_000 }).toBe('done')
+
+    const review = await page.request.get(`/api/tasks/${taskId}/review`)
+    const reviewData = await review.json()
+    expect(reviewData.summary.total).toBe(2)
+    expect(reviewData.entries[0].finalText).toContain('Hello')
+
+    const list = await page.request.get('/api/tasks?page=1&pageSize=100')
+    const listData = await list.json()
+    expect(listData.tasks.find((item: any) => item.taskId === taskId)?.reviewAvailable).toBe(true)
+
+    await page.goto(`/review/${taskId}`)
+    await expect(page.getByText('该任务为「仅原文字幕」')).toBeVisible()
+    await expect(page.getByText('Hello').first()).toBeVisible()
+
+    const db = new Database(process.env.DB_PATH || join(process.cwd(), '.test-artifacts', 'subx.db'))
+    db.prepare('DELETE FROM task_review_entries WHERE task_id = ?').run(taskId)
+    db.close()
+
+    const fallback = await page.request.get(`/api/tasks/${taskId}/review`)
+    const fallbackData = await fallback.json()
+    expect(fallbackData.summary.total).toBe(2)
+    expect(fallbackData.entries[0].finalText).toContain('Hello')
+  } finally {
+    if (taskId) await page.request.delete(`/api/tasks/${taskId}`)
+    rmSync(file, { force: true })
+    rmSync(output, { force: true })
+  }
+})
+
 test('settings visual and accessibility', async ({ page }) => {
   await page.goto('/settings')
   await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
@@ -158,7 +230,7 @@ test('settings OCR tab is accessible', async ({ page }) => {
   await page.waitForTimeout(1500)
   await page.getByRole('switch', { name: '启用图像字幕 OCR' }).click()
   await expect(page.getByText('长视频与超时')).toBeVisible()
-  await expect(page.getByText('最大 OCR 时长（小时）')).toBeVisible()
+  await expect(page.getByText('最大视频时长（小时）')).toBeVisible()
   await expectNoSeriousA11y(page)
 })
 

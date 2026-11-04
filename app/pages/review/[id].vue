@@ -14,6 +14,10 @@
       </template>
     </PageHeader>
 
+    <div v-if="taskMeta.outputMode === 'original' && summary.total > 0" class="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-xs leading-relaxed text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+      该任务为「仅原文字幕」：核对页用于查看、编辑和导出原始字幕。批量重译 / AI 校对会调用翻译模型，是否使用由你决定。
+    </div>
+
     <div class="surface-card flex flex-wrap items-end gap-3 p-3">
       <UFormField label="导出模式" class="min-w-[120px]">
         <USelect v-model="exportMode" :items="exportModeItems" class="w-32" />
@@ -63,12 +67,22 @@
                 <span v-if="dirtyCount > 0" class="text-primary-700">待保存 {{ dirtyCount }} 条</span>
               </div>
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs text-gray-500 dark:text-gray-400">状态筛选</span>
-                <USelect v-model="statusFilter" :items="filterItems" class="w-24" size="xs" aria-label="状态筛选" />
-                <span class="text-xs text-gray-500 dark:text-gray-400">原因筛选</span>
-                <USelect v-model="reasonFilter" :items="reasonFilterItems" class="w-44" size="xs" aria-label="原因筛选" />
-                <USelect v-model="confidenceFilter" :items="confidenceFilterItems" class="w-32" size="xs" aria-label="ASR 置信度筛选" />
-                <USelect v-model="qualityFilter" :items="qualityFilterItems" class="w-32" size="xs" aria-label="翻译质量筛选" />
+                <label class="inline-flex items-center gap-1.5">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">状态筛选</span>
+                  <USelect v-model="statusFilter" :items="filterItems" class="w-24" size="xs" aria-label="状态筛选" />
+                </label>
+                <label class="inline-flex items-center gap-1.5">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">原因筛选</span>
+                  <USelect v-model="reasonFilter" :items="reasonFilterItems" class="w-44" size="xs" aria-label="原因筛选" />
+                </label>
+                <label class="inline-flex items-center gap-1.5">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">置信度</span>
+                  <USelect v-model="confidenceFilter" :items="confidenceFilterItems" class="w-32" size="xs" aria-label="ASR 置信度筛选" />
+                </label>
+                <label class="inline-flex items-center gap-1.5">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">质量</span>
+                  <USelect v-model="qualityFilter" :items="qualityFilterItems" class="w-32" size="xs" aria-label="翻译质量筛选" />
+                </label>
                 <UButton label="全选可见" size="xs" color="neutral" variant="ghost" @click="selectVisible" />
                 <UButton label="待核对" size="xs" color="warning" variant="ghost" @click="selectNeedsReview" />
                 <UButton label="清空选择" size="xs" color="neutral" variant="ghost" @click="clearSelection" />
@@ -114,11 +128,11 @@
             </div>
           </div>
 
-          <div class="divide-y divide-gray-100 dark:divide-gray-800 max-h-[72vh] overflow-y-auto">
+          <div class="divide-y divide-gray-100 dark:divide-gray-800 xl:max-h-[72vh] xl:overflow-y-auto">
             <div
               v-for="entry in pagedEntries"
               :key="entry.subtitleId"
-              v-memo="[entry.finalText, entry.translatedText, entry.reviewStatus, entry.selected, entry.edited, entry.qualityScore, entry.qualityIssues?.join(','), focusedSubtitleId === String(entry.subtitleId)]"
+              v-memo="[entry.finalText, entry.translatedText, entry.originalText, entry.reviewStatus, entry.reviewReasons?.join(','), entry.selected, entry.edited, entry.asrConfidence, entry.qualityScore, entry.qualityIssues?.join(','), focusedSubtitleId === String(entry.subtitleId)]"
               :id="`review-entry-${entry.subtitleId}`"
               tabindex="-1"
               class="p-3 space-y-3"
@@ -191,14 +205,30 @@
               </div>
             </div>
 
-            <div v-if="!filteredEntries.length" class="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
-              当前筛选下暂无字幕条目
+            <div v-if="reviewLoading && !entries.length" class="p-8 text-center text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center gap-2">
+              <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 正在加载核对数据...
+            </div>
+            <div v-else-if="reviewError && !entries.length" class="p-8 text-center text-sm space-y-3">
+              <p class="font-medium text-red-600 dark:text-red-400">核对数据加载失败</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ reviewError }}</p>
+              <UButton label="重试" size="xs" color="primary" variant="soft" :loading="reviewLoading" @click="retryLoadReview" />
+            </div>
+            <div v-else-if="!filteredEntries.length" class="p-8 text-center text-sm text-gray-500 dark:text-gray-400 space-y-3">
+              <template v-if="summary.total === 0">
+                <p class="font-medium text-gray-600 dark:text-gray-300">该任务没有可核对的字幕数据</p>
+                <p class="text-xs leading-relaxed">通常是任务在翻译完成前失败、取消，或旧版本导出的「仅原文字幕」任务尚未生成核对记录。</p>
+                <UButton label="返回任务" size="xs" color="neutral" variant="soft" :to="`/task/${taskId}`" />
+              </template>
+              <template v-else>
+                <p>当前筛选下暂无字幕条目</p>
+                <UButton label="重置筛选" size="xs" color="neutral" variant="soft" @click="resetFilters" />
+              </template>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="surface-card overflow-hidden xl:sticky xl:top-4">
+      <div class="surface-card hidden overflow-hidden xl:sticky xl:top-4 xl:block">
         <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 space-y-2">
           <div class="flex items-center justify-between gap-2">
             <h2 class="text-sm font-semibold text-gray-900 dark:text-white">实时预览</h2>
@@ -288,6 +318,9 @@ const toast = useToast()
 const { confirm } = useConfirm()
 const { data: appConfig } = await useFetch('/api/config')
 const qualityThreshold = computed(() => Number(appConfig.value?.qualityScoreThreshold ?? 0.7))
+const reviewLoading = ref(true)
+const reviewError = ref('')
+const skipLeaveConfirm = ref(false)
 const saving = ref(false)
 const exporting = ref(false)
 const retranslating = ref(false)
@@ -341,6 +374,7 @@ function playClip(entry: any) {
 }
 
 async function runProofread(kind: 'glossary' | 'consistency') {
+  if (!(await confirmOriginalTranslation(kind === 'glossary' ? 'AI 术语建议' : 'AI 一致性检查'))) return
   proofreadKind.value = kind
   proofreadLoading.value = true
   proofreadResult.value = null
@@ -755,34 +789,60 @@ function batchRestoreTranslated() {
 }
 
 async function loadReview() {
-  const res: any = await $fetch(`/api/tasks/${taskId}/review`)
-  summary.total = res.summary.total
-  summary.needsReview = res.summary.needsReview
-  summary.edited = res.summary.edited
-  taskMeta.outputMode = res.task?.outputMode || 'translated'
-  taskMeta.bilingualLayout = res.task?.bilingualLayout || 'translated_first'
-  bilingualLayout.value = taskMeta.bilingualLayout
-  exportMode.value = taskMeta.outputMode as any
-  exportStyle.value = res.task?.subtitleStylePreset || 'bilingual_simple'
-  exportFormat.value = (res.task?.subtitleFormat === 'ass' ? 'ass' : 'srt')
-  entries.value = res.entries
-  lastClickedIndex.value = -1
-  rebuildSnapshots(res.entries || [])
+  reviewLoading.value = true
+  reviewError.value = ''
+  try {
+    const res: any = await $fetch(`/api/tasks/${taskId}/review`)
+    summary.total = res.summary.total
+    summary.needsReview = res.summary.needsReview
+    summary.edited = res.summary.edited
+    taskMeta.outputMode = res.task?.outputMode || 'translated'
+    taskMeta.bilingualLayout = res.task?.bilingualLayout || 'translated_first'
+    bilingualLayout.value = taskMeta.bilingualLayout
+    exportMode.value = taskMeta.outputMode as any
+    exportStyle.value = res.task?.subtitleStylePreset || 'bilingual_simple'
+    exportFormat.value = (res.task?.subtitleFormat === 'ass' ? 'ass' : 'srt')
+    entries.value = res.entries || []
+    lastClickedIndex.value = -1
+    rebuildSnapshots(res.entries || [])
 
-  const focusId = String(route.query.focus || '')
-  if (focusId) {
-    const focusIndex = entries.value.findIndex(entry => String(entry.subtitleId) === focusId)
-    if (focusIndex >= 0) currentPage.value = Math.floor(focusIndex / pageSize.value) + 1
-    focusedSubtitleId.value = focusId
-    await nextTick()
-    const target = document.getElementById(`review-entry-${focusId}`)
-    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const focusId = String(route.query.focus || '')
+    if (focusId) {
+      const focusIndex = entries.value.findIndex(entry => String(entry.subtitleId) === focusId)
+      if (focusIndex >= 0) currentPage.value = Math.floor(focusIndex / pageSize.value) + 1
+      focusedSubtitleId.value = focusId
+      await nextTick()
+      const target = document.getElementById(`review-entry-${focusId}`)
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  } catch (error: any) {
+    reviewError.value = error?.data?.message || error?.message || '无法加载核对数据'
+    throw error
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+async function retryLoadReview() {
+  try {
+    await loadReview()
+    await loadPreview()
+  } catch {
+    // loadReview 已记录错误状态
   }
 }
 
 function openPreview() {
   previewOpen.value = true
   loadPreview()
+}
+
+function resetFilters() {
+  statusFilter.value = 'all'
+  reasonFilter.value = 'all'
+  confidenceFilter.value = 'all'
+  qualityFilter.value = 'all'
+  currentPage.value = 1
 }
 
 async function loadPreview() {
@@ -829,6 +889,16 @@ async function saveChanges(showToast = true) {
   }
 }
 
+async function confirmOriginalTranslation(action: string) {
+  if (taskMeta.outputMode !== 'original') return true
+  return await confirm({
+    title: '仅原文字幕任务',
+    description: `${action}会调用翻译模型并写入当前核对数据。`,
+    confirmLabel: '继续',
+    color: 'warning'
+  })
+}
+
 async function retranslateIds(subtitleIds: string[]) {
   if (!subtitleIds.length) return
   await $fetch(`/api/tasks/${taskId}/review-retranslate`, {
@@ -840,6 +910,7 @@ async function retranslateIds(subtitleIds: string[]) {
 }
 
 async function retranslateSelected() {
+  if (!(await confirmOriginalTranslation('批量重译'))) return
   const ids = selectedEntries.value.map(entry => String(entry.subtitleId))
   if (!ids.length) {
     toast.add({ title: '请先选择要重译的字幕', color: 'warning' })
@@ -857,6 +928,7 @@ async function retranslateSelected() {
 }
 
 async function retranslateSingle(entry: any) {
+  if (!(await confirmOriginalTranslation('单条重译'))) return
   retranslatingSingleId.value = String(entry.subtitleId)
   try {
     await saveChanges(false)
@@ -889,6 +961,7 @@ async function discardReview() {
   if (!(await confirmLeaveIfDirty())) return
   try {
     await $fetch(`/api/tasks/${taskId}/review-discard`, { method: 'POST' })
+    skipLeaveConfirm.value = true
     toast.add({ title: '已放弃本次翻译成果', color: 'warning' })
     await navigateTo(`/history`)
   } catch (error: any) {
@@ -933,6 +1006,7 @@ watch([exportMode, exportStyle], () => {
 })
 
 onBeforeRouteLeave(() => {
+  if (skipLeaveConfirm.value) return true
   return confirmLeaveIfDirty()
 })
 
@@ -963,7 +1037,7 @@ function focusEntryByOffset(offset: number) {
 function handleShortcut(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
     event.preventDefault()
-    saveChanges()
+    void saveChanges().catch(() => {})
     return
   }
   if (isEditableTarget(event.target)) return

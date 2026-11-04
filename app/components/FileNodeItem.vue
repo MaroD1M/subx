@@ -15,7 +15,8 @@
       :aria-expanded="node.isDir ? isOpen : undefined"
       :aria-selected="isSelected"
       :aria-label="fullLabel"
-      tabindex="0"
+      :aria-level="depth + 1"
+      :tabindex="activeKey && activeKey !== nodeKey ? -1 : 0"
       @click="handleClick"
       @keydown="handleKeydown"
     >
@@ -58,6 +59,7 @@
         <FileNodeItem
           :node="child"
           :selected-path="selectedPath"
+          :active-key="activeKey"
           :expanded-keys="expandedKeys"
           :selectable="selectable"
           :selected-keys="selectedKeys"
@@ -77,6 +79,7 @@
 const props = defineProps({
   node: { type: Object, required: true },
   selectedPath: { type: String, default: '' },
+  activeKey: { type: String, default: '' },
   expandedKeys: { type: Array as () => string[], default: () => [] },
   selectable: { type: Boolean, default: false },
   selectedKeys: { type: Array as () => string[], default: () => [] },

@@ -1,10 +1,10 @@
 # SubX 部署文档
 
-> 适用版本：v2.8.1
+> 适用版本：v2.8.2
 
 本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理、拆分部署、升级备份和常见问题。使用说明请参阅 [usage.md](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
-## 1. v2.8.1 架构
+## 1. v2.8.2 架构
 
 从 v2.5.0 开始，主应用镜像 `ghcr.io/marod1m/subx` 同时包含：
 
@@ -25,7 +25,7 @@ OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下�
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.8.1
+    image: ghcr.io/marod1m/subx:v2.8.2
     container_name: subx
     restart: unless-stopped
     ports:
@@ -78,7 +78,7 @@ http://<主机IP>:3000
 4. 需要无字幕识别时开启「启用语音识别」；需要图像字幕时进入「设置 → 图像字幕 OCR」开启 OCR，并按需选择语言和引擎。
 5. 回首页开始翻译。
 
-> 镜像体积参考：amd64 下载约 **586 MiB**，解压后文件约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.1 预计接近）。模型体积参考：`tiny` 约 75MB、`small` 约 500MB、`medium` 约 1.5GB、`large-v3` 约 3GB。建议为 `./data/models` 预留 10–20GB。
+> 镜像体积参考：amd64 下载约 **586 MiB**，解压后文件约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.2 预计接近）。模型体积参考：`tiny` 约 75MB、`small` 约 500MB、`medium` 约 1.5GB、`large-v3` 约 3GB。建议为 `./data/models` 预留 10–20GB。
 
 > [!TIP]
 > 不想读全文？先只改三处：媒体路径、`PUID/PGID`、`SUBX_SECRET_KEY`。然后 `docker compose up -d`，进设置页下载模型。其他默认值先别动，真的够用。
@@ -110,7 +110,7 @@ http://<主机IP>:3000
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.8.1
+    image: ghcr.io/marod1m/subx:v2.8.2
     container_name: subx
     restart: unless-stopped
     ports:
@@ -244,12 +244,13 @@ volumes:
 | `OCR_FPS` | `2` | 抽帧 OCR 帧率；低配 NAS 可降到 `1` |
 | `OCR_WORKERS` | `4` | 并行 OCR 线程数；低配可降到 `2` |
 | `OCR_MIN_CONFIDENCE` | `25` | 低置信度提示阈值（0–100），结果保留并进入核对 |
-| `OCR_MAX_SECONDS` | `14400` | OCR 总体最大处理时长；默认 4 小时，设置页可覆盖 |
+| `OCR_MAX_SECONDS` | `14400` | OCR 最大视频时长；默认 4 小时，设置页可覆盖 |
 | `OCR_CHUNK_SECONDS` | `1800` | VobSub/DVD 分段时长；默认 30 分钟，设置页可覆盖 |
 | `OCR_PGSRIP_TIMEOUT_SECONDS` | `7200` | pgsrip 单次识别超时；默认 2 小时，设置页可覆盖 |
 | `OCR_FFMPEG_TIMEOUT_SECONDS` | `3600` | 单段抽帧/字幕提取超时；设置页可覆盖 |
 | `OCR_CHUNK_RETRIES` | `1` | 单段失败重试次数；设置页可覆盖 |
 | `OCR_RESUME_TTL_HOURS` | `24` | OCR 分段断点保留时间；设置页可覆盖 |
+| `OCR_MAX_CONCURRENT_JOBS` | `2` | 同时运行的 OCR 任务上限；低配 NAS 建议 `1` |
 | `OCR_JOB_IDLE_TIMEOUT_MS` | `3600000` | 主应用 OCR 无进度超时；设置页可覆盖 |
 | `OCR_JOB_ABSOLUTE_TIMEOUT_MS` | `21600000` | 主应用 OCR 总任务上限；设置页可覆盖 |
 | `OCR_TEMP_DIR` | `/app/temp/ocr` | OCR 抽帧临时目录；默认位于主应用 `./data/temp/ocr` 下 |
@@ -285,11 +286,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.8.1
+# 默认拉取 v2.8.2
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.8.1
+./scripts/pull-image.sh --tag v2.8.2
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
@@ -405,7 +406,7 @@ docker compose --profile asr up -d asr
 http://subx-asr:8000
 ```
 
-独立镜像：`ghcr.io/marod1m/subx-asr:v2.8.1`。模型目录为 `./data/models/asr`。
+独立镜像：`ghcr.io/marod1m/subx-asr:v2.8.2`。模型目录为 `./data/models/asr`。
 
 ### 8.2 独立 OCR 容器
 
@@ -503,7 +504,7 @@ OCR 内部健康检查：
 
 ## 12. 升级与备份
 
-升级到 v2.8.1：
+升级到 v2.8.2：
 
 ```bash
 docker compose pull
@@ -512,10 +513,10 @@ docker compose up -d --force-recreate
 
 升级说明：
 
-- v2.8.1 修复 PGS `.sup` 语言/flags 误过滤和 OCR 回退日志误报；从 v2.8.0 升级不需要调整卷、环境变量或数据库。
-- PGS 提取文件现在使用轨道语言和 forced/full 标记命名，pgsrip 直通成功率更高；失败仍会回退到分段 OCR。
-- 拆分部署时请同步升级主应用和 OCR 镜像到 v2.8.1，否则 OCR 服务端仍会生成旧的 `subtitle.sup`。
-- 本次不需要数据库迁移；主应用镜像仍包含 ASR/OCR，旧的 `--profile asr` / `--profile ocr` 不再需要。
+- v2.8.2 修复核对回填来源、运行中核对入口、OCR 并发/取消/缓存和 Edge 最小化自动恢复；从 v2.8.1 升级不需要调整卷、数据库或设置。
+- OCR 新增 `OCR_MAX_CONCURRENT_JOBS` 默认 `2`，低配 NAS 建议设为 `1`。
+- 仅原文字幕任务会生成核对记录；旧任务优先从已导出字幕或外挂字幕源回填。
+- 拆分部署时请同步升级主应用和 OCR 镜像到 v2.8.2；本次不需要数据库迁移。
 - 单镜像会把旧默认地址 `http://subx-asr:8000` / `http://subx-ocr:8000` **一次性**迁移到 `127.0.0.1`；迁移后以设置页保存的地址为准，不会覆盖你后来填写的 sidecar 地址。
 - 如需继续连接外部 sidecar，设置 `SUBX_KEEP_LEGACY_SIDECAR_URLS=true`，并保留旧的 sidecar 容器。
 - 新增 `./data/models:/models` 卷；首次需要在设置页手动下载模型，或复用旧模型缓存。
@@ -633,7 +634,7 @@ docker exec -it subx curl -fsS http://127.0.0.1:8000/health
 
 ### 镜像太大 / 拉取很慢
 
-- v2.8.1 单镜像包含 Python、FFmpeg、Tesseract 语言包和 OCR 依赖：amd64 下载约 586 MiB、解压后约 1.57 GiB；arm64 下载约 520 MiB（不含模型，体积参考基于 v2.6.x 实测）。
+- v2.8.2 单镜像包含 Python、FFmpeg、Tesseract 语言包和 OCR 依赖：amd64 下载约 586 MiB、解压后约 1.57 GiB；arm64 下载约 520 MiB（不含模型，体积参考基于 v2.6.x 实测）。
 - 使用 `./scripts/pull-image.sh` 查看 Docker 原生进度；Ctrl+C 暂停后重新执行可续传。
 - 配置 Docker Daemon 代理（见第 5 节）。
 - 只需要主应用时，可继续使用旧版精简镜像和独立 sidecar，但不再推荐。

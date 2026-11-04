@@ -7,6 +7,10 @@ function toUtcIsoString(value: string | null | undefined) {
   return value.includes('T') ? value : value.replace(' ', 'T') + 'Z'
 }
 
+function isSubtitlePath(value: unknown) {
+  return /\.(?:srt|ass|ssa|vtt)$/i.test(String(value || ''))
+}
+
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const parsed = taskListQuerySchema.safeParse(query)
@@ -31,7 +35,9 @@ export default defineEventHandler(async (event) => {
   const total = Number(totalRow?.count || 0)
   const offset = (page - 1) * pageSize
   const rows = db.prepare(`
-    SELECT * FROM tasks
+    SELECT tasks.*,
+      (SELECT COUNT(*) FROM task_review_entries tre WHERE tre.task_id = tasks.task_id) AS review_entry_count
+    FROM tasks
     ${where}
     ORDER BY created_at DESC
     LIMIT ? OFFSET ?
@@ -46,9 +52,13 @@ export default defineEventHandler(async (event) => {
       // ignore fallback
     }
 
+    const reviewEntryCount = Number(task.review_entry_count || 0)
+    const terminalStatus = ['done', 'error', 'cancelled', 'review'].includes(String(task.status))
     return {
       ...task,
       taskId: task.task_id,
+      reviewEntryCount,
+      reviewAvailable: terminalStatus && (reviewEntryCount > 0 || isSubtitlePath(task.output_path) || isSubtitlePath(task.source_subtitle_path) || isSubtitlePath(task.file_path)),
       filePath: task.file_path,
       rootId: task.root_id,
       rootName,

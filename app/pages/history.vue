@@ -85,6 +85,7 @@
                 variant="ghost"
                 class="shrink-0 opacity-70 hover:opacity-100"
                 title="复制完整路径"
+                aria-label="复制完整路径"
                 @click="copyPath(row.original.filePath)"
               />
             </div>
@@ -115,12 +116,13 @@
           <div class="flex items-center justify-center gap-0.5">
             <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" title="查看详情" aria-label="查看详情" :to="`/task/${row.original.taskId}`" />
             <UButton
-              v-if="['done', 'error', 'cancelled', 'review'].includes(row.original.status)"
+              v-if="row.original.reviewAvailable"
               icon="i-lucide-list-checks"
               variant="ghost"
               color="primary"
               size="xs"
               title="进入核对"
+              aria-label="进入核对"
               @click="openReview(row.original.taskId)"
             />
             <UButton
@@ -131,6 +133,7 @@
               size="xs"
               :loading="retryingTaskId === row.original.taskId"
               title="重新翻译"
+              aria-label="重新翻译"
               @click="retryTask(row.original.taskId)"
             />
             <a v-if="row.original.status === 'done' && row.original.subtitle_format !== 'ass'" :href="`/api/tasks/${row.original.taskId}/download?format=srt`" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-primary-700 hover:text-primary-800 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors" title="下载 SRT" aria-label="下载 SRT">
@@ -141,6 +144,9 @@
             </a>
             <UButton v-if="!isActiveStatus(row.original.status)" icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" :loading="deletingTaskId === row.original.taskId" title="删除记录" aria-label="删除记录" @click="deleteTask(row.original.taskId)" />
           </div>
+        </template>
+        <template #empty>
+          <div class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">当前筛选下暂无任务</div>
         </template>
       </UTable>
     </div>
@@ -182,7 +188,7 @@
 
         <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
           <UButton label="详情" icon="i-lucide-eye" size="xs" color="neutral" variant="soft" :to="`/task/${task.taskId}`" />
-          <UButton v-if="['done', 'error', 'cancelled', 'review'].includes(task.status)" label="核对" icon="i-lucide-list-checks" size="xs" color="warning" variant="soft" @click="openReview(task.taskId)" />
+          <UButton v-if="task.reviewAvailable" label="核对" icon="i-lucide-list-checks" size="xs" color="warning" variant="soft" @click="openReview(task.taskId)" />
           <UButton v-if="['error', 'cancelled', 'review', 'done'].includes(task.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="retryingTaskId === task.taskId" @click="retryTask(task.taskId)" />
           <a v-if="task.status === 'done' && task.subtitle_format !== 'ass'" :href="`/api/tasks/${task.taskId}/download?format=srt`" class="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/20">
             <UIcon name="i-lucide-file-text" class="h-3.5 w-3.5" /> SRT

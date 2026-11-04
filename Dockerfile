@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# SubX v2.8.1 all-in-one image
+# SubX v2.8.2 all-in-one image
 # 主应用 + ASR + OCR 运行在同一个容器内。
 # Whisper 模型不打进镜像，首次在设置页手动下载。
 # ============================================================
@@ -161,6 +161,7 @@ ENV TZ=Asia/Shanghai \
     OCR_FFMPEG_TIMEOUT_SECONDS=3600 \
     OCR_CHUNK_RETRIES=1 \
     OCR_RESUME_TTL_HOURS=24 \
+    OCR_MAX_CONCURRENT_JOBS=2 \
     OCR_JOB_IDLE_TIMEOUT_MS=3600000 \
     OCR_JOB_ABSOLUTE_TIMEOUT_MS=21600000
 

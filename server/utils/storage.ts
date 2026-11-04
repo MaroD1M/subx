@@ -232,9 +232,12 @@ export const StorageService = {
       translationCache: 30
     }
     const ocrSafeAge = selected.includes('ocrTemp') ? await ocrSafeAgeMs() : 0
-    const cutoffFor = (target: StorageTarget) => all
-      ? Date.now() - (target === 'ocrTemp' ? ocrSafeAge : MIN_SAFE_AGE_MS)
-      : Date.now() - (days || categoryDays[target]) * dayMs
+    const cutoffFor = (target: StorageTarget) => {
+      if (target === 'ocrTemp') {
+        return Date.now() - Math.max(ocrSafeAge, (days || categoryDays.ocrTemp) * dayMs)
+      }
+      return all ? Date.now() - MIN_SAFE_AGE_MS : Date.now() - (days || categoryDays[target]) * dayMs
+    }
 
     const removeFile = async (file: string, allowedRoot: string, cutoff: number) => {
       if (!isPathInside(allowedRoot, file)) throw new Error('拒绝清理越权路径')

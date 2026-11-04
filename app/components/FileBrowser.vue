@@ -104,9 +104,9 @@
       <div class="relative flex-1 min-h-0">
         <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-white/70 dark:from-gray-900/65 to-transparent pointer-events-none z-10" />
         <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-white/40 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
-        <div role="tree" aria-label="文件目录树" class="h-full overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+        <div role="tree" aria-label="文件目录树" class="h-full max-h-[70vh] overflow-y-auto space-y-1 pr-1 custom-scrollbar lg:max-h-none">
           <template v-for="node in displayNodes" :key="`${node.rootId || 'group'}:${node.path || node.name}`">
-            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeysArray" :folder-totals="folderVideoTotals" :scanning-keys="folderScanningKeysArray" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
+            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :active-key="activeTreeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeysArray" :folder-totals="folderVideoTotals" :scanning-keys="folderScanningKeysArray" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
           </template>
           <div v-if="!loadingFiles && (!displayNodes || !displayNodes.length)" class="h-full min-h-[180px] flex items-center justify-center text-center px-3">
             <div v-if="isRootUnavailable" class="space-y-3">
@@ -130,7 +130,20 @@
       </div>
     </div>
 
-    <div class="hidden w-2 cursor-col-resize rounded-full bg-gray-200/80 transition-colors hover:bg-primary-300 dark:bg-gray-700/80 dark:hover:bg-primary-700 lg:block" :class="{ 'bg-primary-400 dark:bg-primary-600': resizeMode === 'main' }" title="拖动调整左右分区宽度" aria-label="调整左右分栏宽度" role="separator" aria-orientation="vertical" @mousedown.prevent="startResize('main')" />
+    <div
+      class="hidden w-2 cursor-col-resize rounded-full bg-gray-200/80 transition-colors hover:bg-primary-300 focus-ring dark:bg-gray-700/80 dark:hover:bg-primary-700 lg:block"
+      :class="{ 'bg-primary-400 dark:bg-primary-600': resizeMode === 'main' }"
+      title="拖动调整左右分区宽度；聚焦后按左右方向键微调"
+      aria-label="调整左右分栏宽度"
+      role="separator"
+      aria-orientation="vertical"
+      :aria-valuemin="34"
+      :aria-valuemax="66"
+      :aria-valuenow="Math.round(leftPaneWidth)"
+      tabindex="0"
+      @mousedown.prevent="startResize('main')"
+      @keydown="handleSplitterKeydown"
+    />
 
     <div ref="rightPaneRef" class="surface-card flex min-w-0 flex-1 flex-col p-3 stagger-fade-in" :class="activeMobileTab === 'settings' ? 'flex' : 'hidden lg:flex'" style="animation-delay: 70ms;">
       <div class="flex items-center justify-end mb-2.5 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
@@ -480,6 +493,11 @@ const displayNodes = computed<FileNode[]>(() => filterNodes(files.value || [], s
 const selectedNodeKey = computed(() => {
   if (!selectedNode.value) return ''
   return `${selectedNode.value.rootId || 'default'}:${selectedNode.value.path}`
+})
+const activeTreeKey = computed(() => {
+  if (selectedNodeKey.value) return selectedNodeKey.value
+  const first = displayNodes.value?.[0]
+  return first ? `${first.rootId || activeRootId.value || 'default'}:${first.path || ''}` : ''
 })
 
 const expandedTreeState = ref<Record<string, string[]>>({})
@@ -1130,6 +1148,19 @@ function clamp(value: number, min: number, max: number) {
 
 function startResize(mode: 'main' | 'right') {
   resizeMode.value = mode
+}
+
+function handleSplitterKeydown(event: KeyboardEvent) {
+  const allowed = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+  if (!allowed.includes(event.key)) return
+  event.preventDefault()
+  if (event.key === 'Home') leftPaneWidth.value = 34
+  else if (event.key === 'End') leftPaneWidth.value = 66
+  else {
+    const step = event.shiftKey ? 5 : 2
+    leftPaneWidth.value = clamp(leftPaneWidth.value + (event.key === 'ArrowRight' ? step : -step), 34, 66)
+  }
+  persistLayout()
 }
 
 function handleResize(event: MouseEvent) {

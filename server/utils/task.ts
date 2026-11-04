@@ -564,6 +564,14 @@ function mapReviewStatus(entry: SubtitleEntry, issuesById: Map<string, Array<{ r
     return { reviewStatus: 'translated', reviewReasons }
 }
 
+function persistReviewEntriesSafe(taskId: string, entries: SubtitleEntry[], issues: Array<{ id: string, reason: string, severity?: 'soft' | 'hard' }>) {
+    try {
+        persistReviewEntries(taskId, entries, issues)
+    } catch (error: any) {
+        console.error(`[Review] 核对记录写入失败: ${error?.message || error}`)
+    }
+}
+
 function persistReviewEntries(taskId: string, entries: SubtitleEntry[], issues: Array<{ id: string, reason: string, severity?: 'soft' | 'hard' }>) {
     const db = useDb()
     const issueMap = new Map<string, Array<{ reason: string, severity?: 'soft' | 'hard' }>>()
@@ -1100,6 +1108,7 @@ export const TaskService = {
                 if (embyVariantPath) {
                     await SubtitleService.writeSubtitle(originalEntries, embyVariantPath, 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
                 }
+                persistReviewEntriesSafe(taskId, originalEntries, [])
                 await this.updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}` })
                 db.prepare('UPDATE tasks SET output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(savedPath, taskId)
                 taskSucceeded = true
@@ -1384,10 +1393,10 @@ export const TaskService = {
 
                 if (allIssues.length > 0) {
                     const preview = allIssues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
-                    persistReviewEntries(taskId, translatedEntries, allIssues)
+                    persistReviewEntriesSafe(taskId, translatedEntries, allIssues)
                     writeTaskLog(taskId, 'exporting', 'warn', `[核对] 检测到 ${allIssues.length} 条字幕需注意：${preview}`)
                 } else {
-                    persistReviewEntries(taskId, translatedEntries, [])
+                    persistReviewEntriesSafe(taskId, translatedEntries, [])
                 }
             }
 

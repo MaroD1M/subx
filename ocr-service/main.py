@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -42,6 +43,7 @@ MAX_SECONDS = int(os.getenv("OCR_MAX_SECONDS", "14400"))
 CHUNK_SECONDS = int(os.getenv("OCR_CHUNK_SECONDS", "1800"))
 PGSRIP_TIMEOUT_SECONDS = int(os.getenv("OCR_PGSRIP_TIMEOUT_SECONDS", "7200"))
 FFMPEG_TIMEOUT_SECONDS = int(os.getenv("OCR_FFMPEG_TIMEOUT_SECONDS", "3600"))
+PROBE_TIMEOUT_SECONDS = int(os.getenv("OCR_PROBE_TIMEOUT_SECONDS", "300"))
 CHUNK_RETRIES = int(os.getenv("OCR_CHUNK_RETRIES", "1"))
 RESUME_TTL_HOURS = int(os.getenv("OCR_RESUME_TTL_HOURS", "24"))
 MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "25"))
@@ -49,7 +51,12 @@ OCR_FPS = max(0.5, float(os.getenv("OCR_FPS", "2")))
 OCR_WORKERS = max(1, int(os.getenv("OCR_WORKERS", "4")))
 OCR_ENGINE = os.getenv("OCR_ENGINE", "auto")
 MAX_JOBS = max(1, int(os.getenv("OCR_MAX_JOBS", "50")))
+MAX_CONCURRENT_JOBS = max(1, int(os.getenv("OCR_MAX_CONCURRENT_JOBS", "2")))
+JOB_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
 RESUME_PREFIX = "subx-ocr-job-"
+ALGORITHM_VERSION = 2
+_job_locks: dict[str, threading.Lock] = {}
+_job_locks_guard = threading.Lock()
 _rapidocr_engine = None
 TESS_LANG = {
     "en": "eng", "eng": "eng", "zh": "chi_sim+eng", "zh-cn": "chi_sim+eng",
@@ -100,6 +107,10 @@ def prune_resume_dirs(ttl_hours: int) -> None:
     for entry in OCR_TEMP_DIR.iterdir():
         if not entry.is_dir() or not entry.name.startswith(RESUME_PREFIX):
             continue
+        with _job_locks_guard:
+            lock = _job_locks.get(str(entry))
+        if lock and lock.locked():
+            continue
         try:
             if entry.stat().st_mtime < cutoff:
                 shutil.rmtree(entry, ignore_errors=True)
@@ -107,10 +118,23 @@ def prune_resume_dirs(ttl_hours: int) -> None:
             continue
 
 
-def job_workdir(path: Path, track_index: int, language: str, engine: str | None, chunk_seconds: int) -> Path:
+def job_lock(workdir: Path) -> threading.Lock:
+    key = str(workdir)
+    with _job_locks_guard:
+        return _job_locks.setdefault(key, threading.Lock())
+
+
+def job_workdir(
+    path: Path,
+    track_index: int,
+    language: str,
+    engine: str | None,
+    chunk_seconds: int,
+    min_confidence: float | None,
+) -> Path:
     info = path.stat()
     fingerprint = hashlib.sha256(
-        f"{path.resolve()}|{info.st_size}|{info.st_mtime_ns}|{track_index}|{language}|{engine or ''}|{chunk_seconds}".encode("utf-8")
+        f"{path.resolve()}|{info.st_size}|{info.st_mtime_ns}|{track_index}|{language}|{normalize_engine(engine)}|{chunk_seconds}|{min_confidence}|{OCR_FPS}|v{ALGORITHM_VERSION}".encode("utf-8")
     ).hexdigest()[:32]
     workdir = OCR_TEMP_DIR / f"{RESUME_PREFIX}{fingerprint}"
     workdir.mkdir(parents=True, exist_ok=True)
@@ -120,11 +144,11 @@ def job_workdir(path: Path, track_index: int, language: str, engine: str | None,
 def load_manifest(workdir: Path) -> dict[str, Any]:
     try:
         data = json.loads((workdir / "manifest.json").read_text(encoding="utf-8"))
-        if isinstance(data, dict) and data.get("version") == 1 and isinstance(data.get("chunks"), dict):
+        if isinstance(data, dict) and data.get("version") == ALGORITHM_VERSION and isinstance(data.get("chunks"), dict):
             return data
     except Exception:
         pass
-    return {"version": 1, "chunks": {}}
+    return {"version": ALGORITHM_VERSION, "chunks": {}}
 
 
 def save_manifest(workdir: Path, manifest: dict[str, Any]) -> None:
@@ -149,19 +173,31 @@ def run_process(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,
     )
+
+    def terminate() -> None:
+        if process.poll() is not None:
+            return
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except OSError:
+            process.kill()
     started = time.monotonic()
     last_heartbeat = 0.0
     try:
         while True:
             if cancelled and cancelled():
-                process.kill()
-                process.communicate()
+                terminate()
+                process.communicate(timeout=5)
                 raise RuntimeError("OCR 任务已取消")
             elapsed = time.monotonic() - started
             if elapsed > timeout_seconds:
-                process.kill()
-                stdout, stderr = process.communicate()
+                terminate()
+                stdout, stderr = process.communicate(timeout=5)
                 detail = (stderr or stdout or "").strip()[-2000:]
                 raise RuntimeError(f"{label}超时（{timeout_seconds}s）{('：' + detail) if detail else ''}")
             try:
@@ -176,8 +212,7 @@ def run_process(
             raise RuntimeError(f"{label}失败：{detail or f'exit status {process.returncode}'}")
         return stdout or "", stderr or ""
     finally:
-        if process.poll() is None:
-            process.kill()
+        terminate()
 
 
 def safe_path(value: str) -> Path:
@@ -191,12 +226,12 @@ def safe_path(value: str) -> Path:
 
 def probe(path: Path, track_index: int) -> dict[str, Any]:
     ffprobe = require_tool("ffprobe")
-    result = subprocess.run([
+    stdout, _stderr = run_process([
         ffprobe, "-v", "error", "-show_entries",
         "format=duration:stream=index,codec_name,codec_type,width,height:stream_tags=language,title:stream_disposition=default,forced",
         "-of", "json", str(path)
-    ], check=True, capture_output=True, text=True)
-    data = json.loads(result.stdout)
+    ], PROBE_TIMEOUT_SECONDS, "媒体探测")
+    data = json.loads(stdout)
     streams = [
         stream for stream in data.get("streams", [])
         if stream.get("codec_type") == "subtitle"
@@ -334,29 +369,39 @@ def rip_pgs(
             cwd=workdir,
         )
 
-    stdout, stderr = execute(True)
+    for stale in workdir.rglob("*.srt"):
+        stale.unlink(missing_ok=True)
+
+    first_error: Exception | None = None
+    try:
+        stdout, stderr = execute(True)
+    except Exception as exc:
+        stdout, stderr = "", str(exc)
+        first_error = exc
+
     candidates = sorted(workdir.rglob("*.srt"))
     detail = (stderr or stdout or "").strip()[-2000:]
-    filtered_out = "filtered out" in detail.lower() or "0 pgs subtitle collected" in detail.lower()
+    filtered_out = "filtered out" in detail.lower() or "0 pgs subtitle" in detail.lower()
     if not candidates and filtered_out and language:
-        # .sup language is inferred from its filename. A mismatched or unusual language
-        # code can make pgsrip filter the only input file out. Retry without -l because
-        # the extracted filename already carries the track language.
         stdout, stderr = execute(False)
         candidates = sorted(workdir.rglob("*.srt"))
         detail = (stderr or stdout or "").strip()[-2000:]
+        first_error = None
+    if not candidates and first_error is not None:
+        raise first_error
     if not candidates:
         raise RuntimeError(f"PGS OCR 未生成 SRT：{detail or 'pgsrip 没有输出'}")
     return candidates[0]
 
 
-def pgs_result_suspicious(segments: list[dict[str, Any]], duration: float) -> str | None:
+def pgs_result_suspicious(segments: list[dict[str, Any]], duration: float, is_forced: bool = False) -> str | None:
     if not segments:
         return "pgsrip 未生成有效字幕"
     text_chars = sum(len(str(item.get("text") or "")) for item in segments)
     if text_chars < 4:
         return "pgsrip 识别文本过少"
-    if duration >= 600 and len(segments) < 5:
+    minimum = 3 if is_forced else 5
+    if duration >= 600 and len(segments) < minimum:
         return f"pgsrip 仅返回 {len(segments)} 条字幕，疑似不完整"
     last_end = max(float(item.get("end") or 0) for item in segments)
     if duration >= 300 and last_end < min(60.0, duration * 0.1):
@@ -601,6 +646,7 @@ def ocr_frames(
         blank = not digest
         if blank:
             blank_frames += 1
+            last_hash = ""
         changed = bool(digest) and digest != last_hash
         if changed:
             changed_frames += 1
@@ -723,6 +769,7 @@ def ocr_frames_chunked(
     progress_start, progress_end = progress_range
     manifest = load_manifest(workdir)
     manifest.update({
+        "version": ALGORITHM_VERSION,
         "path": str(path),
         "trackIndex": subtitle_index,
         "language": language,
@@ -735,6 +782,8 @@ def ocr_frames_chunked(
     reused = 0
 
     for index, (start, length) in enumerate(chunks):
+        if cancelled and cancelled():
+            raise RuntimeError("OCR 任务已取消")
         key = str(index)
         cached = manifest["chunks"].get(key)
         if cached and cached.get("status") == "done" and isinstance(cached.get("segments"), list):
@@ -769,6 +818,8 @@ def ocr_frames_chunked(
                     progress_range=(range_start, range_end),
                     timeout_seconds=ffmpeg_timeout_seconds,
                 )
+                if not segments and int(diagnostics.get("changedFrames") or 0) >= 5:
+                    raise RuntimeError("该分段检测到字幕变化，但未识别出有效文本")
                 manifest["chunks"][key] = {
                     "status": "done",
                     "start": start,
@@ -791,6 +842,8 @@ def ocr_frames_chunked(
         if last_error is not None:
             raise RuntimeError(f"第 {index + 1}/{len(chunks)} 段 OCR 失败：{last_error}")
 
+    if cancelled and cancelled():
+        raise RuntimeError("OCR 任务已取消")
     if progress:
         progress(min(95, progress_end + 3), "正在合并分段字幕")
     segments = merge_chunk_segments(chunk_groups, duration)
@@ -825,7 +878,10 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
     chunk_retries = clamp_int(request.chunk_retries, CHUNK_RETRIES, 0, 5)
     resume_ttl_hours = clamp_int(request.resume_ttl_hours, RESUME_TTL_HOURS, 1, 168)
     prune_resume_dirs(resume_ttl_hours)
-    workdir = job_workdir(path, int(request.track_index), request.language, request.engine, chunk_seconds)
+    workdir = job_workdir(path, int(request.track_index), request.language, request.engine, chunk_seconds, request.min_confidence)
+    workdir_lock = job_lock(workdir)
+    workdir_lock.acquire()
+    workdir.mkdir(parents=True, exist_ok=True)
     keep_workdir = False
     try:
         if progress:
@@ -840,6 +896,7 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
 
         codec = str(info["codec"]).lower()
         pgs_codec = is_pgs_codec(codec)
+        is_forced_track = bool(info.get("is_forced"))
         engine = "pgsrip" if pgs_codec else "ffmpeg-ocr"
         pgs_error: str | None = None
         diagnostics: dict[str, Any] = {
@@ -863,7 +920,6 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
                 track_language = str(info.get("language") or "").strip()
                 pgs_request_language = track_language if track_language.lower() not in {"", "und", "unknown"} else request.language
                 pgs_request_language = pgs_language(pgs_request_language)
-                is_forced = bool(info.get("is_forced"))
                 if progress:
                     progress(18, "正在提取 PGS 字幕")
                 sup_path = extract_pgs(
@@ -872,12 +928,12 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
                     workdir,
                     ffmpeg_timeout,
                     pgs_request_language,
-                    is_forced,
+                    is_forced_track,
                     cancelled,
                 )
                 diagnostics["pgsLanguage"] = pgs_request_language
                 diagnostics["pgsSupFile"] = sup_path.name
-                diagnostics["pgsFlag"] = pgsrip_track_flag(is_forced)
+                diagnostics["pgsFlag"] = pgsrip_track_flag(is_forced_track)
                 if progress:
                     progress(45, "正在 OCR PGS 字幕")
                 srt_path = rip_pgs(
@@ -888,21 +944,26 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
                     pgsrip_timeout,
                     heartbeat=(lambda message: progress(50, message)) if progress else None,
                     cancelled=cancelled,
-                    is_forced=is_forced,
+                    is_forced=is_forced_track,
                 )
                 segments = parse_srt(srt_path)
-                suspicious = pgs_result_suspicious(segments, duration)
+                suspicious = pgs_result_suspicious(segments, duration, is_forced_track)
                 if suspicious:
                     raise RuntimeError(suspicious)
+                minimum_segments = 3 if is_forced_track else 5
+                if duration >= 600 and len(segments) < minimum_segments:
+                    raise RuntimeError(f"pgsrip 仅返回 {len(segments)} 条字幕，疑似不完整")
                 diagnostics["pgsSegments"] = len(segments)
             except Exception as exc:
+                if (cancelled and cancelled()) or "OCR 任务已取消" in str(exc):
+                    raise
                 pgs_error = str(exc)
                 if progress:
                     progress(55, f"PGS OCR 回退到分段图像识别：{pgs_error}")
                 segments, frame_diagnostics = ocr_frames_chunked(
                     path,
                     int(info["subtitle_index"]),
-                    request.language,
+                    pgs_request_language,
                     duration,
                     workdir,
                     progress,
@@ -941,8 +1002,11 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
             diagnostics["pgsError"] = pgs_error
 
         if not segments:
+            (workdir / "manifest.json").unlink(missing_ok=True)
             raise RuntimeError("OCR 未生成有效字幕")
-        if duration >= 600 and len(segments) < 10:
+        minimum_segments = 3 if is_forced_track else 5
+        if duration >= 600 and len(segments) < minimum_segments:
+            (workdir / "manifest.json").unlink(missing_ok=True)
             track_desc = f"{info.get('language') or 'und'}{(' ' + str(info.get('title'))) if info.get('title') else ''} {'强制' if info.get('is_forced') else '非强制'}"
             raise RuntimeError(
                 f"OCR 仅识别到 {len(segments)} 条字幕（视频时长 {duration:.0f}s，轨道 {track_desc}），可能选错字幕轨、字幕未渲染到画面，或 OCR 语言/引擎配置不正确；请选择完整字幕轨后重试"
@@ -979,6 +1043,7 @@ def perform_ocr(request: OcrRequest, progress: Callable[[int, str], None] | None
     finally:
         if not keep_workdir:
             shutil.rmtree(workdir, ignore_errors=True)
+        workdir_lock.release()
 
 
 ocr_jobs: dict[str, dict[str, Any]] = {}
@@ -997,39 +1062,48 @@ def prune_jobs() -> None:
 
 
 def run_ocr_job(job_id: str, request: OcrRequest) -> None:
-    with ocr_jobs_lock:
-        ocr_jobs[job_id].update({"status": "running", "startedAt": time.time(), "progress": 1, "message": "开始 OCR"})
+    with JOB_SLOTS:
+        with ocr_jobs_lock:
+            if job_id in ocr_cancel:
+                ocr_jobs[job_id].update({
+                    "status": "cancelled",
+                    "error": "OCR 任务已取消",
+                    "finishedAt": time.time(),
+                })
+                ocr_cancel.discard(job_id)
+                return
+            ocr_jobs[job_id].update({"status": "running", "startedAt": time.time(), "progress": 1, "message": "开始 OCR"})
 
-    def progress(value: int, message: str) -> None:
-        with ocr_jobs_lock:
-            job = ocr_jobs.get(job_id)
-            if job:
-                job.update({"progress": max(0, min(99, int(value))), "message": message})
+        def progress(value: int, message: str) -> None:
+            with ocr_jobs_lock:
+                job = ocr_jobs.get(job_id)
+                if job:
+                    job.update({"progress": max(0, min(99, int(value))), "message": message})
 
-    def cancelled() -> bool:
-        with ocr_jobs_lock:
-            return job_id in ocr_cancel
+        def cancelled() -> bool:
+            with ocr_jobs_lock:
+                return job_id in ocr_cancel
 
-    try:
-        result = perform_ocr(request, progress, cancelled)
-        with ocr_jobs_lock:
-            ocr_jobs[job_id].update({
-                "status": "done",
-                "progress": 100,
-                "message": "OCR 完成",
-                "finishedAt": time.time(),
-                "result": result,
-            })
-    except Exception as exc:
-        with ocr_jobs_lock:
-            ocr_jobs[job_id].update({
-                "status": "cancelled" if job_id in ocr_cancel else "error",
-                "error": str(exc),
-                "finishedAt": time.time(),
-            })
-    finally:
-        with ocr_jobs_lock:
-            ocr_cancel.discard(job_id)
+        try:
+            result = perform_ocr(request, progress, cancelled)
+            with ocr_jobs_lock:
+                ocr_jobs[job_id].update({
+                    "status": "done",
+                    "progress": 100,
+                    "message": "OCR 完成",
+                    "finishedAt": time.time(),
+                    "result": result,
+                })
+        except Exception as exc:
+            with ocr_jobs_lock:
+                ocr_jobs[job_id].update({
+                    "status": "cancelled" if job_id in ocr_cancel else "error",
+                    "error": str(exc),
+                    "finishedAt": time.time(),
+                })
+        finally:
+            with ocr_jobs_lock:
+                ocr_cancel.discard(job_id)
 
 
 @app.get("/health")
@@ -1051,6 +1125,7 @@ def health() -> dict[str, Any]:
         "ffmpegTimeoutSeconds": FFMPEG_TIMEOUT_SECONDS,
         "chunkRetries": CHUNK_RETRIES,
         "resumeTtlHours": RESUME_TTL_HOURS,
+        "maxConcurrentJobs": MAX_CONCURRENT_JOBS,
         "minConfidence": MIN_CONFIDENCE,
         "fps": OCR_FPS,
         "workers": OCR_WORKERS,

@@ -40,7 +40,7 @@
             </AppContainer>
           </header>
 
-          <main id="main-content" tabindex="-1" class="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 xl:px-8 xl:py-6">
+          <main id="main-content" ref="mainContent" tabindex="-1" class="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 xl:px-8 xl:py-6">
             <NuxtPage :transition="{ name: 'page', mode: 'out-in' }" />
           </main>
         </div>
@@ -48,7 +48,7 @@
         <MobileNav />
       </div>
 
-      <main v-else id="main-content" tabindex="-1" class="h-screen w-full">
+      <main v-else id="main-content" ref="mainContent" tabindex="-1" class="h-screen w-full">
         <NuxtPage :transition="{ name: 'page', mode: 'out-in' }" />
       </main>
 
@@ -62,6 +62,7 @@
 const colorMode = useColorMode()
 const { logout, authenticated } = useAuth()
 const route = useRoute()
+const mainContent = ref(null)
 
 const isLoginPage = computed(() => route.path === '/login' || route.path === '/login/')
 const sidebarCollapsed = ref(false)
@@ -93,6 +94,12 @@ onMounted(async () => {
       }
     }
   } catch { /* ignore — network unavailable */ }
+})
+
+watch(() => route.fullPath, async (_to, from) => {
+  if (!from || !import.meta.client) return
+  await nextTick()
+  mainContent.value?.focus({ preventScroll: true })
 })
 
 watch(sidebarCollapsed, (value) => {

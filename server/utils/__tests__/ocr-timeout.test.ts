@@ -33,6 +33,17 @@ describe('OCR long-video timeout configuration', () => {
     expect(inverted.absolute).toBeGreaterThanOrEqual(inverted.idle)
   })
 
+  it('falls back to defaults for invalid timeout numbers', () => {
+    const timeouts = resolveOcrTimeouts({
+      idleTimeoutMs: Number.NaN,
+      absoluteTimeoutMs: Number.POSITIVE_INFINITY
+    })
+    expect(Number.isFinite(timeouts.idle)).toBe(true)
+    expect(Number.isFinite(timeouts.absolute)).toBe(true)
+    expect(timeouts.idle).toBeGreaterThanOrEqual(60_000)
+    expect(timeouts.absolute).toBeGreaterThanOrEqual(timeouts.idle)
+  })
+
   it('classifies OCR duration limits before generic 5xx provider errors', () => {
     const limit = classifyTaskError('OCR 请求失败 (500): 视频时长 8503s 超过 OCR 最大处理时长 7200s')
     expect(limit.type).toBe('ocr_limit')

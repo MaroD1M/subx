@@ -276,8 +276,8 @@
                     <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">PGS 直接交给 pgsrip；VobSub/DVD 超过分段时长会自动分段处理，并保留断点供重试复用。</p>
                   </div>
                   <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <UFormField label="最大 OCR 时长（小时）">
-                      <UInputNumber v-model="ocrMaxHours" :min="1" :max="24" :step="1" class="w-full" />
+                    <UFormField label="最大视频时长（小时）">
+                      <UInputNumber v-model="ocrMaxHours" :min="0.1" :max="24" :step="0.5" class="w-full" />
                     </UFormField>
                     <UFormField label="分段时长（分钟）">
                       <UInputNumber v-model="ocrChunkMinutes" :min="5" :max="240" :step="5" class="w-full" />
@@ -303,7 +303,7 @@
                       <UInputNumber v-model="config.ocrResumeTtlHours" :min="1" :max="168" :step="1" class="w-full" />
                     </UFormField>
                   </div>
-                  <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">默认最大 4 小时、30 分钟一段。调大后请留意 <code>temp/ocr</code> 磁盘占用；明显超过总任务上限时会在 OCR 开始前明确报错。</p>
+                  <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">默认最大视频时长 4 小时、30 分钟一段。调大后请留意 <code>temp/ocr</code> 磁盘占用；明显超过总任务上限时会在 OCR 开始前明确报错。</p>
                 </div>
 
                 <div class="rounded-xl border border-sky-100 bg-sky-50/70 p-3 text-xs leading-5 text-sky-800 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-200">
@@ -460,7 +460,8 @@
               <UButton label="刷新" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="storageLoading" @click="loadStorage" />
             </template>
 
-            <div v-if="storageLoading && !storage" class="space-y-3" aria-label="正在统计存储占用">
+            <div v-if="storageLoading && !storage" class="space-y-3" role="status" aria-live="polite" aria-label="正在统计存储占用">
+              <span class="sr-only">正在统计存储占用</span>
               <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <div v-for="index in 4" :key="index" class="skeleton h-20" />
               </div>
@@ -779,8 +780,11 @@ const asrJobAbsoluteTimeoutHours = computed({
 })
 
 const ocrMaxHours = computed({
-  get: () => Math.max(1, Math.round(Number(config.value?.ocrMaxSeconds ?? 14400) / 3600)),
-  set: (value: any) => { config.value.ocrMaxSeconds = Math.max(1, Math.min(24, Math.round(Number(value) || 4))) * 3600 }
+  get: () => Math.max(0.1, Number((Number(config.value?.ocrMaxSeconds ?? 14400) / 3600).toFixed(2))),
+  set: (value: any) => {
+    const hours = Math.max(0.1, Math.min(24, Number(value) || 4))
+    config.value.ocrMaxSeconds = Math.max(300, Math.round(hours * 3600))
+  }
 })
 const ocrChunkMinutes = computed({
   get: () => Math.max(5, Math.round(Number(config.value?.ocrChunkSeconds ?? 1800) / 60)),

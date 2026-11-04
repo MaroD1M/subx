@@ -24,13 +24,18 @@ export interface OcrOptions {
   onProgress?: (progress: number, message: string) => void
 }
 
+function finiteNumber(value: unknown, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 export function resolveOcrTimeouts(options: Pick<OcrOptions, 'idleTimeoutMs' | 'absoluteTimeoutMs'> = {}) {
-  const envIdle = Number(process.env.OCR_JOB_IDLE_TIMEOUT_MS || OCR_DEFAULT_IDLE_TIMEOUT_MS)
-  const envAbsolute = Number(process.env.OCR_JOB_ABSOLUTE_TIMEOUT_MS || OCR_DEFAULT_ABSOLUTE_TIMEOUT_MS)
-  const idle = Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(options.idleTimeoutMs) || envIdle))
+  const envIdle = finiteNumber(process.env.OCR_JOB_IDLE_TIMEOUT_MS, OCR_DEFAULT_IDLE_TIMEOUT_MS)
+  const envAbsolute = finiteNumber(process.env.OCR_JOB_ABSOLUTE_TIMEOUT_MS, OCR_DEFAULT_ABSOLUTE_TIMEOUT_MS)
+  const idle = Math.max(60_000, Math.min(24 * 60 * 60 * 1000, finiteNumber(options.idleTimeoutMs, envIdle)))
   const absolute = Math.max(
     10 * 60 * 1000,
-    Math.min(7 * 24 * 60 * 60 * 1000, Number(options.absoluteTimeoutMs) || envAbsolute)
+    Math.min(7 * 24 * 60 * 60 * 1000, finiteNumber(options.absoluteTimeoutMs, envAbsolute))
   )
   return { idle, absolute: Math.max(idle, absolute) }
 }
@@ -44,7 +49,16 @@ function combineSignals(signals: Array<AbortSignal | undefined>) {
   if (valid.length === 0) return undefined
   if (valid.length === 1) return valid[0]
   if (typeof AbortSignal.any === 'function') return AbortSignal.any(valid)
-  return valid[0]
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  for (const item of valid) {
+    if (item.aborted) {
+      abort()
+      break
+    }
+    item.addEventListener('abort', abort, { once: true })
+  }
+  return controller.signal
 }
 
 function normalizeResult(data: AsrResult, fallbackLanguage: string): AsrResult {
@@ -90,6 +104,7 @@ export const OcrService = {
     let lastProgress = -1
     let lastMessage = ''
     let jobId = ''
+    let jobFinished = false
 
     const cancelJob = async () => {
       if (!jobId) return
@@ -157,12 +172,20 @@ export const OcrService = {
         lastMessage = message
         options.onProgress?.(progress, message)
         if (job.status === 'done' && job.result) {
+          jobFinished = true
           return normalizeResult(job.result as AsrResult, options.language || 'unknown')
         }
-        if (job.status === 'error') throw new Error(String(job.error || 'OCR 失败'))
-        if (job.status === 'cancelled') throw new Error('OCR 任务已取消')
+        if (job.status === 'error') {
+          jobFinished = true
+          throw new Error(String(job.error || 'OCR 失败'))
+        }
+        if (job.status === 'cancelled') {
+          jobFinished = true
+          throw new Error('OCR 任务已取消')
+        }
       }
     } catch (error: any) {
+      if (jobId && !jobFinished) await cancelJob()
       if (signal?.aborted) throw new Error('任务已取消')
       if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
         throw new Error('OCR 服务请求超时，请检查服务负载或调大无进度超时')

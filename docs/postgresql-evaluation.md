@@ -1,7 +1,7 @@
 # PostgreSQL 运行时与迁移
 
-> 适用版本：v2.8.1
-> 结论：v2.8.1 已支持可选 PostgreSQL 运行时；未设置 `DATABASE_URL` 时继续使用 SQLite。
+> 适用版本：v2.8.2
+> 结论：v2.8.2 已支持可选 PostgreSQL 运行时；未设置 `DATABASE_URL` 时继续使用 SQLite。
 
 ## 当前架构
 
