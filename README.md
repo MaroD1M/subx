@@ -2,7 +2,7 @@
 
 > 把 NAS 里的生肉视频，变成能直接看的双语字幕。
 
-当前版本：**v2.8.2** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.8.3** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
 
 [项目地址](https://github.com/MaroD1M/subx) · [问题反馈](https://github.com/MaroD1M/subx/issues)
 
@@ -12,7 +12,7 @@
 
 ## ✨ 近期亮点
 
-- 🩹 **v2.8.2 修复**：核对页正确区分原文字幕与译文回填；仅原文字幕任务可正常核对；修正运行中任务提前显示核对入口、OCR 并发/取消/缓存复用和 Edge 最小化自动恢复问题。
+- 🩹 **v2.8.3 修复**：统一服务端与前端时区，界面时间、任务日志和通知均按 `TZ` 显示；新增 Windows Edge 页面隐藏/恢复导航守护，避免最小化窗口被自动恢复；优化侧边栏与移动端导航的客户端跳转状态和预取行为。
 - 🎬 **长电影 OCR 不再被 2 小时限制误拦**：默认上限提升到 4 小时，并可在应用设置页调整。
 - 🧩 **PGS 长片直通**：PGS 优先走 pgsrip，不再强制整片抽帧；失败时自动回退到分段图像 OCR。
 - 💾 **VobSub / DVD 自动分段**：长视频按 30 分钟一段处理，每段完成立即清理帧文件。
@@ -64,7 +64,7 @@
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.8.2
+    image: ghcr.io/marod1m/subx:v2.8.3
     container_name: subx
     restart: unless-stopped
     ports:
@@ -92,7 +92,7 @@ docker compose up -d
 
 访问 `http://NAS_IP:3000`，第一次进入先设置至少 8 位访问口令。
 
-> 镜像体积参考：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.2 预计接近）。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
+> 镜像体积参考：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.3 预计接近）。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
 >
 > 根目录 [`docker-compose.yml`](docker-compose.yml) 已逐项注释端口、卷、环境变量、健康检查、资源限制和 profiles；完整变量表见 [部署文档第 4 节](docs/deployment.md#4-环境变量与参数)。
 
@@ -207,7 +207,7 @@ ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/a
 >
 > 需要拆分部署时仍可使用独立 CPU sidecar：`docker compose --profile asr up -d asr`，地址改为 `http://subx-asr:8000`。
 >
-> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.8.2`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
+> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.8.3`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
 
 ---
 
@@ -260,23 +260,21 @@ curl -H "Authorization: Bearer subx_xxx" \
 
 ---
 
-## ⬆️ 升级到 v2.8.2
+## ⬆️ 升级到 v2.8.3
 
 ```bash
 docker compose pull
 docker compose up -d --force-recreate
 ```
 
-本版集中修复核对数据正确性、OCR 长任务资源与缓存、Edge 最小化自动恢复，以及文件树和核对页的布局/可访问性问题。从 v2.8.1 升级无需调整卷、数据库或设置。
+本版统一了服务端与前端时区，并补充 Edge 页面隐藏/恢复时的导航守护；从 v2.8.2 升级无需调整卷、数据库或设置。
 
 升级说明：
 
-- 仅原文字幕任务现在会生成核对记录；旧任务会优先从已导出字幕或外挂字幕源回填，不再把译文当成原文。
-- 运行中的任务不再显示“核对”入口，转录/导出阶段不会被误操作。
-- OCR 新增 `OCR_MAX_CONCURRENT_JOBS`，默认同时运行 2 个任务；低配 NAS 建议设为 1。
-- OCR 分段缓存、断点清理、PGS 稀疏字幕校验、取消处理和子进程超时均已加强。
-- Edge 最小化自动恢复问题通过仅对 Edge 生效的 Vue Router 历史补丁规避。
-- 拆分部署时请同步升级主应用和 OCR 镜像到 v2.8.2。
+- 界面时间、任务日志、诊断信息和通知默认跟随容器 `TZ`；也可用 `NUXT_PUBLIC_TIME_ZONE` 单独覆盖显示时区。
+- 新增仅对 Edge 生效的页面恢复守护，避免最小化窗口在页面隐藏后自动恢复；普通标签切换仍可正常使用。
+- 侧边栏和移动端导航改为响应式当前路由，并关闭导航预取，减少 Edge 后台导航副作用。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.8.3。
 - 建议升级前备份 `./data/db`、`./data/models` 与 PostgreSQL 数据库。
 
 ---

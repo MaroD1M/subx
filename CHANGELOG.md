@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.8.3 - 2026-11-05
+
+### Fixed
+
+- 统一服务端与前端时间显示：SQLite/ISO 时间戳按 UTC 解析后，再按 `TZ` 或 `NUXT_PUBLIC_TIME_ZONE` 输出；历史、任务详情、自动化、日志、诊断、API Token 和通知时间不再出现时区偏差。
+- 任务日志与翻译请求日志使用配置时区写入，便于与界面时间对齐。
+- 修复 Edge 在页面隐藏/恢复后可能因后台导航导致最小化窗口自动恢复的问题；守护仅对 Edge 生效，并带 20 秒重载保护。
+
+### Changed
+
+- 新增 `NUXT_PUBLIC_TIME_ZONE`，未设置时回退到 `TZ`，再回退到 `Asia/Shanghai`；docker-compose、entrypoint 和 all-in-one 启动脚本已同步。
+- 侧边栏和移动端导航改为响应式当前路由，并关闭导航项预取，减少客户端跳转副作用。
+
+### Tests
+
+- 新增时区解析、格式化、默认时区回退的单元测试。
+- 新增客户端导航更新当前导航项和页面内容的 E2E 回归。
+
+### Upgrade Notes
+
+- 从 v2.8.2 升级无需调整卷、数据库或设置。
+- 如需与容器时区不同的显示时区，设置 `NUXT_PUBLIC_TIME_ZONE`；否则沿用 `TZ`。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.8.3。
+- 建议升级前备份 `./data/db`、`./data/models` 与 PostgreSQL 数据库。
+
 ## v2.8.2 - 2026-11-03
 
 ### Fixed
