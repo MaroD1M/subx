@@ -1,7 +1,8 @@
-import { basename, dirname, join } from 'path'
+import { dirname, join } from 'path'
 import { useDb } from '../../../utils/db'
 import { SubtitleService } from '../../../utils/subtitle'
 import { resolveMediaPath } from '../../../utils/mediaRoots'
+import { deriveOutputBaseName } from '../../../utils/outputNaming'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -28,12 +29,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const inputPath = await resolveMediaPath(task.file_path, task.root_id)
-  const baseName = task.file_path.replace(/\.[^.]+$/, '')
-  const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
   const subtitleFormat = body.subtitleFormat || (String(task.subtitle_format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt')
   const requestedOutputMode = String(body.outputMode || task.output_mode || 'translated')
   const outputSuffix = requestedOutputMode === 'original' ? 'original' : task.target_lang
-  const outputBaseName = basename(cleanName)
+  const outputBaseName = deriveOutputBaseName(task.file_path, task.source_type)
   const outputPath = join(dirname(inputPath), `${outputBaseName}.${outputSuffix}.${subtitleFormat}`)
   if (outputPath === inputPath) {
     throw createError({ statusCode: 400, message: '输出路径与源文件冲突，请更改输出设置' })

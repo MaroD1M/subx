@@ -63,6 +63,16 @@ describe('watch rules', () => {
     }).reason).toBe('已存在目标输出字幕')
   })
 
+  it('matches existing output for release-tag filenames', () => {
+    const relativePath = 'Movies/Show.S01E01.H264.English-MWR.mkv'
+    const result = evaluateWatchCandidate({
+      ...baseInput,
+      relativePath,
+      siblingNames: ['Show.S01E01.H264.English-MWR.mkv', 'Show.S01E01.H264.English-MWR.zh-CN.srt']
+    })
+    expect(result.reason).toBe('已存在目标输出字幕')
+  })
+
   it('allows explicitly disabling subtitle and output skipping', () => {
     const rules = sanitizeWatchRules({ skipExistingSubtitles: false, skipExistingOutput: false, stableSeconds: 0 })
     expect(evaluateWatchCandidate({

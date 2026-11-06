@@ -1,6 +1,6 @@
 import type { TrackInfo, TrackPolicy } from '~~/types'
 
-const LANGUAGE_ALIASES: Record<string, string[]> = {
+export const LANGUAGE_ALIASES: Record<string, string[]> = {
   zh: ['zh', 'chi', 'zho', 'chs', 'cht', 'cmn', 'chinese', '中文', '简体', '繁体'],
   en: ['en', 'eng', 'english', '英文', '英语'],
   ja: ['ja', 'jpn', 'japanese', '日文', '日语'],

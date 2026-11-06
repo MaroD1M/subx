@@ -6,6 +6,7 @@ import { resolveInsideRoot } from '../../../utils/pathSafety'
 import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'fs'
 import { basename, join, relative } from 'path'
 import { SubtitleService } from '../../../utils/subtitle'
+import { buildOriginalSubtitleCandidates, getMediaBaseName } from '../../../utils/outputNaming'
 
 export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id')
@@ -42,14 +43,10 @@ export default defineEventHandler(async (event) => {
     } else if (row.source_type === 'external') {
         sourcePath = await safePath(row.file_path, row.root_id)
     } else {
-        // 尝试寻找同名外部文件（保留原有逻辑）
-        const baseName = row.file_path.replace(/\.[^.]+$/, '')
-        const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
-        const possibleExts = ['.srt', '.ass', '.ssa']
-        
+        // 尝试寻找同名外部文件
         let foundPath = ''
-        for (const ext of possibleExts) {
-            const candidate = join(videoDir, `${cleanName}${ext}`)
+        for (const candidateRelativePath of buildOriginalSubtitleCandidates(row.file_path, row.source_type)) {
+            const candidate = join(videoDir, candidateRelativePath)
             let safeCandidate = ''
             try {
                 safeCandidate = await resolveInsideRoot(videoDir, relative(videoDir, candidate), { allowMissing: true })
@@ -82,7 +79,7 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 404, message: '无法找到原始字幕文件' })
     }
 
-    const baseName = basename(row.file_path || 'subtitle').replace(/\.[^.]+$/, '')
+    const baseName = getMediaBaseName(row.file_path || 'subtitle')
     const ext = basename(sourcePath).includes('.') ? basename(sourcePath).split('.').pop() : 'srt'
     const fileName = `${baseName}.original.${ext}`
 

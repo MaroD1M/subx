@@ -302,6 +302,11 @@ export const WatchService = {
       ...(await siblingNames(join(parentDir, 'SubX'))).map(name => `SubX/${name}`)
     ]
     console.log(`[Watch] 处理候选文件 #${folderId} (${source}): ${rel}`)
+    const config = folder.outputPolicy.targetLanguage ? null : await ConfigService.getConfig()
+    const outputPolicy = {
+      ...folder.outputPolicy,
+      targetLanguage: folder.outputPolicy.targetLanguage || config?.targetLanguage || 'zh-CN'
+    }
     const evaluation = evaluateWatchCandidate({
       relativePath: rel,
       size: info.size,
@@ -309,7 +314,7 @@ export const WatchService = {
       createdMs: info.birthtimeMs || info.ctimeMs,
       siblingNames: siblings,
       rules: folder.rules,
-      policy: folder.outputPolicy
+      policy: outputPolicy
     })
     if (!evaluation.accepted) {
       console.log(`[Watch] 跳过 #${folderId}: ${rel} -> ${evaluation.reason}`)

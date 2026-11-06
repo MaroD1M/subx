@@ -29,6 +29,7 @@ import type { BoundTranslationProvider } from './providers/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
 import { fileNameMatchesLanguage, resolveTrackPolicy, selectTrackForPolicy } from './trackPolicy'
+import { deriveOutputBaseName } from './outputNaming'
 
 export const taskEvents = new EventEmitter()
 taskEvents.setMaxListeners(0)
@@ -919,12 +920,10 @@ export const TaskService = {
                 : task.sourceType === 'asr'
                     ? ''
                     : join(tempDir, `${taskId}.srt`)
-            const baseName = task.filePath.replace(/\.[^.]+$/, '')
-            const cleanName = baseName.replace(/\.[a-zA-Z]{2,}(-[a-zA-Z]{2,})?$/, '')
             const outputExt = task.subtitleFormat === 'both' ? 'ass' : (task.subtitleFormat || 'srt')
             const outputSuffix = task.outputMode === 'original' ? 'original' : task.targetLanguage
             const inputPath = await resolveMediaPath(task.filePath, task.rootId)
-            const outputBaseName = basename(cleanName)
+            const outputBaseName = deriveOutputBaseName(task.filePath, task.sourceType)
             const config = await ConfigService.getConfig()
             const embyCompatible = config.embyCompatibleOutput === true && task.sourceType !== 'external'
             const outputPath = embyCompatible
@@ -933,6 +932,14 @@ export const TaskService = {
             const embyVariantPath = embyCompatible
                 ? join(dirname(inputPath), 'SubX', `${outputBaseName}.${outputSuffix}.${outputExt}`)
                 : ''
+            const outputBasePath = outputPath.replace(/\.[^.]+$/, '')
+            const plannedOutputPaths = task.subtitleFormat === 'both'
+                ? [`${outputBasePath}.srt`, `${outputBasePath}.ass`]
+                : [outputPath]
+            const protectedSourcePaths = [inputPath, srtPath].filter(Boolean)
+            if (plannedOutputPaths.some(candidate => protectedSourcePaths.includes(candidate))) {
+                throw new Error('输出路径与源字幕文件相同，请更改目标语言或输出模式')
+            }
             keepAsrAudio = Boolean(config.asrKeepAudio)
             let allEntries: SubtitleEntry[] = []
 
