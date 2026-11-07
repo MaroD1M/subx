@@ -18,7 +18,8 @@
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:pg": "vitest run server/utils/__tests__/pgLive.test.ts",
-    "test:ocr": "python3 -m unittest discover -s ocr-service/tests -v"
+    "test:ocr": "python3 -m unittest discover -s ocr-service/tests -v",
+    "preview:images": "playwright test --config playwright.preview.config.ts"
   },
   "dependencies": {
     "@nuxt/ui": "^4.12.0",

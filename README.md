@@ -32,9 +32,13 @@
 | --- | --- |
 | ![首页工作台](docs/images/preview-home.png) | ![翻译历史](docs/images/preview-history.png) |
 
-| 字幕核对 | 任务详情 |
+| 字幕核对 | AI 校对与问题筛选 |
 | --- | --- |
-| ![字幕核对](docs/images/preview-review.png) | ![任务详情](docs/images/preview-task.png) |
+| ![字幕核对](docs/images/preview-review.png) | ![AI 校对与问题筛选](docs/images/preview-review-ai.png) |
+
+| 任务详情 | 媒体库管理 |
+| --- | --- |
+| ![任务详情](docs/images/preview-task.png) | ![媒体库管理](docs/images/preview-media-libraries.png) |
 
 | 移动端首页 | 设置与自定义风格 |
 | --- | --- |
@@ -44,7 +48,7 @@
 | --- | --- |
 | ![语音识别来源](docs/images/preview-asr.png) | ![自动化](docs/images/preview-automation.png) |
 
-> 预览图基于演示数据生成，实际界面会随版本继续优化。
+> 预览图由 `npm run preview:images` 使用稳定演示数据统一生成（1440×900 视口），实际界面会随版本继续优化。
 
 ---
 
@@ -215,7 +219,7 @@ ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/a
 
 进入「自动化」页面可以配置：
 
-- **监控目录**：新建独立子目录，或在「媒体库」卡片上直接开启整库监控。
+- **监控目录**：新建独立子目录，或在「媒体库」右侧编辑器直接开启整库监控。
 - **规则**：递归、扩展名、包含/排除正则、体积、视频时长、创建/修改时间、稳定等待、已有字幕/输出跳过。
 - **输出策略**：目标语言、输出模式、字幕格式、翻译风格、模型和通知渠道。
 - **历史回填**：手动指定时间范围，按全局自动并发逐步处理，不默认全库扫描。

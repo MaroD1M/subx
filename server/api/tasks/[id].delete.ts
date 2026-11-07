@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
     db.prepare('DELETE FROM task_jobs WHERE task_id = ?').run(id)
     db.prepare('DELETE FROM task_logs WHERE task_id = ?').run(id)
     db.prepare('DELETE FROM task_review_entries WHERE task_id = ?').run(id)
+    try { db.prepare('DELETE FROM task_proofread_cache WHERE task_id = ?').run(id) } catch { /* old schema */ }
     try { db.prepare('DELETE FROM translation_quality_entries WHERE task_id = ?').run(id) } catch { /* old schema */ }
     try { db.prepare('DELETE FROM translation_quality_runs WHERE task_id = ?').run(id) } catch { /* old schema */ }
     try { db.prepare('DELETE FROM asr_segments WHERE run_id IN (SELECT id FROM transcription_runs WHERE task_id = ?)').run(id) } catch { /* old schema */ }

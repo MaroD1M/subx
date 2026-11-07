@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { mkdirSync, rmSync, writeFileSync } from 'fs'
 import Database from 'better-sqlite3'
 import { join } from 'path'
-import { seedTasks, setupAuth } from './helpers'
+import { seedProofreadCache, seedTasks, setupAuth } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -82,6 +82,44 @@ test('review visual and accessibility', async ({ page }) => {
   await expect(page.getByText('Good evening, Minister.').first()).toBeVisible()
   await page.waitForTimeout(300)
   await expect(page).toHaveScreenshot('review.png', {
+    fullPage: true
+  })
+  await expectNoSeriousA11y(page)
+})
+
+test('media libraries visual and accessibility', async ({ page }) => {
+  await page.goto('/media-libraries')
+  await expect(page.getByRole('heading', { name: '媒体库管理' })).toBeVisible()
+  await expect(page.getByText('影视库').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: '新增媒体库' }).first()).toBeVisible()
+  await expect(page.getByText('路径说明')).toBeVisible()
+  await page.waitForTimeout(300)
+  await expect(page).toHaveScreenshot('media-libraries.png', {
+    fullPage: true
+  })
+  await expectNoSeriousA11y(page)
+})
+
+test('review proofread cache is actionable and filterable', async ({ page }) => {
+  seedProofreadCache()
+  let proofreadPostCount = 0
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url().includes('/api/tasks/preview-review/proofread')) {
+      proofreadPostCount += 1
+    }
+  })
+  const cacheResponse = page.waitForResponse(item => item.url().includes('/api/tasks/preview-review/proofread') && item.url().includes('kind=consistency') && item.status() === 200).catch(() => null)
+  await page.goto('/review/preview-review')
+  await cacheResponse
+  await expect(page.getByRole('button', { name: /AI 校对 2/ }).first()).toBeVisible()
+  await page.getByRole('button', { name: /AI 校对 2/ }).first().click()
+  await expect(page.getByText('缓存结果')).toBeVisible()
+  await expect(page.getByText('一致性问题 2 条')).toBeVisible()
+  await expect(page.getByText('人名译法与前后文不一致')).toBeVisible()
+  await page.getByRole('button', { name: '只看问题字幕' }).click()
+  await expect(page.getByText('筛选结果 2 条')).toBeVisible()
+  expect(proofreadPostCount).toBe(0)
+  await expect(page).toHaveScreenshot('review-proofread.png', {
     fullPage: true
   })
   await expectNoSeriousA11y(page)
@@ -393,6 +431,21 @@ test('login help modal explains passkey recovery', async ({ browser }) => {
   await context.close()
 })
 
+test('media library edits save without leaving the page', async ({ page }) => {
+  await page.goto('/media-libraries')
+  await expect(page.getByText('路径说明')).toBeVisible()
+  await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+  await page.locator('input').first().fill('影视库 E2E')
+  await expect(page.getByText('有未保存修改').first()).toBeVisible()
+  await page.getByRole('button', { name: '保存媒体库' }).click()
+  await expect(page).toHaveURL(/\/media-libraries$/)
+  await expect(page.getByText('保存成功').last()).toBeVisible()
+  await expect(page.getByText('有未保存修改')).toHaveCount(0)
+  await page.locator('input').first().fill('影视库')
+  await page.getByRole('button', { name: '保存媒体库' }).click()
+  await expect(page.getByText('保存成功').last()).toBeVisible()
+})
+
 test.describe('tablet', () => {
   test.use({ viewport: { width: 900, height: 900 } })
 
@@ -412,5 +465,19 @@ test.describe('mobile', () => {
     await expect(page).toHaveScreenshot('mobile-home.png', {
       fullPage: true
     })
+  })
+
+  test('mobile review and media pages do not overflow horizontally', async ({ page }) => {
+    seedProofreadCache()
+    await page.goto('/review/preview-review')
+    await expect(page.getByRole('heading', { name: '字幕核对' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
+    await page.getByRole('button', { name: /AI 校对 2/ }).click()
+    await expect(page.getByText('缓存结果').last()).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
+
+    await page.goto('/media-libraries')
+    await expect(page.getByText('路径说明')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
   })
 })

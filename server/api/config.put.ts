@@ -1,4 +1,5 @@
 import { ConfigService } from '../utils/config'
+import { useDb } from '../utils/db'
 import { validateMediaRoots } from '../utils/mediaRoots'
 import { configUpdateSchema, parseBody } from '../utils/validation'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
@@ -79,7 +80,22 @@ export default defineEventHandler(async (event) => {
     if (!ALLOWED_KEYS.has(key)) continue
     if ((key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken') && String(value).includes('*')) continue
     if (key === 'mediaRoots') {
-      await ConfigService.updateConfig(key, validateMediaRoots(value))
+      const roots = validateMediaRoots(value)
+      await ConfigService.updateConfig(key, roots)
+      try {
+        const rootMap = new Map(roots.map(root => [root.id, root]))
+        const db = useDb()
+        const watchFolders = db.prepare('SELECT id, root_id FROM watch_folders').all() as any[]
+        for (const folder of watchFolders) {
+          const root = rootMap.get(String(folder.root_id))
+          if (!root || root.enabled === false) {
+            db.prepare('DELETE FROM watch_events WHERE folder_id = ?').run(folder.id)
+            db.prepare('DELETE FROM watch_folders WHERE id = ?').run(folder.id)
+          }
+        }
+      } catch (error) {
+        console.error('[Config] Failed to clean removed media root watch folders:', error)
+      }
       continue
     }
     if (key === 'customStylePresets') {

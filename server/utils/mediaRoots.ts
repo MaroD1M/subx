@@ -19,7 +19,7 @@ function sanitizeRoot(root: Partial<MediaRoot>, index: number): MediaRoot | null
 
   return {
     id: String(root.id || `root-${index + 1}`),
-    name: String(root.name || `媒体库 ${index + 1}`),
+    name: String(root.name || `媒体库 ${index + 1}`).trim(),
     path: normalizeRootPath(rawPath),
     enabled: root.enabled !== false,
     order: Number.isFinite(Number(root.order)) ? Number(root.order) : index,
@@ -45,27 +45,43 @@ export function validateMediaRoots(input: unknown): MediaRoot[] {
 
   const active = sanitized.filter(root => root.enabled !== false)
   const pathSet = new Set<string>()
-  const idSet = new Set<string>()
+  const usedIds = new Set<string>()
+
+  // Old configurations may contain duplicate IDs from early versions. Normalize
+  // them instead of failing the whole media library list.
+  for (let index = 0; index < sanitized.length; index++) {
+    const root = sanitized[index]!
+    let id = root.id
+    if (usedIds.has(id)) {
+      let suffix = index + 1
+      while (usedIds.has(`${id}-${suffix}`)) suffix += 1
+      id = `${id}-${suffix}`
+      root.id = id
+    }
+    usedIds.add(id)
+  }
 
   for (const root of active) {
-    if (!root.name.trim()) {
+    if (!root.name) {
       throw createError({ statusCode: 400, message: '媒体库名称不能为空' })
     }
     if (!root.path.trim()) {
       throw createError({ statusCode: 400, message: `媒体库「${root.name}」路径不能为空` })
     }
-    if (idSet.has(root.id)) {
-      throw createError({ statusCode: 400, message: `媒体库 ID 重复：${root.id}` })
-    }
     if (pathSet.has(root.path)) {
       throw createError({ statusCode: 400, message: `媒体库路径重复：${root.path}` })
     }
-    idSet.add(root.id)
     pathSet.add(root.path)
   }
 
-  if (active.length > 0 && !active.some(root => root.isDefault)) {
+  for (const root of sanitized) {
+    if (root.enabled === false) root.isDefault = false
+  }
+  const activeDefaults = active.filter(root => root.isDefault)
+  if (active.length > 0 && !activeDefaults.length) {
     active[0]!.isDefault = true
+  } else if (activeDefaults.length > 1) {
+    for (const root of activeDefaults.slice(1)) root.isDefault = false
   }
 
   return sanitized.sort((a, b) => (a.order || 0) - (b.order || 0))

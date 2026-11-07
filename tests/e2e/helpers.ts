@@ -41,6 +41,7 @@ export async function setupAuth(request: APIRequestContext) {
 
 export function seedTasks() {
   const db = new Database(DB_PATH)
+  try { db.prepare('DELETE FROM task_proofread_cache').run() } catch { /* older schema */ }
   const now = '2026-10-30 07:00:00'
   const insertTask = db.prepare(`
     INSERT OR REPLACE INTO tasks (
@@ -155,5 +156,41 @@ export function seedTasks() {
     VALUES (?, ?, ?, ?, NULL, '2026-10-30 07:05:00', '2026-10-30 07:00:00')
   `).run('下载器回调', createHash('sha256').update(token).digest('hex'), token.slice(0, 12), JSON.stringify(['tasks:read', 'tasks:write']))
 
+  db.close()
+}
+
+
+export function seedProofreadCache() {
+  const db = new Database(DB_PATH)
+  const rows = db.prepare(`
+    SELECT subtitle_id, original_text, translated_text, final_text
+    FROM task_review_entries
+    WHERE task_id = 'preview-review'
+    ORDER BY sort_order ASC, CAST(subtitle_id AS INTEGER) ASC
+  `).all() as Array<{ subtitle_id: string, original_text: string, translated_text: string, final_text: string }>
+  const payload = {
+    version: 2,
+    kind: 'consistency',
+    model: 'deepseek-chat',
+    providerType: 'openai-compatible',
+    apiBaseUrl: 'https://api.openai.com/v1',
+    targetLanguage: 'zh-CN',
+    totalEntries: rows.length,
+    rows: rows.map(row => [String(row.subtitle_id), String(row.original_text || ''), String(row.translated_text || row.final_text || '')])
+  }
+  const fingerprint = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
+  const result = {
+    terms: [],
+    issues: [
+      { subtitleId: '2', type: 'name_inconsistency', message: '人名译法与前后文不一致' },
+      { subtitleId: '8', type: 'terminology', message: '术语建议保持统一' }
+    ]
+  }
+  db.prepare('DELETE FROM task_proofread_cache WHERE task_id = ?').run('preview-review')
+  const cachedAt = '2026-10-30 07:00:00'
+  db.prepare(`
+    INSERT INTO task_proofread_cache (task_id, kind, fingerprint, model, provider_type, entry_count, total_entries, result_json, created_at, updated_at)
+    VALUES ('preview-review', 'consistency', ?, 'deepseek-chat', 'openai-compatible', ?, ?, ?, ?, ?)
+  `).run(fingerprint, rows.length, rows.length, JSON.stringify(result), cachedAt, cachedAt)
   db.close()
 }

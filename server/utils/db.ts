@@ -303,6 +303,20 @@ export function useDb() {
       UNIQUE(task_id, subtitle_id)
     );
 
+    CREATE TABLE IF NOT EXISTS task_proofread_cache (
+      task_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,
+      model TEXT NOT NULL DEFAULT '',
+      provider_type TEXT NOT NULL DEFAULT '',
+      entry_count INTEGER NOT NULL DEFAULT 0,
+      total_entries INTEGER NOT NULL DEFAULT 0,
+      result_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (task_id, kind)
+    );
+
     CREATE TABLE IF NOT EXISTS auth (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       passkey_hash TEXT NOT NULL,

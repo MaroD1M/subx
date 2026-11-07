@@ -1,43 +1,60 @@
 <template>
-  <AppContainer size="wide" class="space-y-5 py-2">
+  <AppContainer size="wide" class="space-y-4 py-2">
     <PageHeader
       title="字幕核对"
-      description="批量筛选、重译、手动修正，并实时预览最终字幕。"
+      description="筛选、重译、修正并预览最终字幕。"
       :breadcrumb="[{ label: '翻译历史', icon: 'i-lucide-history', to: '/history' }, { label: '字幕核对' }]"
     >
       <template #actions>
-        <UButton label="操作指南" icon="i-lucide-help-circle" color="neutral" variant="ghost" @click="guideOpen = true" />
-        <UButton label="返回任务" color="neutral" variant="ghost" :to="`/task/${taskId}`" />
-        <UButton label="AI 校对" icon="i-lucide-sparkles" color="primary" variant="soft" title="只生成术语与一致性建议，不会自动修改字幕" @click="proofreadOpen = true" />
-        <UButton label="预览" icon="i-lucide-eye" color="neutral" variant="soft" class="xl:hidden" @click="openPreview" />
-        <UButton label="放弃成果" color="error" variant="soft" title="将任务标记为失败并作废本次翻译结果" @click="discardReview" />
-        <UButton label="导出结果" color="primary" :loading="exporting" title="先保存当前修改，再生成字幕文件并返回任务页" @click="exportReviewed" />
+        <UButton icon="i-lucide-help-circle" color="neutral" variant="ghost" size="sm" aria-label="操作指南" title="操作指南" @click="guideOpen = true" />
+        <UButton
+          :label="proofreadIssueCount ? `AI 校对 ${proofreadIssueCount}` : 'AI 校对'"
+          icon="i-lucide-sparkles"
+          color="primary"
+          variant="soft"
+          size="sm"
+          title="只生成术语与一致性建议，不会自动修改字幕"
+          @click="openProofread"
+        />
+        <UPopover v-model:open="moreMenuOpen" :content="{ align: 'end' }">
+          <UButton icon="i-lucide-ellipsis" color="neutral" variant="ghost" size="sm" aria-label="更多操作" title="更多操作" />
+          <template #content>
+            <div class="w-48 p-1">
+              <UButton label="返回任务" icon="i-lucide-arrow-left" color="neutral" variant="ghost" class="w-full justify-start" :to="`/task/${taskId}`" @click="moreMenuOpen = false" />
+              <UButton label="放弃成果" icon="i-lucide-trash-2" color="error" variant="ghost" class="w-full justify-start" @click="moreMenuOpen = false; discardReview()" />
+            </div>
+          </template>
+        </UPopover>
+        <UPopover v-model:open="exportSettingsOpen" :content="{ align: 'end' }">
+          <UButton icon="i-lucide-sliders-horizontal" label="导出设置" color="neutral" variant="ghost" size="sm" title="设置导出模式、字幕样式和格式" />
+          <template #content>
+            <div class="w-80 max-w-[calc(100vw-2rem)] space-y-3 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <p class="app-section-title">导出设置</p>
+                <UButton label="预览" icon="i-lucide-eye" size="xs" color="neutral" variant="ghost" @click="exportSettingsOpen = false; openPreview()" />
+              </div>
+              <UFormField label="导出模式">
+                <USelect v-model="exportMode" :items="exportModeItems" size="sm" class="w-full" />
+              </UFormField>
+              <UFormField label="字幕样式">
+                <USelect v-model="exportStyle" :items="exportStyleItems" size="sm" class="w-full" />
+              </UFormField>
+              <UFormField label="导出格式">
+                <USelect v-model="exportFormat" :items="exportFormatItems" size="sm" class="w-full" />
+              </UFormField>
+              <p class="app-caption">导出前会自动保存当前修改。文件内容以每条字幕的「最终导出」列为准；「当前译文」只用于恢复和重译参考。</p>
+            </div>
+          </template>
+        </UPopover>
+        <UButton label="导出结果" color="primary" size="sm" :loading="exporting" title="先保存当前修改，再生成字幕文件并返回任务页" @click="exportReviewed" />
       </template>
     </PageHeader>
 
-    <div v-if="taskMeta.outputMode === 'original' && summary.total > 0" class="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-xs leading-relaxed text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
-      该任务为「仅原文字幕」：核对页用于查看、编辑和导出原始字幕。批量重译 / AI 校对会调用翻译模型，是否使用由你决定。
+    <div v-if="taskMeta.outputMode === 'original' && summary.total > 0" class="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+      该任务为「仅原文字幕」：核对页用于查看、编辑和导出原始字幕。重译 / AI 校对会调用翻译模型，是否使用由你决定。
     </div>
 
-    <div class="surface-card space-y-2 p-3">
-      <div class="flex flex-wrap items-end gap-3">
-        <UFormField label="导出模式" class="min-w-[120px]">
-          <USelect v-model="exportMode" :items="exportModeItems" class="w-32" title="决定导出文件使用译文、双语还是原文" />
-        </UFormField>
-        <UFormField label="字幕样式" class="min-w-[140px]">
-          <USelect v-model="exportStyle" :items="exportStyleItems" class="w-40" title="仅影响 ASS 字幕的双语排版和样式" />
-        </UFormField>
-        <UFormField label="导出格式" class="min-w-[100px]">
-          <USelect v-model="exportFormat" :items="exportFormatItems" class="w-24" title="SRT 兼容性最好；ASS 支持样式和双语排版" />
-        </UFormField>
-        <UButton label="操作指南" icon="i-lucide-help-circle" size="xs" color="neutral" variant="ghost" @click="guideOpen = true" />
-      </div>
-      <p class="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-        导出前会自动保存当前修改。文件内容以每条字幕的「最终导出」列为准；「当前译文」只作为恢复和重译参考。
-      </p>
-    </div>
-
-    <div v-if="clipUrl" class="rounded-2xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-950/20 space-y-2">
+    <div v-if="clipUrl" class="space-y-2 rounded-2xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
       <div class="flex items-center justify-between gap-2">
         <p class="text-xs font-semibold text-primary-800 dark:text-primary-200">音频片段 #{{ clipEntryId }} · {{ clipRangeText }}</p>
         <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" aria-label="关闭音频片段" @click="closeClip" />
@@ -45,157 +62,153 @@
       <audio :src="clipUrl" controls autoplay class="w-full" aria-label="字幕音频片段"></audio>
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-      <div class="surface-card p-4">
-        <p class="stat-label">总条数</p>
-        <p class="stat-value">{{ summary.total }}</p>
+    <div class="surface-card space-y-3 p-3 sm:p-4">
+      <div class="flex flex-wrap items-center gap-2">
+        <UInput v-model="searchQuery" icon="i-lucide-search" size="sm" placeholder="搜索原文 / 译文 / 编号" class="w-full sm:w-56" aria-label="搜索字幕内容" />
+        <UButton
+          :label="`需要处理 ${contentCounts.needsAttention}`"
+          size="sm"
+          color="warning"
+          :variant="contentFilter === 'needs_attention' ? 'soft' : 'ghost'"
+          title="空译文、同文、待核对、低质量、低置信度或有核对原因的条目"
+          @click="toggleFilterPreset('needs_attention')"
+        />
+        <UButton
+          :label="`未翻译 / 同文 ${contentCounts.untranslated}`"
+          size="sm"
+          color="error"
+          :variant="contentFilter === 'untranslated' ? 'soft' : 'ghost'"
+          title="译文为空，或译文与原文完全相同"
+          @click="toggleFilterPreset('untranslated')"
+        />
+        <UButton
+          v-if="proofreadIssueCount"
+          :label="`AI 问题 ${proofreadIssueCount}`"
+          size="sm"
+          color="warning"
+          :variant="proofreadIssueFilter !== 'all' ? 'soft' : 'ghost'"
+          title="只看 AI 一致性问题涉及的字幕"
+          @click="toggleProofreadIssueFilter"
+        />
+        <UButton
+          label="低质量"
+          size="sm"
+          color="warning"
+          :variant="qualityFilter === 'low' ? 'soft' : 'ghost'"
+          title="质量分低于设置阈值"
+          @click="toggleFilterPreset('low_quality')"
+        />
+        <UButton
+          label="待保存"
+          size="sm"
+          color="neutral"
+          :variant="statusFilter === 'dirty' ? 'soft' : 'ghost'"
+          title="只看尚未保存的修改"
+          @click="toggleFilterPreset('dirty')"
+        />
+
+        <UPopover v-model:open="filterPanelOpen" :content="{ align: 'start' }">
+          <UButton
+            label="筛选"
+            icon="i-lucide-sliders-horizontal"
+            size="sm"
+            color="neutral"
+            :variant="advancedFilterCount ? 'soft' : 'ghost'"
+            :title="advancedFilterCount ? `已启用 ${advancedFilterCount} 个高级筛选` : '打开高级筛选'"
+          />
+          <template #content>
+            <div class="w-[22rem] max-w-[calc(100vw-2rem)] space-y-3 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <p class="app-section-title">高级筛选</p>
+                <UButton label="重置" icon="i-lucide-filter-x" size="xs" color="neutral" variant="ghost" :disabled="!advancedFilterCount" @click="resetAdvancedFilters" />
+              </div>
+              <UFormField label="状态筛选">
+                <USelect v-model="statusFilter" :items="statusFilterItems" size="sm" class="w-full" />
+              </UFormField>
+              <UFormField label="内容筛选">
+                <USelect v-model="contentFilter" :items="contentFilterItems" size="sm" class="w-full" />
+              </UFormField>
+              <UFormField label="原因筛选">
+                <USelect v-model="reasonFilter" :items="reasonFilterItems" size="sm" class="w-full" />
+              </UFormField>
+              <UFormField label="ASR 置信度">
+                <USelect v-model="confidenceFilter" :items="confidenceFilterItems" size="sm" class="w-full" />
+              </UFormField>
+              <UFormField label="翻译质量">
+                <USelect v-model="qualityFilter" :items="qualityFilterItems" size="sm" class="w-full" />
+              </UFormField>
+              <UFormField v-if="proofreadIssueCount" label="AI 校对问题">
+                <USelect v-model="proofreadIssueFilter" :items="proofreadIssueFilterItems" size="sm" class="w-full" />
+              </UFormField>
+              <p class="app-caption">译文与原文相同会忽略标点、空格、大小写和格式标签。AI 问题来自一致性检查缓存。</p>
+            </div>
+          </template>
+        </UPopover>
+        <UButton v-if="hasActiveFilters" label="清空筛选" icon="i-lucide-filter-x" size="sm" color="neutral" variant="ghost" @click="resetFilters" />
       </div>
-      <div class="surface-card p-4 ring-1 ring-amber-200/50 dark:ring-amber-800/30">
-        <p class="stat-label text-amber-500">待核对</p>
-        <p class="stat-value text-amber-700 dark:text-amber-300">{{ summary.needsReview }}</p>
-      </div>
-      <div class="surface-card p-4 ring-1 ring-blue-200/50 dark:ring-blue-800/30">
-        <p class="stat-label text-blue-500">已编辑</p>
-        <p class="stat-value text-blue-700 dark:text-blue-300">{{ summary.edited }}</p>
-      </div>
-      <button
-        type="button"
-        class="surface-card p-4 text-left ring-1 ring-red-200/50 transition hover:ring-red-300 dark:ring-red-800/30 dark:hover:ring-red-700"
-        title="点击筛选：译文为空或与原文完全相同"
-        @click="applyFilterPreset('untranslated')"
-      >
-        <p class="stat-label text-red-500">未翻译 / 同文</p>
-        <p class="stat-value text-red-700 dark:text-red-300">{{ contentCounts.untranslated }}</p>
-      </button>
-      <div class="surface-card p-4">
-        <p class="stat-label">当前可见</p>
-        <p class="stat-value">{{ filteredEntries.length }}</p>
+
+      <div class="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+        <span>已选 {{ selectedEntries.length }}</span>
+        <span v-if="dirtyCount > 0" class="text-primary-700 dark:text-primary-300">待保存 {{ dirtyCount }}</span>
+        <span v-if="hasActiveFilters" class="text-primary-600 dark:text-primary-400">已启用 {{ activeFilterCount }} 个筛选</span>
+
+        <div class="ml-auto flex flex-wrap items-center gap-1.5">
+          <UButton label="全选筛选结果" size="xs" color="neutral" variant="ghost" title="选中当前筛选出的所有条目（跨页生效）" @click="selectVisible" />
+          <UButton label="反选" size="xs" color="neutral" variant="ghost" title="反转当前筛选结果的选中状态" @click="invertVisibleSelection" />
+          <UButton label="清空选择" size="xs" color="neutral" variant="ghost" @click="clearSelection" />
+          <span class="mx-1 hidden h-4 w-px bg-gray-200 dark:bg-gray-700 sm:block" />
+          <UButton label="重译选中" size="xs" color="primary" variant="soft" :loading="retranslating" title="对已勾选条目调用模型重译；会覆盖当前译文和最终导出" @click="retranslateSelected" />
+          <UButton label="重译筛选" size="xs" color="primary" variant="ghost" :loading="retranslating" title="直接重译当前筛选出的全部条目" @click="retranslateFiltered" />
+          <UButton label="设为原文" size="xs" color="warning" variant="ghost" title="只把选中条目的最终导出设为原文，不改变当前译文" @click="applyBulkOriginal" />
+          <UPopover :content="{ align: 'end' }">
+            <UButton label="更多" icon="i-lucide-ellipsis" size="xs" color="neutral" variant="ghost" title="顺序与错位修正" />
+            <template #content>
+              <div class="w-64 space-y-1 p-2">
+                <p class="section-title px-2 py-1">顺序调整</p>
+                <UButton label="所选上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="moveSelectedUp" />
+                <UButton label="所选下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="moveSelectedDown" />
+                <p class="section-title px-2 pb-1 pt-2">译文平移</p>
+                <UButton label="从选中处下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="shiftAllCol('translatedText', 1)" />
+                <UButton label="从选中处上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="shiftAllCol('translatedText', -1)" />
+                <UButton label="选区内下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="batchShiftCol('translatedText', 1)" />
+                <UButton label="选区内上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="batchShiftCol('translatedText', -1)" />
+                <p class="section-title px-2 pb-1 pt-2">导出文本</p>
+                <UButton label="恢复译文" icon="i-lucide-rotate-ccw" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="batchRestoreTranslated" />
+                <UButton label="导出文本下移" icon="i-lucide-arrow-down" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="shiftAllCol('finalText', 1)" />
+                <UButton label="导出文本上移" icon="i-lucide-arrow-up" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="shiftAllCol('finalText', -1)" />
+              </div>
+            </template>
+          </UPopover>
+          <UButton label="保存修改" size="xs" color="neutral" :loading="saving" :disabled="dirtyCount === 0" title="写入核对数据，但不会生成字幕文件" @click="saveChanges()" />
+        </div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5 items-start">
-      <div class="space-y-4 min-w-0">
+    <div class="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div class="min-w-0">
         <div class="surface-card overflow-hidden">
-          <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 space-y-3">
-            <div class="flex items-center justify-between gap-3 flex-wrap">
-              <div class="flex items-center gap-3 flex-wrap text-sm text-gray-500 dark:text-gray-400">
-                <span>已选 {{ selectedEntries.length }} 条</span>
-                <span v-if="dirtyCount > 0" class="text-primary-700">待保存 {{ dirtyCount }} 条</span>
-                <span v-if="hasActiveFilters" class="text-primary-600 dark:text-primary-400">已启用 {{ activeFilterCount }} 个筛选</span>
-              </div>
-              <div class="flex items-center gap-2 flex-wrap">
-                <UButton label="操作指南" icon="i-lucide-help-circle" size="xs" color="neutral" variant="ghost" @click="guideOpen = true" />
-                <UButton label="重置筛选" icon="i-lucide-filter-x" size="xs" color="neutral" variant="ghost" :disabled="!hasActiveFilters" @click="resetFilters" />
-              </div>
-            </div>
-
-            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              <label class="flex flex-col gap-1">
-                <span class="text-[11px] font-medium text-gray-500 dark:text-gray-400">搜索原文 / 译文 / 编号</span>
-                <UInput v-model="searchQuery" icon="i-lucide-search" size="xs" placeholder="例如：人名、台词、编号" class="w-full" aria-label="搜索字幕内容" />
-              </label>
-              <label class="flex flex-col gap-1">
-                <UTooltip text="按核对状态筛选。待核对包含需核对、已回退和缺失；待保存只看尚未写入数据库的修改。">
-                  <span class="inline-flex cursor-help items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">状态筛选 <UIcon name="i-lucide-circle-help" class="h-3 w-3" /></span>
-                </UTooltip>
-                <USelect v-model="statusFilter" :items="statusFilterItems" class="w-full" size="xs" aria-label="状态筛选" />
-              </label>
-              <label class="flex flex-col gap-1">
-                <UTooltip text="按内容特征筛选。译文与原文相同会忽略标点、空格和格式标签；需要处理会合并空译文、同文、低质量、低置信度和待核对条目。">
-                  <span class="inline-flex cursor-help items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">内容筛选 <UIcon name="i-lucide-circle-help" class="h-3 w-3" /></span>
-                </UTooltip>
-                <USelect v-model="contentFilter" :items="contentFilterItems" class="w-full" size="xs" aria-label="内容筛选" />
-              </label>
-              <label class="flex flex-col gap-1">
-                <UTooltip text="按系统记录的核对原因筛选，例如缺少译文、译文与原文相同、疑似串条等。">
-                  <span class="inline-flex cursor-help items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">原因筛选 <UIcon name="i-lucide-circle-help" class="h-3 w-3" /></span>
-                </UTooltip>
-                <USelect v-model="reasonFilter" :items="reasonFilterItems" class="w-full" size="xs" aria-label="原因筛选" />
-              </label>
-              <label class="flex flex-col gap-1">
-                <UTooltip text="按语音识别置信度筛选。低于 60% 通常意味着原文字幕本身可能不准确，建议结合音频片段确认。">
-                  <span class="inline-flex cursor-help items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">ASR 置信度 <UIcon name="i-lucide-circle-help" class="h-3 w-3" /></span>
-                </UTooltip>
-                <USelect v-model="confidenceFilter" :items="confidenceFilterItems" class="w-full" size="xs" aria-label="ASR 置信度筛选" />
-              </label>
-              <label class="flex flex-col gap-1">
-                <UTooltip text="按双模型质量校验分数筛选。阈值默认 70%，可在设置页调整。">
-                  <span class="inline-flex cursor-help items-center gap-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">翻译质量 <UIcon name="i-lucide-circle-help" class="h-3 w-3" /></span>
-                </UTooltip>
-                <USelect v-model="qualityFilter" :items="qualityFilterItems" class="w-full" size="xs" aria-label="翻译质量筛选" />
-              </label>
-            </div>
-
-            <div class="flex items-center gap-2 flex-wrap border-t border-gray-100 pt-2 dark:border-gray-800">
-              <span class="text-[11px] font-medium text-gray-500 dark:text-gray-400">快捷筛选</span>
-              <UButton label="需要处理" size="xs" color="warning" variant="soft" title="空译文、同文、待核对、低质量、低置信度或有核对原因的条目" @click="applyFilterPreset('needs_attention')" />
-              <UButton label="未翻译 / 同文" size="xs" color="error" variant="soft" title="译文为空，或译文与原文完全相同" @click="applyFilterPreset('untranslated')" />
-              <UButton label="低质量" size="xs" color="warning" variant="ghost" title="质量分低于设置阈值" @click="applyFilterPreset('low_quality')" />
-              <UButton label="低置信度" size="xs" color="neutral" variant="ghost" title="ASR 置信度低于 60%" @click="applyFilterPreset('low_confidence')" />
-              <UButton label="待保存" size="xs" color="neutral" variant="ghost" title="只看尚未保存的修改" @click="applyFilterPreset('dirty')" />
-            </div>
-
-            <div class="flex items-center gap-2 flex-wrap border-t border-gray-100 pt-2 dark:border-gray-800">
-              <span class="text-[11px] font-medium text-gray-500 dark:text-gray-400">选择</span>
-              <UButton label="全选筛选结果" size="xs" color="neutral" variant="ghost" title="选中当前筛选出的所有条目（跨页生效）" @click="selectVisible" />
-              <UButton label="选待核对" size="xs" color="warning" variant="ghost" title="选中所有需要核对的条目" @click="selectNeedsReview" />
-              <UButton label="反选可见" size="xs" color="neutral" variant="ghost" title="反转当前筛选结果的选中状态" @click="invertVisibleSelection" />
-              <UButton label="清空选择" size="xs" color="neutral" variant="ghost" @click="clearSelection" />
-            </div>
-
-            <div class="flex items-center gap-2 flex-wrap border-t border-gray-100 pt-2 dark:border-gray-800">
-              <UButton label="重译选中" size="xs" color="primary" variant="soft" :loading="retranslating" title="对已勾选条目调用模型重译；会覆盖当前译文和最终导出" @click="retranslateSelected" />
-              <UButton label="重译筛选结果" size="xs" color="primary" variant="ghost" :loading="retranslating" title="直接重译当前筛选出的全部条目，适合先筛出未翻译/同文再批量重译" @click="retranslateFiltered" />
-              <UButton label="设为原文" size="xs" color="warning" variant="ghost" title="只把选中条目的最终导出设为原文，不改变当前译文" @click="applyBulkOriginal" />
-              <UButton label="▲上移" size="xs" color="neutral" variant="ghost" title="所选整行上移" @click="moveSelectedUp" />
-              <UButton label="▼下移" size="xs" color="neutral" variant="ghost" title="所选整行下移" @click="moveSelectedDown" />
-              <UButton label="保存修改" size="xs" color="neutral" :loading="saving" :disabled="dirtyCount === 0" title="写入核对数据，但不会生成字幕文件" @click="saveChanges()" />
-            </div>
-            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-              <span>筛选结果 {{ filteredEntries.length }} 条 · 第 {{ currentPage }} / {{ totalPages }} 页</span>
-              <div class="flex items-center gap-2">
-                <USelect v-model="pageSize" :items="pageSizeItems" size="xs" class="w-24" aria-label="每页条数" />
-                <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="currentPage <= 1" @click="currentPage -= 1" />
-                <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="currentPage >= totalPages" @click="currentPage += 1" />
-              </div>
-            </div>
-            <div class="flex items-center justify-between gap-2 border-t border-gray-100 pt-2 dark:border-gray-800">
-              <UButton :label="showAdjustTools ? '收起调整' : '更多调整'" icon="i-lucide-sliders-horizontal" size="xs" color="neutral" variant="ghost" @click="showAdjustTools = !showAdjustTools" />
-              <span class="text-[10px] text-gray-500 dark:text-gray-400">用于修正 AI 错位或批量平移文本</span>
-            </div>
-            <div v-show="showAdjustTools" class="flex items-center gap-2 flex-wrap border-t border-gray-100 dark:border-gray-800 pt-2">
-              <UBadge color="info" variant="soft" class="text-[11px] font-semibold">译文</UBadge>
-              <span class="text-[10px] text-gray-500 dark:text-gray-400">全局</span>
-              <UButton icon="i-lucide-arrow-down" size="xs" color="info" variant="ghost" title="从选中条目起所有译文整体下移" aria-label="从选中条目起所有译文整体下移" @click="shiftAllCol('translatedText', 1)" />
-              <UButton icon="i-lucide-arrow-up" size="xs" color="info" variant="ghost" title="从选中条目起所有译文整体上移" aria-label="从选中条目起所有译文整体上移" @click="shiftAllCol('translatedText', -1)" />
-              <span class="text-[10px] text-gray-500 dark:text-gray-400">选区</span>
-              <UButton icon="i-lucide-arrow-down" size="xs" color="info" variant="ghost" title="选中条目间译文轮换下移" aria-label="选中条目间译文轮换下移" @click="batchShiftCol('translatedText', 1)" />
-              <UButton icon="i-lucide-arrow-up" size="xs" color="info" variant="ghost" title="选中条目间译文轮换上移" aria-label="选中条目间译文轮换上移" @click="batchShiftCol('translatedText', -1)" />
-              <span class="text-gray-300 dark:text-gray-600 mx-1">│</span>
-              <UBadge color="primary" variant="soft" class="text-[11px] font-semibold">最终导出</UBadge>
-              <span class="text-[10px] text-gray-500 dark:text-gray-400">全局</span>
-              <UButton icon="i-lucide-arrow-down" size="xs" color="primary" variant="ghost" title="从选中条目起所有导出文本整体下移" aria-label="从选中条目起所有导出文本整体下移" @click="shiftAllCol('finalText', 1)" />
-              <UButton icon="i-lucide-arrow-up" size="xs" color="primary" variant="ghost" title="从选中条目起所有导出文本整体上移" aria-label="从选中条目起所有导出文本整体上移" @click="shiftAllCol('finalText', -1)" />
-              <span class="text-[10px] text-gray-500 dark:text-gray-400">选区</span>
-              <UButton icon="i-lucide-arrow-down" size="xs" color="primary" variant="ghost" title="选中条目间导出文本轮换下移" aria-label="选中条目间导出文本轮换下移" @click="batchShiftCol('finalText', 1)" />
-              <UButton icon="i-lucide-arrow-up" size="xs" color="primary" variant="ghost" title="选中条目间导出文本轮换上移" aria-label="选中条目间导出文本轮换上移" @click="batchShiftCol('finalText', -1)" />
-              <UButton label="恢复译文" size="xs" color="primary" variant="ghost" title="将选中条目的导出文本恢复为译文" @click="batchRestoreTranslated" />
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+            <span>共 {{ summary.total }} 条 · 筛选结果 {{ filteredEntries.length }} 条 · 第 {{ currentPage }} / {{ totalPages }} 页</span>
+            <div class="flex items-center gap-2">
+              <USelect v-model="pageSize" :items="pageSizeItems" size="xs" class="w-24" aria-label="每页条数" />
+              <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="currentPage <= 1" @click="currentPage -= 1" />
+              <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="currentPage >= totalPages" @click="currentPage += 1" />
             </div>
           </div>
 
-          <div class="divide-y divide-gray-100 dark:divide-gray-800 xl:max-h-[72vh] xl:overflow-y-auto">
+          <div class="divide-y divide-gray-100 dark:divide-gray-800 xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto">
             <div
               v-for="entry in pagedEntries"
               :key="entry.subtitleId"
-              v-memo="[entry.finalText, entry.translatedText, entry.originalText, entry.reviewStatus, entry.reviewReasons?.join(','), entry.selected, entry.edited, entry.asrConfidence, entry.qualityScore, entry.qualityIssues?.join(','), focusedSubtitleId === String(entry.subtitleId)]"
+              v-memo="[entry.finalText, entry.translatedText, entry.originalText, entry.reviewStatus, entry.reviewReasons?.join(','), entry.selected, entry.edited, entry.asrConfidence, entry.qualityScore, entry.qualityIssues?.join(','), focusedSubtitleId === String(entry.subtitleId), proofreadRevision]"
               :id="`review-entry-${entry.subtitleId}`"
               tabindex="-1"
-              class="p-3 space-y-3"
-              :class="focusedSubtitleId === String(entry.subtitleId) ? 'ring-2 ring-warning-400/70 rounded-2xl bg-warning-50/40 dark:bg-warning-900/10' : ''"
+              class="space-y-2.5 p-3"
+              :class="focusedSubtitleId === String(entry.subtitleId) ? 'rounded-2xl bg-warning-50/40 ring-2 ring-warning-400/70 dark:bg-warning-900/10' : ''"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 space-y-2">
-                  <div class="flex items-center gap-2 flex-wrap">
+                  <div class="flex flex-wrap items-center gap-2">
                     <span class="inline-flex" @click.prevent="onCheckboxClick(entry, $event)">
                       <UCheckbox :model-value="entry.selected" :aria-label="`选择字幕 #${entry.subtitleId}`" />
                     </span>
@@ -213,6 +226,15 @@
                     <UBadge v-else-if="isReviewSameAsSource(entry)" size="sm" color="warning" variant="subtle">译文与原文相同</UBadge>
                     <UBadge v-if="isReviewFinalDiffersFromTranslation(entry)" size="sm" color="info" variant="subtle">导出已调整</UBadge>
                     <UBadge v-else-if="isReviewFinalSameAsSource(entry) && !isReviewSameAsSource(entry)" size="sm" color="neutral" variant="subtle">导出=原文</UBadge>
+                    <UBadge
+                      v-if="proofreadIssueList(entry).length"
+                      size="sm"
+                      color="warning"
+                      variant="subtle"
+                      :title="proofreadIssueList(entry).map((issue: any) => `${issue.type}: ${issue.message}`).join('\n')"
+                    >
+                      AI 校对 {{ proofreadIssueList(entry).length }}
+                    </UBadge>
                     <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ entry.startTime }} → {{ entry.endTime }}</span>
                   </div>
                   <div class="flex flex-wrap gap-1.5">
@@ -222,16 +244,16 @@
                 </div>
                 <div class="flex items-center gap-1">
                   <UButton icon="i-lucide-play" size="xs" color="neutral" variant="ghost" :aria-label="`播放片段 #${entry.subtitleId}`" title="播放音频片段" @click="playClip(entry)" />
-                  <UButton label="重译" size="xs" color="primary" variant="ghost" :loading="retranslatingSingleId === entry.subtitleId" @click="retranslateSingle(entry)" />
+                  <UButton label="重译" size="xs" color="primary" variant="ghost" :loading="retranslatingSingleId === entry.subtitleId" title="重译此条；会覆盖当前译文和最终导出" @click="retranslateSingle(entry)" />
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 xl:grid-cols-[minmax(180px,0.9fr)_minmax(180px,0.9fr)_minmax(240px,1.2fr)] gap-3">
-                <div class="rounded-2xl bg-gray-50 dark:bg-gray-900/60 p-3 space-y-1.5">
+              <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(180px,0.9fr)_minmax(180px,0.9fr)_minmax(240px,1.2fr)]">
+                <div class="space-y-1.5 rounded-2xl bg-gray-50 p-3 dark:bg-gray-900/60">
                   <p class="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400">原文</p>
-                  <p class="text-[13px] leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
+                  <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
                 </div>
-                <div class="rounded-2xl bg-gray-50 dark:bg-gray-900/60 p-3 space-y-1.5">
+                <div class="space-y-1.5 rounded-2xl bg-gray-50 p-3 dark:bg-gray-900/60">
                   <div class="flex items-center justify-between gap-1">
                     <p class="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400" title="AI 当前译文；重译会覆盖此列">当前译文</p>
                     <div class="flex items-center gap-0.5">
@@ -239,10 +261,10 @@
                       <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="neutral" title="译文下移" aria-label="译文下移" @click="shiftTranslation(entry, 1)" />
                     </div>
                   </div>
-                  <p class="text-[13px] leading-6 whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
+                  <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
                 </div>
-                <div class="rounded-2xl bg-white dark:bg-gray-950/60 border border-primary-100 dark:border-primary-900/40 p-3 space-y-2">
-                  <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="space-y-2 rounded-2xl border border-primary-100 bg-white p-3 dark:border-primary-900/40 dark:bg-gray-950/60">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
                     <p class="text-[10px] uppercase tracking-widest text-primary-700" title="此列内容会写入最终字幕文件">最终导出</p>
                     <div class="flex items-center gap-0.5">
                       <UButton icon="i-lucide-chevron-up" variant="ghost" size="xs" color="primary" title="最终导出上移" aria-label="最终导出上移" @click="shiftFinal(entry, -1)" />
@@ -265,15 +287,15 @@
               </div>
             </div>
 
-            <div v-if="reviewLoading && !entries.length" class="p-8 text-center text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center gap-2">
-              <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 正在加载核对数据...
+            <div v-if="reviewLoading && !entries.length" class="flex items-center justify-center gap-2 p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+              <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" /> 正在加载核对数据...
             </div>
-            <div v-else-if="reviewError && !entries.length" class="p-8 text-center text-sm space-y-3">
+            <div v-else-if="reviewError && !entries.length" class="space-y-3 p-8 text-center text-sm">
               <p class="font-medium text-red-600 dark:text-red-400">核对数据加载失败</p>
               <p class="text-xs text-gray-500 dark:text-gray-400">{{ reviewError }}</p>
               <UButton label="重试" size="xs" color="primary" variant="soft" :loading="reviewLoading" @click="retryLoadReview" />
             </div>
-            <div v-else-if="!filteredEntries.length" class="p-8 text-center text-sm text-gray-500 dark:text-gray-400 space-y-3">
+            <div v-else-if="!filteredEntries.length" class="space-y-3 p-8 text-center text-sm text-gray-500 dark:text-gray-400">
               <template v-if="summary.total === 0">
                 <p class="font-medium text-gray-600 dark:text-gray-300">该任务没有可核对的字幕数据</p>
                 <p class="text-xs leading-relaxed">通常是任务在翻译完成前失败、取消，或旧版本导出的「仅原文字幕」任务尚未生成核对记录。</p>
@@ -288,23 +310,62 @@
         </div>
       </div>
 
-      <div class="surface-card hidden overflow-hidden xl:sticky xl:top-4 xl:block">
-        <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 space-y-2">
-          <div class="flex items-center justify-between gap-2">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">实时预览</h2>
-            <UButton label="刷新" size="xs" color="neutral" variant="ghost" :loading="previewLoading" @click="loadPreview" />
-          </div>
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            <USelect v-model="previewFormat" :items="previewFormatItems" class="w-28" aria-label="预览格式" />
-            <USelect v-model="bilingualLayout" :items="bilingualLayoutItems" class="w-36" aria-label="双语布局" />
+      <div class="surface-card hidden max-h-[calc(100vh-2rem)] flex-col overflow-hidden xl:sticky xl:top-4 xl:flex">
+        <div class="flex items-center gap-1 border-b border-gray-100 p-2 dark:border-gray-800">
+          <button
+            type="button"
+            class="rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors"
+            :aria-pressed="rightPanelTab === 'preview'"
+            :class="rightPanelTab === 'preview' ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            @click="rightPanelTab = 'preview'"
+          >
+            实时预览
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors"
+            :aria-pressed="rightPanelTab === 'proofread'"
+            :class="rightPanelTab === 'proofread' ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            @click="switchRightPanel('proofread')"
+          >
+            AI 校对
+            <UBadge v-if="proofreadIssueCount" color="warning" variant="subtle">{{ proofreadIssueCount }}</UBadge>
+          </button>
+          <UButton v-if="rightPanelTab === 'preview'" label="刷新" size="xs" color="neutral" variant="ghost" class="ml-auto" :loading="previewLoading" @click="loadPreview" />
+        </div>
+
+        <div v-if="rightPanelTab === 'preview'" class="min-h-0 flex-1 overflow-y-auto">
+          <div class="flex flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+            <USelect v-model="previewFormat" :items="previewFormatItems" size="xs" class="w-24" aria-label="预览格式" />
+            <USelect v-model="bilingualLayout" :items="bilingualLayoutItems" size="xs" class="w-32" aria-label="双语布局" />
             <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ previewFormat === 'ass' ? 'ASS 样式预览' : 'SRT 文本预览' }}</span>
           </div>
-        </div>
-        <div class="p-4">
-          <div v-if="previewLoading" class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-            <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 正在生成预览...
+          <div class="p-3">
+            <div v-if="previewLoading" class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" /> 正在生成预览...
+            </div>
+            <pre v-else tabindex="0" aria-label="字幕预览内容" class="max-h-[calc(100vh-12rem)] overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5 text-gray-800 dark:text-gray-100">{{ previewContent || '暂无预览内容' }}</pre>
           </div>
-          <pre v-else tabindex="0" aria-label="字幕预览内容" class="text-xs leading-5 whitespace-pre-wrap break-words max-h-[72vh] overflow-y-auto custom-scrollbar text-gray-800 dark:text-gray-100">{{ previewContent || '暂无预览内容' }}</pre>
+        </div>
+
+        <div v-if="rightPanelTab === 'proofread'" class="min-h-0 flex-1 overflow-y-auto">
+          <ReviewProofreadPanel
+            :kind="proofreadKind"
+            :state="proofreadStates[proofreadKind]"
+            :glossary="(appConfig as any)?.glossary || {}"
+            :issue-types="proofreadIssueTypes"
+            :issue-count="proofreadIssueCount"
+            :issue-filter="proofreadIssueFilter"
+            :applying-terms="applyingTerms"
+            @update:kind="switchProofreadKind"
+            @generate="(refresh) => generateProofread(proofreadKind, refresh)"
+            @focus-issue="focusIssue"
+            @filter-issues="filterProofreadIssues"
+            @select-issues="selectProofreadIssues"
+            @retranslate-issues="retranslateProofreadIssues"
+            @apply-term="applyProofreadTerm"
+            @apply-terms="applyProofreadTerms"
+          />
         </div>
       </div>
     </div>
@@ -319,11 +380,11 @@
           </section>
           <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
             <p class="font-semibold text-gray-900 dark:text-white">2. 勾选要处理的条目</p>
-            <p class="mt-1">勾选单条后可按住 Shift 再点另一条，连续选中一段。「全选筛选结果」会选中当前筛选出的所有条目（跨页生效）；「反选可见」用于快速切换。</p>
+            <p class="mt-1">勾选单条后可按住 Shift 再点另一条，连续选中一段。「全选筛选结果」会选中当前筛选出的所有条目（跨页生效）；「反选」用于快速切换。</p>
           </section>
           <section class="rounded-2xl border border-primary-100 bg-primary-50/70 p-4 dark:border-primary-900/40 dark:bg-primary-950/20">
             <p class="font-semibold text-primary-900 dark:text-primary-100">3. 重译会覆盖内容</p>
-            <p class="mt-1 text-primary-800 dark:text-primary-200">「重译选中」和「重译筛选结果」都会调用当前翻译模型，覆盖这些条目的「当前译文」和「最终导出」，并清除旧质量评分。开始时系统会先保存未保存修改，但随后手动改动仍会被重译结果覆盖，也会产生模型调用费用。</p>
+            <p class="mt-1 text-primary-800 dark:text-primary-200">「重译选中」和「重译筛选」都会调用当前翻译模型，覆盖这些条目的「当前译文」和「最终导出」，并清除旧质量评分。开始时系统会先保存未保存修改，但随后手动改动仍会被重译结果覆盖，也会产生模型调用费用。</p>
           </section>
           <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
             <p class="font-semibold text-gray-900 dark:text-white">4. 三列文本分别是什么</p>
@@ -336,7 +397,7 @@
           </section>
           <section class="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
             <p class="font-semibold text-amber-900 dark:text-amber-100">5. 上移 / 下移 / 平移用于修正错位</p>
-            <p class="mt-1 text-amber-800 dark:text-amber-200">整行上移下移会改变字幕顺序；「更多调整」里的全局平移和选区平移用于译文整体错位一行的情况。执行前建议先保存或确认当前筛选范围，避免影响未注意到的条目。</p>
+            <p class="mt-1 text-amber-800 dark:text-amber-200">整行上移下移会改变字幕顺序；「更多」里的全局平移和选区平移用于译文整体错位一行的情况。执行前建议先保存或确认当前筛选范围，避免影响未注意到的条目。</p>
           </section>
           <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
             <p class="font-semibold text-gray-900 dark:text-white">6. 保存、导出、放弃的区别</p>
@@ -348,7 +409,7 @@
           </section>
           <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
             <p class="font-semibold text-gray-900 dark:text-white">7. AI 校对只给建议</p>
-            <p class="mt-1">「AI 校对」不会自动修改字幕，只返回术语建议和一致性问题。可逐条加入术语表，加入后只影响后续新任务，不改变当前任务；若术语表已有不同译法会提示覆盖。</p>
+            <p class="mt-1">「AI 校对」不会自动修改字幕，只返回术语建议和一致性问题。结果会缓存，重进页面或误点不会重复消耗 Token；术语加入后只影响后续新任务。</p>
           </section>
           <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
             <p class="font-semibold text-gray-900 dark:text-white">8. 键盘快捷键</p>
@@ -359,64 +420,6 @@
       <template #footer>
         <div class="flex w-full justify-end">
           <UButton label="开始操作" color="primary" @click="guideOpen = false" />
-        </div>
-      </template>
-    </UModal>
-
-    <UModal v-model:open="proofreadOpen" title="AI 校对与术语学习" description="用当前翻译模型提取术语或检查译名一致性；只给建议，不会自动修改字幕。">
-      <template #body>
-        <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-          <div class="rounded-xl border border-primary-100 bg-primary-50/70 p-3 text-xs leading-relaxed text-primary-800 dark:border-primary-900/40 dark:bg-primary-950/20 dark:text-primary-200">
-            AI 校对是只读分析：不会改动「当前译文」或「最终导出」。加入术语表只影响后续新任务；一致性问题需要你定位后手动修改或重译。
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <UButton label="术语建议" icon="i-lucide-book-marked" size="sm" color="primary" :variant="proofreadKind === 'glossary' ? 'solid' : 'soft'" :loading="proofreadLoading && proofreadKind === 'glossary'" @click="runProofread('glossary')" />
-            <UButton label="一致性检查" icon="i-lucide-scan-search" size="sm" color="warning" :variant="proofreadKind === 'consistency' ? 'solid' : 'soft'" :loading="proofreadLoading && proofreadKind === 'consistency'" @click="runProofread('consistency')" />
-          </div>
-          <div v-if="proofreadLoading" class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" /> 正在分析字幕...
-          </div>
-          <template v-else-if="proofreadResult">
-            <div v-if="proofreadResult.terms?.length" class="space-y-2">
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">术语建议 {{ proofreadResult.terms.length }} 条</p>
-                <UButton label="全部加入术语表" icon="i-lucide-plus" size="xs" color="primary" :loading="applyingTerms" title="写入全局术语表，只影响后续任务；已有同名条目会被覆盖" @click="applyProofreadTerms" />
-              </div>
-              <div class="space-y-2">
-                <div v-for="term in proofreadResult.terms" :key="`${term.source}-${term.target}`" class="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/30">
-                  <div class="flex items-start justify-between gap-2">
-                    <div class="min-w-0">
-                      <p class="text-sm text-gray-800 dark:text-gray-100"><span class="font-mono">{{ term.source }}</span> → <span class="font-semibold text-primary-700 dark:text-primary-300">{{ term.target }}</span></p>
-                      <p v-if="term.reason" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ term.reason }}</p>
-                      <p v-if="glossaryConflict(term)" class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">术语表已有：{{ glossaryConflict(term) }}（加入后会覆盖）</p>
-                      <p v-else-if="glossaryHasTerm(term)" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">术语表已存在相同译法</p>
-                    </div>
-                    <UButton label="加入" size="xs" color="primary" variant="ghost" :loading="applyingTerms" @click="applyProofreadTerm(term)" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-if="proofreadResult.issues?.length" class="space-y-2">
-              <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">一致性问题 {{ proofreadResult.issues.length }} 条</p>
-              <p class="text-[11px] text-gray-500 dark:text-gray-400">这些问题不会自动修改。点击「定位」会重置筛选并跳转到对应字幕，可手动修改或重译。</p>
-              <div v-for="issue in proofreadResult.issues" :key="`${issue.subtitleId}-${issue.type}-${issue.message}`" class="rounded-xl border border-amber-100 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
-                <div class="flex items-start justify-between gap-2">
-                  <div class="min-w-0">
-                    <p class="text-xs font-semibold text-amber-900 dark:text-amber-100">#{{ issue.subtitleId }} · {{ issue.type }}</p>
-                    <p class="mt-1 text-xs text-amber-800 dark:text-amber-200">{{ issue.message }}</p>
-                  </div>
-                  <UButton v-if="issue.subtitleId" label="定位" size="xs" color="warning" variant="ghost" @click="focusIssue(issue)" />
-                </div>
-              </div>
-            </div>
-            <div v-if="!proofreadResult.terms?.length && !proofreadResult.issues?.length" class="text-sm text-gray-500 dark:text-gray-400">未发现可建议内容。</div>
-          </template>
-          <div v-else class="text-sm text-gray-500 dark:text-gray-400">选择上方按钮开始 AI 校对。长片会抽样检查，结果仅供人工确认。</div>
-        </div>
-      </template>
-      <template #footer>
-        <div class="flex w-full justify-end">
-          <UButton label="关闭" color="neutral" variant="ghost" @click="proofreadOpen = false" />
         </div>
       </template>
     </UModal>
@@ -433,6 +436,29 @@
         </div>
       </template>
     </USlideover>
+
+    <USlideover v-model:open="proofreadDrawerOpen" title="AI 校对与术语学习" description="只给建议，不会自动修改字幕；结果会缓存。" :ui="{ content: 'w-full sm:max-w-xl' }">
+      <template #body>
+        <ReviewProofreadPanel
+          class="h-[75vh]"
+          :kind="proofreadKind"
+          :state="proofreadStates[proofreadKind]"
+          :glossary="(appConfig as any)?.glossary || {}"
+          :issue-types="proofreadIssueTypes"
+          :issue-count="proofreadIssueCount"
+          :issue-filter="proofreadIssueFilter"
+          :applying-terms="applyingTerms"
+          @update:kind="switchProofreadKind"
+          @generate="(refresh) => generateProofread(proofreadKind, refresh)"
+          @focus-issue="focusIssue"
+          @filter-issues="filterProofreadIssues"
+          @select-issues="selectProofreadIssues"
+          @retranslate-issues="retranslateProofreadIssues"
+          @apply-term="applyProofreadTerm"
+          @apply-terms="applyProofreadTerms"
+        />
+      </template>
+    </USlideover>
   </AppContainer>
 </template>
 
@@ -440,6 +466,9 @@
 import {
   isReviewFinalDiffersFromTranslation,
   isReviewFinalSameAsSource,
+  isReviewLatinHeavy,
+  isReviewNeedsAttention,
+  isReviewOverlong,
   isReviewSameAsSource,
   isReviewTranslationEmpty,
   matchesReviewContentFilter,
@@ -468,21 +497,42 @@ const retranslatingSingleId = ref('')
 const clipUrl = ref('')
 const clipEntryId = ref('')
 const clipRangeText = ref('')
-const proofreadOpen = ref(false)
-const proofreadLoading = ref(false)
-const proofreadKind = ref<'glossary' | 'consistency'>('glossary')
-const proofreadResult = ref<any>(null)
+type ProofreadKind = 'glossary' | 'consistency'
+interface ProofreadState {
+  result: any | null
+  meta: any | null
+  loading: boolean
+}
+const proofreadStates = reactive<Record<ProofreadKind, ProofreadState>>({
+  glossary: { result: null, meta: null, loading: false },
+  consistency: { result: null, meta: null, loading: false }
+})
+const proofreadKind = ref<ProofreadKind>('consistency')
+const proofreadRevision = ref(0)
+const proofreadIssueFilter = ref('all')
+const proofreadDrawerOpen = ref(false)
 const applyingTerms = ref(false)
+const rightPanelTab = ref<'preview' | 'proofread'>('preview')
+const filterPanelOpen = ref(false)
+const exportSettingsOpen = ref(false)
+const moreMenuOpen = ref(false)
 const previewLoading = ref(false)
+let previewRequestId = 0
+let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null
 const previewContent = ref('')
 const previewOpen = ref(false)
-const showAdjustTools = ref(false)
 const previewFormat = ref<'srt' | 'ass'>('srt')
 const bilingualLayout = ref<'translated_first' | 'original_first'>('translated_first')
 const exportMode = ref<'translated' | 'bilingual' | 'original'>('translated')
 const exportStyle = ref<string>('bilingual_simple')
 const exportFormat = ref<'srt' | 'ass'>('srt')
 const searchQuery = ref('')
+const debouncedSearchQuery = ref('')
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+watch(searchQuery, (value) => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => { debouncedSearchQuery.value = value }, 150)
+})
 const statusFilter = ref('all')
 const contentFilter = ref<ReviewContentFilter>('all')
 const reasonFilter = ref('all')
@@ -516,17 +566,102 @@ function playClip(entry: any) {
   clipUrl.value = `/api/tasks/${taskId}/audio?start=${encodeURIComponent(start.toFixed(3))}&end=${encodeURIComponent(end.toFixed(3))}&t=${Date.now()}`
 }
 
-async function runProofread(kind: 'glossary' | 'consistency') {
-  if (!(await confirmOriginalTranslation(kind === 'glossary' ? 'AI 术语建议' : 'AI 一致性检查'))) return
-  proofreadKind.value = kind
-  proofreadLoading.value = true
-  proofreadResult.value = null
+function applyProofreadPayload(kind: ProofreadKind, payload: any) {
+  const state = proofreadStates[kind]
+  if (!payload || payload.available === false) {
+    state.result = null
+    state.meta = null
+  } else {
+    state.result = {
+      terms: Array.isArray(payload.terms) ? payload.terms : [],
+      issues: Array.isArray(payload.issues) ? payload.issues : []
+    }
+    state.meta = {
+      cached: payload.cached === true,
+      stale: payload.stale === true,
+      cachedAt: payload.cachedAt || null,
+      model: payload.model || '',
+      entryCount: Number(payload.entryCount || 0),
+      totalEntries: Number(payload.totalEntries || 0)
+    }
+  }
+  if (kind === 'consistency') {
+    proofreadRevision.value += 1
+    if (!state.result?.issues?.length) proofreadIssueFilter.value = 'all'
+  }
+}
+
+async function loadCachedProofread(kind: ProofreadKind, silent = false) {
+  const state = proofreadStates[kind]
+  if (state.loading) return
   try {
-    proofreadResult.value = await $fetch(`/api/tasks/${taskId}/proofread`, { method: 'POST', body: { kind } })
+    const res: any = await $fetch(`/api/tasks/${taskId}/proofread`, { query: { kind } })
+    applyProofreadPayload(kind, res)
+  } catch (e: any) {
+    if (!silent) {
+      toast.add({ title: '读取 AI 校对缓存失败', description: e?.data?.message || e?.message || '请稍后重试', color: 'error' })
+    }
+  }
+}
+
+async function refreshProofreadCacheState() {
+  if (!proofreadStates.consistency.result && !proofreadStates.consistency.meta) return
+  await loadCachedProofread('consistency', true)
+}
+
+async function generateProofread(kind: ProofreadKind, refresh: boolean) {
+  const state = proofreadStates[kind]
+  const confirmed = await confirm({
+    title: refresh ? '重新执行 AI 校对？' : '开始 AI 校对？',
+    description: refresh
+      ? '会再次调用当前翻译模型分析抽样字幕，并覆盖已有缓存建议。会产生新的 Token 费用，但不会修改当前字幕。'
+      : '会调用当前翻译模型分析抽样字幕。结果会自动缓存，后续打开不会重复消耗 Token，也不会修改当前字幕。',
+    confirmLabel: refresh ? '重新校对' : '开始校对',
+    color: 'warning'
+  })
+  if (!confirmed) return
+  state.loading = true
+  try {
+    const res: any = await $fetch(`/api/tasks/${taskId}/proofread`, {
+      method: 'POST',
+      body: { kind, refresh }
+    })
+    applyProofreadPayload(kind, res)
+    toast.add({
+      title: res?.cached ? '已使用缓存结果' : 'AI 校对完成',
+      description: res?.cached ? '没有重复调用模型。' : '建议已缓存，重新进入页面不会重复消耗 Token。',
+      color: 'success'
+    })
   } catch (e: any) {
     toast.add({ title: 'AI 校对失败', description: e?.data?.message || e?.message || '无法完成校对', color: 'error' })
   } finally {
-    proofreadLoading.value = false
+    state.loading = false
+  }
+}
+
+function switchProofreadKind(kind: ProofreadKind) {
+  proofreadKind.value = kind
+  if (!proofreadStates[kind].result && !proofreadStates[kind].meta) {
+    loadCachedProofread(kind, true)
+  }
+}
+
+function switchRightPanel(tab: 'preview' | 'proofread') {
+  rightPanelTab.value = tab
+  if (tab === 'proofread' && !proofreadStates[proofreadKind.value].result && !proofreadStates[proofreadKind.value].meta) {
+    loadCachedProofread(proofreadKind.value, true)
+  }
+}
+
+function openProofread() {
+  if (!proofreadStates[proofreadKind.value].result && !proofreadStates[proofreadKind.value].meta) {
+    loadCachedProofread(proofreadKind.value, true)
+  }
+  const desktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+  if (desktop) {
+    rightPanelTab.value = 'proofread'
+  } else {
+    proofreadDrawerOpen.value = true
   }
 }
 
@@ -586,7 +721,7 @@ async function applyProofreadTerm(term: any) {
 }
 
 async function applyProofreadTerms() {
-  const terms = proofreadResult.value?.terms || []
+  const terms = proofreadStates[proofreadKind.value].result?.terms || []
   if (!terms.length) return
   const conflicts = terms.filter((term: any) => glossaryConflict(term))
   const confirmed = await confirm({
@@ -620,7 +755,7 @@ async function focusIssue(issue: any) {
   resetFilters()
   focusedSubtitleId.value = subtitleId
   currentPage.value = Math.floor(index / pageSize.value) + 1
-  proofreadOpen.value = false
+  proofreadDrawerOpen.value = false
   await nextTick()
   const target = document.getElementById(`review-entry-${subtitleId}`)
   target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -686,8 +821,25 @@ const reasonLabels: Record<string, string> = {
   bilingual_duplicate: '双语内容重复',
   suspected_contamination: '疑似串条/混入相邻字幕',
   overlong_translation: '译文异常偏长',
+  suspected_shift: '疑似错位/串行',
   low_asr_confidence: 'ASR 置信度偏低',
   low_quality_translation: '双模型质量评分偏低'
+}
+
+const proofreadIssueLabels: Record<string, string> = {
+  name_inconsistency: '人名/译名不一致',
+  terminology: '术语不一致',
+  mistranslation: '疑似误译',
+  omission: '漏译',
+  addition: '增译',
+  fluency: '不自然',
+  formatting: '格式/标点',
+  style_mismatch: '风格不匹配',
+  other: '其他问题'
+}
+
+function proofreadIssueLabel(type: string) {
+  return proofreadIssueLabels[type] || type
 }
 
 const reasonFilterItems = computed(() => {
@@ -707,10 +859,106 @@ const reasonFilterItems = computed(() => {
   ]
 })
 
+const proofreadIssueMap = computed(() => {
+  const map = new Map<string, any[]>()
+  const issues = proofreadStates.consistency.result?.issues || []
+  for (const issue of issues) {
+    const subtitleId = String(issue?.subtitleId || '').trim()
+    if (!subtitleId) continue
+    const list = map.get(subtitleId) || []
+    list.push(issue)
+    map.set(subtitleId, list)
+  }
+  return map
+})
+
+const proofreadIssueCount = computed(() => proofreadIssueMap.value.size)
+
+const proofreadIssueTypes = computed(() => {
+  const counts = new Map<string, number>()
+  for (const issues of proofreadIssueMap.value.values()) {
+    for (const issue of issues) {
+      const type = String(issue?.type || 'other')
+      counts.set(type, (counts.get(type) || 0) + 1)
+    }
+  }
+  return Array.from(counts.entries())
+    .map(([type, count]) => ({ type, count, label: proofreadIssueLabel(type) }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'zh-CN'))
+})
+
+const proofreadIssueFilterItems = computed(() => [
+  { label: `全部 AI 问题 (${proofreadIssueCount.value})`, value: 'all' },
+  { label: '只看有 AI 问题的字幕', value: 'any' },
+  ...proofreadIssueTypes.value.map(item => ({ label: `${item.label} (${item.count})`, value: item.type }))
+])
+
+function proofreadIssueList(entry: any) {
+  return proofreadIssueMap.value.get(String(entry?.subtitleId)) || []
+}
+
+function toggleProofreadIssueFilter() {
+  proofreadIssueFilter.value = proofreadIssueFilter.value === 'all' ? 'any' : 'all'
+}
+
+function filterProofreadIssues(type: string | null) {
+  proofreadIssueFilter.value = type || 'any'
+  const desktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+  if (!desktop) proofreadDrawerOpen.value = false
+}
+
+async function selectProofreadIssues() {
+  const issueIds = proofreadIssueMap.value
+  let count = 0
+  for (const entry of entries.value) {
+    const hasIssue = issueIds.has(String(entry.subtitleId))
+    entry.selected = hasIssue
+    if (hasIssue) count += 1
+  }
+  proofreadIssueFilter.value = 'any'
+  lastClickedIndex.value = -1
+  const desktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+  if (!desktop) proofreadDrawerOpen.value = false
+  if (!count) {
+    toast.add({ title: '没有可选择的 AI 问题字幕', color: 'warning' })
+    return
+  }
+  toast.add({ title: `已选中 ${count} 条问题字幕`, description: '可继续使用上方「重译选中」或手动修改。', color: 'success' })
+}
+
+async function retranslateProofreadIssues() {
+  const ids = entries.value
+    .filter(entry => proofreadIssueMap.value.has(String(entry.subtitleId)))
+    .map(entry => String(entry.subtitleId))
+  if (!ids.length) {
+    toast.add({ title: '没有可重译的 AI 问题字幕', color: 'warning' })
+    return
+  }
+  if (!(await confirmRetranslate(ids.length, 'AI 问题'))) return
+  retranslating.value = true
+  try {
+    const idSet = new Set(ids)
+    for (const entry of entries.value) {
+      entry.selected = idSet.has(String(entry.subtitleId))
+    }
+    proofreadIssueFilter.value = 'any'
+    const desktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+    if (!desktop) proofreadDrawerOpen.value = false
+    await saveChanges(false)
+    await retranslateIds(ids)
+  } catch (error: any) {
+    toast.add({ title: '问题字幕重译失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+  } finally {
+    retranslating.value = false
+  }
+}
+
 const filteredEntries = computed(() => {
   let list = entries.value
 
-  list = list.filter(entry => matchesReviewSearch(entry, searchQuery.value))
+  if (debouncedSearchQuery.value.trim()) {
+    list = list.filter(entry => matchesReviewSearch(entry, debouncedSearchQuery.value))
+  }
 
   if (statusFilter.value === 'needs_review') {
     list = list.filter(entry => reviewStatuses.includes(entry.reviewStatus))
@@ -730,9 +978,19 @@ const filteredEntries = computed(() => {
     list = list.filter(entry => entry.selected)
   }
 
-  list = list.filter(entry => matchesReviewContentFilter(entry, contentFilter.value, {
-    qualityThreshold: qualityThreshold.value
-  }))
+  if (contentFilter.value !== 'all') {
+    list = list.filter(entry => matchesReviewContentFilter(entry, contentFilter.value, {
+      qualityThreshold: qualityThreshold.value
+    }))
+  }
+
+  if (proofreadIssueFilter.value !== 'all') {
+    if (proofreadIssueFilter.value === 'any') {
+      list = list.filter(entry => proofreadIssueMap.value.has(String(entry.subtitleId)))
+    } else {
+      list = list.filter(entry => proofreadIssueList(entry).some((issue: any) => String(issue.type) === proofreadIssueFilter.value))
+    }
+  }
 
   if (reasonFilter.value !== 'all') {
     list = list.filter(entry => (entry.reviewReasons || []).includes(reasonFilter.value))
@@ -765,20 +1023,62 @@ const selectedEntries = computed(() => entries.value.filter(entry => entry.selec
 const dirtyEntries = computed(() => entries.value.filter(entry => isEntryDirty(entry)))
 const dirtyCount = computed(() => dirtyEntries.value.length)
 
-const statusCounts = computed(() => {
-  const list = entries.value
-  return {
-    all: list.length,
-    needs_review: list.filter(entry => reviewStatuses.includes(entry.reviewStatus)).length,
-    translated: list.filter(entry => entry.reviewStatus === 'translated').length,
-    accepted_same: list.filter(entry => entry.reviewStatus === 'accepted_same').length,
-    fallback_original: list.filter(entry => entry.reviewStatus === 'fallback_original').length,
-    missing: list.filter(entry => entry.reviewStatus === 'missing').length,
-    edited: list.filter(entry => entry.edited).length,
-    dirty: dirtyEntries.value.length,
-    selected: selectedEntries.value.length
+const reviewStats = computed(() => {
+  const quality = qualityThreshold.value
+  const stats = {
+    all: 0,
+    needs_review: 0,
+    translated: 0,
+    accepted_same: 0,
+    fallback_original: 0,
+    missing: 0,
+    edited: 0,
+    empty: 0,
+    same: 0,
+    untranslated: 0,
+    finalSame: 0,
+    finalDiffers: 0,
+    latinHeavy: 0,
+    overlong: 0,
+    needsAttention: 0
   }
+
+  for (const entry of entries.value) {
+    stats.all += 1
+    const status = String(entry.reviewStatus || '')
+    if (reviewStatuses.includes(status)) stats.needs_review += 1
+    if (status === 'translated') stats.translated += 1
+    if (status === 'accepted_same') stats.accepted_same += 1
+    if (status === 'fallback_original') stats.fallback_original += 1
+    if (status === 'missing') stats.missing += 1
+    if (entry.edited) stats.edited += 1
+
+    const empty = isReviewTranslationEmpty(entry)
+    const same = isReviewSameAsSource(entry)
+    if (empty) stats.empty += 1
+    if (same) stats.same += 1
+    if (empty || same) stats.untranslated += 1
+    if (isReviewFinalSameAsSource(entry)) stats.finalSame += 1
+    if (isReviewFinalDiffersFromTranslation(entry)) stats.finalDiffers += 1
+    if (isReviewLatinHeavy(entry)) stats.latinHeavy += 1
+    if (isReviewOverlong(entry)) stats.overlong += 1
+    if (isReviewNeedsAttention(entry, quality)) stats.needsAttention += 1
+  }
+
+  return stats
 })
+
+const statusCounts = computed(() => ({
+  all: reviewStats.value.all,
+  needs_review: reviewStats.value.needs_review,
+  translated: reviewStats.value.translated,
+  accepted_same: reviewStats.value.accepted_same,
+  fallback_original: reviewStats.value.fallback_original,
+  missing: reviewStats.value.missing,
+  edited: reviewStats.value.edited,
+  dirty: dirtyEntries.value.length,
+  selected: selectedEntries.value.length
+}))
 
 const statusFilterItems = computed(() => [
   { label: `全部状态 (${statusCounts.value.all})`, value: 'all' },
@@ -792,20 +1092,16 @@ const statusFilterItems = computed(() => [
   { label: `仅已选 (${statusCounts.value.selected})`, value: 'selected' }
 ])
 
-const contentCounts = computed(() => {
-  const list = entries.value
-  const quality = qualityThreshold.value
-  return {
-    empty: list.filter(entry => isReviewTranslationEmpty(entry)).length,
-    same: list.filter(entry => isReviewSameAsSource(entry)).length,
-    untranslated: list.filter(entry => matchesReviewContentFilter(entry, 'untranslated')).length,
-    finalSame: list.filter(entry => matchesReviewContentFilter(entry, 'final_same_as_source')).length,
-    finalDiffers: list.filter(entry => matchesReviewContentFilter(entry, 'final_differs')).length,
-    latinHeavy: list.filter(entry => matchesReviewContentFilter(entry, 'latin_heavy')).length,
-    overlong: list.filter(entry => matchesReviewContentFilter(entry, 'overlong')).length,
-    needsAttention: list.filter(entry => matchesReviewContentFilter(entry, 'needs_attention', { qualityThreshold: quality })).length
-  }
-})
+const contentCounts = computed(() => ({
+  empty: reviewStats.value.empty,
+  same: reviewStats.value.same,
+  untranslated: reviewStats.value.untranslated,
+  finalSame: reviewStats.value.finalSame,
+  finalDiffers: reviewStats.value.finalDiffers,
+  latinHeavy: reviewStats.value.latinHeavy,
+  overlong: reviewStats.value.overlong,
+  needsAttention: reviewStats.value.needsAttention
+}))
 
 const contentFilterItems = computed(() => [
   { label: `全部内容 (${entries.value.length})`, value: 'all' },
@@ -819,23 +1115,21 @@ const contentFilterItems = computed(() => [
   { label: `译文异常偏长 (${contentCounts.value.overlong})`, value: 'overlong' }
 ])
 
-const hasActiveFilters = computed(() => Boolean(
-  searchQuery.value.trim()
-  || statusFilter.value !== 'all'
-  || contentFilter.value !== 'all'
-  || reasonFilter.value !== 'all'
-  || confidenceFilter.value !== 'all'
-  || qualityFilter.value !== 'all'
-))
-
-const activeFilterCount = computed(() => [
-  Boolean(searchQuery.value.trim()),
+const advancedFilterCount = computed(() => [
   statusFilter.value !== 'all',
   contentFilter.value !== 'all',
   reasonFilter.value !== 'all',
   confidenceFilter.value !== 'all',
-  qualityFilter.value !== 'all'
+  qualityFilter.value !== 'all',
+  proofreadIssueFilter.value !== 'all'
 ].filter(Boolean).length)
+
+const hasActiveFilters = computed(() => Boolean(
+  searchQuery.value.trim()
+  || advancedFilterCount.value > 0
+))
+
+const activeFilterCount = computed(() => (searchQuery.value.trim() ? 1 : 0) + advancedFilterCount.value)
 
 function statusLabel(status: string) {
   return ({ translated: '已翻译', accepted_same: '同文可接受', needs_review: '需核对', fallback_original: '已回退', missing: '缺失', edited: '已编辑' } as any)[status] || status
@@ -950,13 +1244,19 @@ function clearSelection() {
   lastClickedIndex.value = -1
 }
 
-function applyFilterPreset(preset: 'needs_attention' | 'untranslated' | 'low_quality' | 'low_confidence' | 'dirty') {
-  searchQuery.value = ''
+function resetAdvancedFilters() {
   statusFilter.value = 'all'
   contentFilter.value = 'all'
   reasonFilter.value = 'all'
   confidenceFilter.value = 'all'
   qualityFilter.value = 'all'
+  proofreadIssueFilter.value = 'all'
+  currentPage.value = 1
+}
+
+function applyFilterPreset(preset: 'needs_attention' | 'untranslated' | 'low_quality' | 'low_confidence' | 'dirty') {
+  clearSearch()
+  resetAdvancedFilters()
 
   if (preset === 'needs_attention' || preset === 'untranslated') {
     contentFilter.value = preset
@@ -969,6 +1269,25 @@ function applyFilterPreset(preset: 'needs_attention' | 'untranslated' | 'low_qua
   }
 
   currentPage.value = 1
+}
+
+function toggleFilterPreset(preset: 'needs_attention' | 'untranslated' | 'low_quality' | 'low_confidence' | 'dirty') {
+  const active = (preset === 'needs_attention' || preset === 'untranslated')
+    ? contentFilter.value === preset
+    : preset === 'low_quality'
+      ? qualityFilter.value === 'low'
+      : preset === 'low_confidence'
+        ? confidenceFilter.value === 'low'
+        : statusFilter.value === 'dirty'
+  if (active) {
+    if (preset === 'needs_attention' || preset === 'untranslated') contentFilter.value = 'all'
+    else if (preset === 'low_quality') qualityFilter.value = 'all'
+    else if (preset === 'low_confidence') confidenceFilter.value = 'all'
+    else if (preset === 'dirty') statusFilter.value = 'all'
+    currentPage.value = 1
+    return
+  }
+  applyFilterPreset(preset)
 }
 
 function onCheckboxClick(entry: any, event: MouseEvent) {
@@ -1185,30 +1504,52 @@ async function retryLoadReview() {
 }
 
 function openPreview() {
+  const desktop = typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+  if (desktop) {
+    rightPanelTab.value = 'preview'
+    return
+  }
   previewOpen.value = true
   loadPreview()
 }
 
-function resetFilters() {
+function clearSearch() {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = null
   searchQuery.value = ''
-  statusFilter.value = 'all'
-  contentFilter.value = 'all'
-  reasonFilter.value = 'all'
-  confidenceFilter.value = 'all'
-  qualityFilter.value = 'all'
-  currentPage.value = 1
+  debouncedSearchQuery.value = ''
+}
+
+function resetFilters() {
+  clearSearch()
+  resetAdvancedFilters()
 }
 
 async function loadPreview() {
+  if (previewDebounceTimer) {
+    clearTimeout(previewDebounceTimer)
+    previewDebounceTimer = null
+  }
+  const requestId = ++previewRequestId
   previewLoading.value = true
   try {
     const res: any = await $fetch(`/api/tasks/${taskId}/review-preview`, { query: { format: previewFormat.value, bilingualLayout: bilingualLayout.value, outputMode: exportMode.value, subtitleStylePreset: exportStyle.value } })
-    previewContent.value = res.content || ''
+    if (requestId === previewRequestId) previewContent.value = res.content || ''
   } catch (error: any) {
-    toast.add({ title: '预览生成失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+    if (requestId === previewRequestId) {
+      toast.add({ title: '预览生成失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+    }
   } finally {
-    previewLoading.value = false
+    if (requestId === previewRequestId) previewLoading.value = false
   }
+}
+
+function schedulePreview() {
+  if (previewDebounceTimer) clearTimeout(previewDebounceTimer)
+  previewDebounceTimer = setTimeout(() => {
+    previewDebounceTimer = null
+    void loadPreview()
+  }, 120)
 }
 
 async function saveChanges(showToast = true) {
@@ -1234,7 +1575,7 @@ async function saveChanges(showToast = true) {
       body: { entries: changedEntries, bilingualLayout: bilingualLayout.value }
     })
     if (showToast) toast.add({ title: `已保存 ${changedEntries.length} 条修改`, description: '尚未生成字幕文件；需要时再点「导出结果」。', color: 'success' })
-    await Promise.all([loadReview(), loadPreview()])
+    await Promise.all([loadReview(), loadPreview(), refreshProofreadCacheState()])
   } catch (error: any) {
     toast.add({ title: '保存失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
     throw error
@@ -1268,7 +1609,7 @@ async function retranslateIds(subtitleIds: string[]) {
     method: 'POST',
     body: { subtitleIds }
   })
-  await Promise.all([loadReview(), loadPreview()])
+  await Promise.all([loadReview(), loadPreview(), refreshProofreadCacheState()])
   const count = Array.isArray(result?.entries) ? result.entries.length : subtitleIds.length
   toast.add({ title: `已重译 ${count} 条字幕`, description: '当前译文和最终导出已更新，可继续校对或导出。', color: 'success' })
 }
@@ -1365,8 +1706,14 @@ watch(reasonFilterItems, (items) => {
   }
 })
 
-watch([searchQuery, statusFilter, contentFilter, reasonFilter, confidenceFilter, qualityFilter], () => {
+watch([searchQuery, statusFilter, contentFilter, reasonFilter, confidenceFilter, qualityFilter, proofreadIssueFilter], () => {
   currentPage.value = 1
+})
+
+watch(proofreadIssueFilterItems, (items) => {
+  if (!items.some(item => item.value === proofreadIssueFilter.value)) {
+    proofreadIssueFilter.value = 'all'
+  }
 })
 
 watch([pageSize, totalPages], () => {
@@ -1375,7 +1722,7 @@ watch([pageSize, totalPages], () => {
 })
 
 watch(previewFormat, () => {
-  loadPreview()
+  schedulePreview()
 })
 
 watch(bilingualLayout, async (value) => {
@@ -1388,11 +1735,11 @@ watch(bilingualLayout, async (value) => {
   } catch (error: any) {
     toast.add({ title: '布局保存失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
   }
-  loadPreview()
+  schedulePreview()
 })
 
 watch([exportMode, exportStyle], () => {
-  loadPreview()
+  schedulePreview()
 })
 
 onBeforeRouteLeave(() => {
@@ -1449,13 +1796,15 @@ onMounted(async () => {
   window.addEventListener('keydown', handleShortcut)
   try {
     await loadReview()
-    await loadPreview()
+    await Promise.all([loadPreview(), loadCachedProofread('consistency', true)])
   } catch (error: any) {
     toast.add({ title: '核对页加载失败', description: error?.data?.message || error?.message || '请返回历史页后重试', color: 'error' })
   }
 })
 
 onBeforeUnmount(() => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  if (previewDebounceTimer) clearTimeout(previewDebounceTimer)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   window.removeEventListener('keydown', handleShortcut)
 })

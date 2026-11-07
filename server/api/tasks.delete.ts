@@ -11,6 +11,7 @@ export default defineEventHandler(async () => {
         db.prepare(`DELETE FROM task_jobs WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run()
         db.prepare(`DELETE FROM task_logs WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run()
         db.prepare(`DELETE FROM task_review_entries WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run()
+        try { db.prepare(`DELETE FROM task_proofread_cache WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run() } catch { /* old schema */ }
         db.prepare(`DELETE FROM task_responses WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run()
         try { db.prepare(`DELETE FROM translation_quality_entries WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run() } catch { /* old schema */ }
         try { db.prepare(`DELETE FROM translation_quality_runs WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run() } catch { /* old schema */ }

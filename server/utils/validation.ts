@@ -57,6 +57,11 @@ export const reviewRetranslateSchema = z.object({
   subtitleIds: z.array(z.union([z.string(), z.number()])).min(1)
 })
 
+export const proofreadRequestSchema = z.preprocess(value => value ?? {}, z.object({
+  kind: z.enum(['glossary', 'consistency']).optional(),
+  refresh: z.boolean().optional()
+}).passthrough())
+
 export const fileCreateSchema = z.object({
   name: z.string().min(1),
   parentPath: z.string().optional(),

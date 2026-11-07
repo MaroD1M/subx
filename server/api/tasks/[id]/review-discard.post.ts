@@ -7,6 +7,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const db = useDb()
+  try { db.prepare('DELETE FROM task_proofread_cache WHERE task_id = ?').run(id) } catch { /* old schema */ }
   db.prepare("UPDATE tasks SET status = 'error', error = ?, updated_at = datetime('now') WHERE task_id = ?").run('翻译成果已放弃', id)
   db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, 'error', 'error', 'warn', ?, datetime('now'))").run(id, '已放弃本次翻译成果。')
   return { success: true }

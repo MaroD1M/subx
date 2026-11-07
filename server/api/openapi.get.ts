@@ -83,7 +83,10 @@ export default defineEventHandler(() => {
       '/api/tasks/{id}': { get: { ...taskPath.get, parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }] }, delete: { summary: '删除任务', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': jsonResponse({ success: true }) } } },
       '/api/tasks/{id}/cancel': { post: { summary: '取消任务', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': jsonResponse({ success: true }) } } },
       '/api/tasks/{id}/quality': { get: { summary: '双模型质量校验结果', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
-      '/api/tasks/{id}/proofread': { post: { summary: 'AI 校对与术语建议', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/tasks/{id}/proofread': {
+        get: { summary: '读取 AI 校对缓存', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'kind', in: 'query', schema: { type: 'string', enum: ['glossary', 'consistency'] } }], responses: { '200': { description: 'OK' } } },
+        post: { summary: '生成或强制刷新 AI 校对与术语建议', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { kind: { type: 'string', enum: ['glossary', 'consistency'] }, refresh: { type: 'boolean' } } } } } }, responses: { '200': { description: 'OK' } } }
+      },
       '/api/tasks/{id}/audio': { get: { summary: '字幕音频片段', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'start', in: 'query', schema: { type: 'number' } }, { name: 'end', in: 'query', schema: { type: 'number' } }], responses: { '200': { description: 'audio/mpeg' } } } },
       '/api/watch-folders': {
         get: { summary: '监控目录列表', responses: { '200': { description: 'OK' } } },

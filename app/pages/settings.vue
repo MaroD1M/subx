@@ -1,5 +1,5 @@
 <template>
-  <AppContainer size="default" class="space-y-6 py-2">
+  <AppContainer size="default" class="space-y-6 py-2 pb-28">
     <PageHeader
       title="设置"
       description="配置 AI 连接、语音识别、图像字幕 OCR、模型下载、翻译默认行为和术语表。"
