@@ -25,7 +25,7 @@ useHead({
   title: '首页 - SubX'
 })
 
-const { data: config } = await useFetch('/api/config')
+const { data: config } = await useAppConfigData()
 
 const showMediaSetupHint = computed(() => {
   const roots = Array.isArray(config.value?.mediaRoots)

@@ -357,9 +357,11 @@
             :issue-count="proofreadIssueCount"
             :issue-filter="proofreadIssueFilter"
             :applying-terms="applyingTerms"
+            :other-terms="proofreadKind === 'consistency' ? (proofreadStates.glossary.result?.terms || []) : []"
             @update:kind="switchProofreadKind"
             @generate="(refresh) => generateProofread(proofreadKind, refresh)"
             @focus-issue="focusIssue"
+            @focus-subtitle="focusSubtitle"
             @filter-issues="filterProofreadIssues"
             @select-issues="selectProofreadIssues"
             @retranslate-issues="retranslateProofreadIssues"
@@ -448,9 +450,11 @@
           :issue-count="proofreadIssueCount"
           :issue-filter="proofreadIssueFilter"
           :applying-terms="applyingTerms"
+          :other-terms="proofreadKind === 'consistency' ? (proofreadStates.glossary.result?.terms || []) : []"
           @update:kind="switchProofreadKind"
           @generate="(refresh) => generateProofread(proofreadKind, refresh)"
           @focus-issue="focusIssue"
+          @focus-subtitle="focusSubtitle"
           @filter-issues="filterProofreadIssues"
           @select-issues="selectProofreadIssues"
           @retranslate-issues="retranslateProofreadIssues"
@@ -485,7 +489,7 @@ const taskId = String(route.params.id)
 const focusedSubtitleId = ref('')
 const toast = useToast()
 const { confirm } = useConfirm()
-const { data: appConfig, refresh: refreshAppConfig } = await useFetch('/api/config')
+const { data: appConfig, refresh: refreshAppConfig } = await useAppConfigData()
 const qualityThreshold = computed(() => Number(appConfig.value?.qualityScoreThreshold ?? 0.7))
 const reviewLoading = ref(true)
 const reviewError = ref('')
@@ -720,23 +724,54 @@ async function applyProofreadTerm(term: any) {
   }
 }
 
-async function applyProofreadTerms() {
+function proofreadTermKey(term: any) {
+  return `${String(term?.source || '')}\u0000${String(term?.target || '')}`
+}
+
+const currentProofreadTermsForApply = computed(() => {
   const terms = proofreadStates[proofreadKind.value].result?.terms || []
+  if (proofreadKind.value !== 'consistency') return terms
+  const glossaryTerms = proofreadStates.glossary.result?.terms || []
+  if (!glossaryTerms.length) return terms
+  const merged = new Map<string, any>()
+  for (const term of [...glossaryTerms, ...terms]) {
+    const key = proofreadTermKey(term)
+    if (!merged.has(key)) merged.set(key, term)
+  }
+  return Array.from(merged.values())
+})
+
+async function applyProofreadTerms() {
+  const terms = currentProofreadTermsForApply.value
   if (!terms.length) return
-  const conflicts = terms.filter((term: any) => glossaryConflict(term))
+
+  let added = 0
+  let overwritten = 0
+  let existing = 0
+  for (const term of terms) {
+    const current = glossaryValue(term.source)
+    if (!current) added += 1
+    else if (current === term.target) existing += 1
+    else overwritten += 1
+  }
+  const summary = [
+    added ? `新增 ${added}` : '',
+    overwritten ? `覆盖 ${overwritten}` : '',
+    existing ? `已存在 ${existing}` : ''
+  ].filter(Boolean).join('，')
+  const mergedExtra = terms.length - (proofreadStates[proofreadKind.value].result?.terms?.length || 0)
+
   const confirmed = await confirm({
     title: `加入 ${terms.length} 个术语？`,
-    description: conflicts.length
-      ? `其中 ${conflicts.length} 个会覆盖术语表已有译法。术语表只影响后续新任务，不会修改当前字幕。`
-      : '术语只写入全局术语表，只影响后续新任务，不会修改当前字幕。',
-    confirmLabel: '加入术语表',
-    color: conflicts.length ? 'warning' : 'primary'
+    description: `${mergedExtra > 0 ? `已合并术语提取建议中的 ${mergedExtra} 条术语。` : ''}将写入全局术语表：${summary || '无变化'}。术语表只影响后续新任务，不会修改当前字幕。`,
+    confirmLabel: overwritten ? '覆盖并加入' : '加入术语表',
+    color: overwritten ? 'warning' : 'primary'
   })
   if (!confirmed) return
   applyingTerms.value = true
   try {
     const saved = await persistGlossaryTerms(terms)
-    toast.add({ title: '已加入术语表', description: `${saved} 个术语已保存，后续任务生效`, color: 'success' })
+    toast.add({ title: '已加入术语表', description: `${summary || `${saved} 个术语`}；后续任务生效`, color: 'success' })
   } catch (e: any) {
     toast.add({ title: '保存失败', description: e?.data?.message || e?.message || '无法更新术语表', color: 'error' })
   } finally {
@@ -744,22 +779,26 @@ async function applyProofreadTerms() {
   }
 }
 
-async function focusIssue(issue: any) {
-  const subtitleId = String(issue?.subtitleId || '').trim()
-  if (!subtitleId) return
-  const index = entries.value.findIndex(entry => String(entry.subtitleId) === subtitleId)
+async function focusSubtitle(subtitleId: string) {
+  const id = String(subtitleId || '').trim()
+  if (!id) return
+  const index = entries.value.findIndex(entry => String(entry.subtitleId) === id)
   if (index < 0) {
-    toast.add({ title: '未找到对应字幕', description: `AI 返回的 #${subtitleId} 不在当前任务中`, color: 'warning' })
+    toast.add({ title: '未找到对应字幕', description: `AI 返回的 #${id} 不在当前任务中`, color: 'warning' })
     return
   }
   resetFilters()
-  focusedSubtitleId.value = subtitleId
+  focusedSubtitleId.value = id
   currentPage.value = Math.floor(index / pageSize.value) + 1
   proofreadDrawerOpen.value = false
   await nextTick()
-  const target = document.getElementById(`review-entry-${subtitleId}`)
+  const target = document.getElementById(`review-entry-${id}`)
   target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   target?.focus()
+}
+
+async function focusIssue(issue: any) {
+  await focusSubtitle(String(issue?.subtitleId || ''))
 }
 
 function closeClip() {

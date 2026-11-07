@@ -1,5 +1,6 @@
 <template>
   <UApp>
+    <NuxtLoadingIndicator color="#0f766e" :height="2" />
     <div class="min-h-screen bg-gray-50/50 dark:bg-gray-950">
       <a
         v-if="!isLoginPage"
@@ -74,10 +75,20 @@ function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
-onMounted(async () => {
+const LATEST_VERSION_CACHE_KEY = 'subx:latest-version'
+const LATEST_VERSION_TTL = 6 * 60 * 60 * 1000
+
+async function loadLatestVersion() {
   try {
-    sidebarCollapsed.value = localStorage.getItem('subx:sidebar-collapsed') === '1'
-  } catch { /* ignore storage failures */ }
+    const raw = localStorage.getItem(LATEST_VERSION_CACHE_KEY)
+    if (raw) {
+      const cached = JSON.parse(raw)
+      if (cached?.version && Date.now() - Number(cached.at || 0) < LATEST_VERSION_TTL) {
+        latestVersion.value = String(cached.version)
+        return
+      }
+    }
+  } catch { /* ignore cache failures */ }
 
   try {
     const controller = new AbortController()
@@ -90,10 +101,27 @@ onMounted(async () => {
     if (res.ok) {
       const data = await res.json()
       if (Array.isArray(data) && data.length) {
-        latestVersion.value = String(data[0].name || '').replace(/^v/, '')
+        const version = String(data[0].name || '').replace(/^v/, '')
+        latestVersion.value = version
+        try {
+          localStorage.setItem(LATEST_VERSION_CACHE_KEY, JSON.stringify({ version, at: Date.now() }))
+        } catch { /* ignore storage failures */ }
       }
     }
   } catch { /* ignore — network unavailable */ }
+}
+
+onMounted(() => {
+  try {
+    sidebarCollapsed.value = localStorage.getItem('subx:sidebar-collapsed') === '1'
+  } catch { /* ignore storage failures */ }
+
+  const run = () => { void loadLatestVersion() }
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    window.requestIdleCallback(run, { timeout: 3000 })
+  } else {
+    window.setTimeout(run, 1500)
+  }
 })
 
 watch(() => route.fullPath, async (_to, from) => {

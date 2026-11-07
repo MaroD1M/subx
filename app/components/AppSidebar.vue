@@ -26,7 +26,7 @@
         v-for="item in navItems"
         :key="item.to"
         :to="item.to"
-        no-prefetch
+        prefetch-on="interaction"
         :title="collapsed ? item.label : undefined"
         :aria-label="item.label"
         class="group relative flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-medium leading-[22px] transition-colors"
@@ -110,27 +110,9 @@ const emit = defineEmits<{
   toggle: []
 }>()
 
-const router = useRouter()
-const currentPath = computed(() => router.currentRoute.value.path)
 const colorMode = useColorMode()
+const { navItems, isActive } = useNavigation()
 const { authenticated, logout } = useAuth()
-
-const navItems = [
-  { label: '首页', icon: 'i-lucide-home', to: '/' },
-  { label: '翻译历史', icon: 'i-lucide-history', to: '/history' },
-  { label: '媒体库', icon: 'i-lucide-library-big', to: '/media-libraries' },
-  { label: '自动化', icon: 'i-lucide-workflow', to: '/automation' },
-  { label: '设置', icon: 'i-lucide-settings', to: '/settings' }
-]
-
-function isActive(path: string) {
-  const routePath = currentPath.value
-  if (path === '/') return routePath === '/'
-  if (path === '/history') {
-    return routePath.startsWith('/history') || routePath.startsWith('/task') || routePath.startsWith('/review')
-  }
-  return routePath.startsWith(path)
-}
 
 const versionTitle = computed(() => {
   if (!props.latestVersion) return '版本检查不可用'

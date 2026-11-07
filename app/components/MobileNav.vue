@@ -5,36 +5,18 @@
         v-for="item in items"
         :key="item.to"
         :to="item.to"
-        no-prefetch
+        prefetch-on="interaction"
         :aria-current="isActive(item.to) ? 'page' : undefined"
         class="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-xs font-medium transition-colors"
         :class="isActive(item.to) ? 'text-primary-700 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
       >
         <UIcon :name="item.icon" class="h-5 w-5" />
-        <span>{{ item.label }}</span>
+        <span>{{ item.shortLabel || item.label }}</span>
       </NuxtLink>
     </div>
   </nav>
 </template>
 
 <script setup lang="ts">
-const router = useRouter()
-const currentPath = computed(() => router.currentRoute.value.path)
-
-const items = [
-  { label: '首页', icon: 'i-lucide-home', to: '/' },
-  { label: '历史', icon: 'i-lucide-history', to: '/history' },
-  { label: '媒体库', icon: 'i-lucide-library-big', to: '/media-libraries' },
-  { label: '自动化', icon: 'i-lucide-workflow', to: '/automation' },
-  { label: '设置', icon: 'i-lucide-settings', to: '/settings' }
-]
-
-function isActive(path: string) {
-  const routePath = currentPath.value
-  if (path === '/') return routePath === '/'
-  if (path === '/history') {
-    return routePath.startsWith('/history') || routePath.startsWith('/task') || routePath.startsWith('/review')
-  }
-  return routePath.startsWith(path)
-}
+const { navItems: items, isActive } = useNavigation()
 </script>

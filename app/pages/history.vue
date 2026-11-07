@@ -12,8 +12,8 @@
       </template>
     </PageHeader>
 
-    <details class="group surface-card overflow-hidden p-2">
-      <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 rounded-xl bg-white/85 dark:bg-gray-900/70 px-4 py-4 sm:px-5">
+    <details ref="diagnosticsDetails" class="group surface-card overflow-hidden p-2">
+      <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 rounded-xl bg-white/85 dark:bg-gray-900/70 px-4 py-4 sm:px-5" @click="handleDiagnosticsOpen">
         <div class="space-y-1">
           <div class="flex items-center gap-2 text-gray-900 dark:text-white">
             <UIcon name="i-lucide-chart-no-axes-combined" class="w-4 h-4" />
@@ -23,7 +23,7 @@
           <p v-if="overviewSummaryText" class="text-[11px] text-gray-600 dark:text-gray-300">{{ overviewSummaryText }}</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-          <UBadge color="neutral" variant="subtle">最近 {{ diagnosticsOverview?.summary?.totalTasks || 0 }} 个任务</UBadge>
+          <UBadge color="neutral" variant="subtle">{{ diagnosticsOverview ? `最近 ${diagnosticsOverview.summary.totalTasks} 个任务` : '展开加载' }}</UBadge>
           <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-400 shrink-0 transition-transform group-open:rotate-180" />
         </div>
       </summary>
@@ -73,11 +73,11 @@
     </details>
 
     <div class="history-table surface-card hidden overflow-hidden rounded-2xl p-2 md:block" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
-      <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group' }">
+      <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group cursor-default transition-colors duration-150 hover:bg-primary-50/60 dark:hover:bg-primary-950/20' }">
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
             <div class="flex items-center gap-2">
-              <p class="text-sm font-medium text-gray-800 dark:text-gray-100 break-all">{{ fileName(row.original.filePath) }}</p>
+              <p class="break-all text-sm font-medium text-gray-800 transition-colors group-hover:text-primary-700 dark:text-gray-100 dark:group-hover:text-primary-300">{{ fileName(row.original.filePath) }}</p>
               <UButton
                 icon="i-lucide-copy"
                 size="xs"
@@ -159,7 +159,7 @@
         当前筛选下暂无任务
       </div>
       <template v-else>
-      <article v-for="task in tasks" :key="task.taskId" class="rounded-2xl border border-gray-200/80 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950/60">
+      <article v-for="task in tasks" :key="task.taskId" class="rounded-2xl border border-gray-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-950/60 dark:hover:border-primary-900/50">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="break-all text-sm font-semibold text-gray-900 dark:text-white">{{ fileName(task.filePath) }}</p>
@@ -204,11 +204,21 @@
 
     <div class="flex flex-wrap items-center justify-between gap-3 px-1">
       <p class="text-xs text-gray-500 dark:text-gray-400">
-        共 {{ data?.total || 0 }} 条，第 {{ data?.page || 1 }} 页
+        共 {{ data?.total || 0 }} 条，第 {{ page }} / {{ totalPages }} 页
       </p>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-end gap-1.5">
+        <USelect v-model="pageSize" :items="pageSizeItems" size="xs" class="w-24" aria-label="每页条数" />
         <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="page <= 1" @click="page -= 1" />
-        <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="page * pageSize >= (data?.total || 0)" @click="page += 1" />
+        <UButton
+          v-for="pageNumber in pageNumbers"
+          :key="pageNumber"
+          :label="String(pageNumber)"
+          size="xs"
+          :color="pageNumber === page ? 'primary' : 'neutral'"
+          :variant="pageNumber === page ? 'solid' : 'ghost'"
+          @click="page = pageNumber"
+        />
+        <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="page >= totalPages" @click="page += 1" />
       </div>
     </div>
 
@@ -251,6 +261,11 @@ const timeZone = useTimeZone()
 
 const page = ref(1)
 const pageSize = ref(50)
+const pageSizeItems = [
+  { label: '20 条/页', value: 20 },
+  { label: '50 条/页', value: 50 },
+  { label: '100 条/页', value: 100 }
+]
 const statusFilter = ref('all')
 const searchQuery = ref('')
 const statusOptions = [
@@ -269,9 +284,42 @@ const taskQuery = computed(() => ({
   q: searchQuery.value.trim()
 }))
 const { data, pending, refresh } = await useFetch('/api/tasks', { query: taskQuery })
-watch([page, pageSize, statusFilter, searchQuery], () => refresh())
-watch([statusFilter, searchQuery], () => { page.value = 1 })
-const { data: diagnosticsOverview, pending: overviewPending } = await useFetch('/api/tasks/diagnostics/overview')
+let historyRefreshTimer = null
+watch([page, pageSize, statusFilter, searchQuery], () => {
+  if (historyRefreshTimer) clearTimeout(historyRefreshTimer)
+  historyRefreshTimer = setTimeout(() => {
+    historyRefreshTimer = null
+    void refresh()
+  }, 30)
+})
+watch([statusFilter, searchQuery, pageSize], () => { page.value = 1 })
+
+const totalPages = computed(() => Math.max(1, Math.ceil(Number(data.value?.total || 0) / pageSize.value)))
+const pageNumbers = computed(() => {
+  const total = totalPages.value
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1)
+  const start = Math.max(1, Math.min(page.value - 2, total - 4))
+  return Array.from({ length: 5 }, (_, index) => start + index)
+})
+
+watch(page, () => {
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+})
+
+watch(totalPages, (total) => {
+  if (page.value > total) page.value = total
+})
+const { data: diagnosticsOverview, pending: overviewPending, execute: loadDiagnostics } = useLazyFetch('/api/tasks/diagnostics/overview', { server: false, immediate: false })
+const diagnosticsDetails = ref(null)
+
+function handleDiagnosticsOpen() {
+  window.setTimeout(() => {
+    if (diagnosticsDetails.value?.open && !diagnosticsOverview.value && !overviewPending.value) {
+      void loadDiagnostics()
+    }
+  }, 0)
+}
+
 const overviewSummaryText = computed(() => {
   const value = diagnosticsOverview.value
   if (!value) return ''
@@ -449,6 +497,10 @@ const columns = [
   { accessorKey: 'createdAt', header: '创建时间' },
   { id: 'actions', header: '操作' }
 ]
+
+onBeforeUnmount(() => {
+  if (historyRefreshTimer) clearTimeout(historyRefreshTimer)
+})
 
 function statusColor(status) {
   switch (status) {

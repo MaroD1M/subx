@@ -17,18 +17,9 @@ export const useAuth = () => {
         
         checking.value = true
         try {
-            // 1. 检查是否已设置密钥
-            const statusRes = await fetcher('/api/auth/status')
-            hasPasskey.value = statusRes.hasPasskey
-
-            if (!statusRes.hasPasskey) {
-                authenticated.value = false
-                return
-            }
-
-            // 2. 检查当前会话是否有效
-            const verifyRes = await fetcher('/api/auth/verify')
-            authenticated.value = verifyRes.authenticated
+            const session = await fetcher('/api/auth/session')
+            hasPasskey.value = !!session.hasPasskey
+            authenticated.value = !!session.authenticated
         } catch (e) {
             console.error('[Auth] Check failed:', e)
             hasPasskey.value = true

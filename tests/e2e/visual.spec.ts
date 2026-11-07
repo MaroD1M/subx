@@ -54,13 +54,28 @@ test('home dark visual and accessibility', async ({ page }) => {
 })
 
 test('history visual and accessibility', async ({ page }) => {
+  let diagnosticsRequests = 0
+  page.on('request', request => {
+    if (request.url().includes('/api/tasks/diagnostics/overview')) diagnosticsRequests += 1
+  })
   await page.goto('/history')
   await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
   await expect(page.getByRole('button', { name: '进入核对' }).first()).toBeVisible()
   await expect(page).toHaveScreenshot('history.png', {
     fullPage: true
   })
+  const firstHistoryRow = page.locator('tbody tr').first()
+  await firstHistoryRow.hover()
+  const hoverBackground = await firstHistoryRow.evaluate(element => getComputedStyle(element).backgroundColor)
+  expect(hoverBackground).not.toBe('rgba(0, 0, 0, 0)')
   await expectNoSeriousA11y(page)
+
+  expect(diagnosticsRequests).toBe(0)
+  await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+  const diagnosticsResponse = page.waitForResponse(item => item.url().includes('/api/tasks/diagnostics/overview') && item.status() === 200)
+  await page.locator('summary').click()
+  await diagnosticsResponse
+  expect(diagnosticsRequests).toBe(1)
 })
 
 test('client navigation updates active nav and page content', async ({ page }) => {
@@ -70,6 +85,31 @@ test('client navigation updates active nav and page content', async ({ page }) =
   await expect(page).toHaveURL(/\/history$/)
   await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
   await expect(page.locator('aside').getByRole('link', { name: '翻译历史' })).toHaveAttribute('aria-current', 'page')
+})
+
+test('shared config and watch folder caches avoid duplicate requests on navigation', async ({ page }) => {
+  let configRequests = 0
+  let watchFoldersRequests = 0
+  page.on('request', request => {
+    if (request.method() !== 'GET') return
+    const pathname = new URL(request.url()).pathname
+    if (pathname === '/api/config') configRequests += 1
+    if (pathname === '/api/watch-folders') watchFoldersRequests += 1
+  })
+  await page.goto('/')
+  await expect(page.getByText('文件浏览器')).toBeVisible()
+  await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+  await page.locator('aside').getByRole('link', { name: '媒体库' }).click()
+  await expect(page).toHaveURL(/\/media-libraries$/)
+  await expect(page.getByText('路径说明')).toBeVisible()
+  await page.locator('aside').getByRole('link', { name: '设置' }).click()
+  await expect(page).toHaveURL(/\/settings$/)
+  await expect(page.getByRole('heading', { name: '设置' })).toBeVisible()
+  await page.locator('aside').getByRole('link', { name: '自动化' }).click()
+  await expect(page).toHaveURL(/\/automation$/)
+  await expect(page.getByRole('heading', { name: '自动化' })).toBeVisible()
+  expect(configRequests).toBe(0)
+  expect(watchFoldersRequests).toBeLessThanOrEqual(1)
 })
 
 test('review visual and accessibility', async ({ page }) => {
@@ -97,6 +137,11 @@ test('media libraries visual and accessibility', async ({ page }) => {
   await expect(page).toHaveScreenshot('media-libraries.png', {
     fullPage: true
   })
+  await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+  await page.getByLabel('搜索媒体库').fill('不存在的媒体库')
+  await expect(page.getByText('没有匹配的媒体库')).toBeVisible()
+  await page.getByRole('button', { name: '清空筛选' }).click()
+  await expect(page.getByText('影视库').first()).toBeVisible()
   await expectNoSeriousA11y(page)
 })
 
@@ -122,6 +167,8 @@ test('review proofread cache is actionable and filterable', async ({ page }) => 
   await expect(page).toHaveScreenshot('review-proofread.png', {
     fullPage: true
   })
+  await page.getByRole('button', { name: '#8', exact: true }).first().click()
+  await expect(page.locator('#review-entry-8')).toHaveClass(/ring-warning/)
   await expectNoSeriousA11y(page)
 })
 
@@ -414,6 +461,14 @@ test('Emby and Bazarr webhook endpoints accept valid tokens', async ({ page }) =
   }
 })
 
+test('combined auth session endpoint returns authentication state', async ({ page }) => {
+  const response = await page.request.get('/api/auth/session')
+  expect(response.ok()).toBeTruthy()
+  const data = await response.json()
+  expect(data.hasPasskey).toBe(true)
+  expect(data.authenticated).toBe(true)
+})
+
 test('authenticated users are redirected away from login', async ({ page }) => {
   await page.goto('/login')
   await expect(page).toHaveURL(/\/$/)
@@ -435,15 +490,17 @@ test('media library edits save without leaving the page', async ({ page }) => {
   await page.goto('/media-libraries')
   await expect(page.getByText('路径说明')).toBeVisible()
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
-  await page.locator('input').first().fill('影视库 E2E')
+  await page.getByPlaceholder('例如：电影库 / 剧集库').fill('影视库 E2E')
   await expect(page.getByText('有未保存修改').first()).toBeVisible()
   await page.getByRole('button', { name: '保存媒体库' }).click()
   await expect(page).toHaveURL(/\/media-libraries$/)
   await expect(page.getByText('保存成功').last()).toBeVisible()
   await expect(page.getByText('有未保存修改')).toHaveCount(0)
-  await page.locator('input').first().fill('影视库')
+  await expect(page.getByPlaceholder('例如：电影库 / 剧集库')).toHaveValue('影视库 E2E')
+  await page.getByPlaceholder('例如：电影库 / 剧集库').fill('影视库')
   await page.getByRole('button', { name: '保存媒体库' }).click()
   await expect(page.getByText('保存成功').last()).toBeVisible()
+  await expect(page.getByPlaceholder('例如：电影库 / 剧集库')).toHaveValue('影视库')
 })
 
 test.describe('tablet', () => {

@@ -37,13 +37,29 @@
 
     <div v-if="mediaRoots.length" class="grid grid-cols-1 items-start gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
       <div class="surface-card overflow-hidden">
-        <div class="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
-          <p class="app-section-title">媒体库列表</p>
-          <span class="text-[11px] text-gray-500 dark:text-gray-400">点击编辑</span>
+        <div class="space-y-2 border-b border-gray-100 p-3 dark:border-gray-800">
+          <div class="flex items-center justify-between gap-2">
+            <p class="app-section-title">媒体库列表</p>
+            <span class="text-[11px] text-gray-500 dark:text-gray-400">显示 {{ filteredMediaRoots.length }} / {{ mediaRoots.length }}</span>
+          </div>
+          <UInput v-model="librarySearch" icon="i-lucide-search" size="xs" placeholder="搜索名称或路径" class="w-full" aria-label="搜索媒体库" />
+          <div class="flex items-center gap-2">
+            <USelect v-model="libraryStatusFilter" :items="libraryStatusOptions" size="xs" class="w-full" aria-label="媒体库状态筛选" />
+            <UButton
+              v-if="librarySearch || libraryStatusFilter !== 'all'"
+              icon="i-lucide-filter-x"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              aria-label="清空媒体库筛选"
+              title="清空筛选"
+              @click="clearLibraryFilters"
+            />
+          </div>
         </div>
-        <div class="max-h-[calc(100vh-16rem)] space-y-1 overflow-y-auto p-2">
+        <div class="max-h-[calc(100vh-19rem)] space-y-1 overflow-y-auto p-2 custom-scrollbar">
           <button
-            v-for="(root, index) in mediaRoots"
+            v-for="root in filteredMediaRoots"
             :key="root.id"
             type="button"
             class="w-full rounded-xl border px-3 py-2.5 text-left transition-colors"
@@ -64,9 +80,14 @@
               <UBadge size="xs" :color="root.enabled !== false ? 'success' : 'neutral'" variant="subtle">{{ root.enabled !== false ? '已启用' : '已停用' }}</UBadge>
               <UBadge v-if="isRootWatched(root)" size="xs" color="primary" variant="subtle">监控中</UBadge>
               <UBadge v-if="rootValidation(root).length" size="xs" color="error" variant="subtle">配置异常</UBadge>
-              <span class="ml-auto text-[10px] text-gray-400">#{{ index + 1 }}</span>
+              <span class="ml-auto text-[10px] text-gray-400">#{{ rootPosition(root) }}</span>
             </div>
           </button>
+          <div v-if="!filteredMediaRoots.length" class="space-y-2 px-2 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
+            <UIcon name="i-lucide-search-x" class="mx-auto h-5 w-5 text-gray-300 dark:text-gray-600" />
+            <p>没有匹配的媒体库</p>
+            <UButton label="清空筛选" size="xs" color="neutral" variant="soft" @click="clearLibraryFilters" />
+          </div>
         </div>
       </div>
 
@@ -233,7 +254,7 @@ const forceSaveInvalidRoots = ref(false)
 const removeDialogOpen = ref(false)
 const removeTargetIndex = ref(-1)
 
-const { data, refresh } = await useFetch('/api/config')
+const { data, refresh } = await useAppConfigData()
 const config = ref<any>(data.value || {})
 const mediaRoots = ref<MediaRoot[]>(normalizeMediaRootIds(Array.isArray(config.value?.mediaRoots) ? config.value.mediaRoots : []))
 function ensureSingleDefault() {
@@ -251,11 +272,13 @@ function ensureSingleDefault() {
 }
 ensureSingleDefault()
 const selectedRootId = ref(mediaRoots.value[0]?.id || '')
+const librarySearch = ref('')
+const libraryStatusFilter = ref('all')
 const persistedRootIds = ref<Set<string>>(new Set(mediaRoots.value.map(root => root.id)))
 const initialSnapshot = ref(JSON.stringify(sanitizeMediaRoots()))
 const inspectionStates = ref<Record<string, { ok: boolean, message: string, path?: string }>>({})
 const watchPending = ref<Record<string, boolean>>({})
-const { data: watchData, refresh: refreshWatch } = await useFetch('/api/watch-folders')
+const { data: watchData, refresh: refreshWatch } = await useWatchFoldersData()
 const watchFolders = computed(() => watchData.value?.folders || [])
 
 const selectedRoot = computed(() => mediaRoots.value.find(root => root.id === selectedRootId.value) || null)
@@ -263,9 +286,31 @@ const selectedRootIndex = computed(() => mediaRoots.value.findIndex(root => root
 const removeTargetRoot = computed(() => removeTargetIndex.value >= 0 ? mediaRoots.value[removeTargetIndex.value] : null)
 const defaultRootCount = computed(() => mediaRoots.value.filter(root => root.isDefault).length)
 const enabledRootCount = computed(() => mediaRoots.value.filter(root => root.enabled !== false).length)
+const disabledRootCount = computed(() => mediaRoots.value.filter(root => root.enabled === false).length)
 const watchedRootCount = computed(() => mediaRoots.value.filter(root => isRootWatched(root)).length)
 const invalidRootCount = computed(() => mediaRoots.value.filter(root => rootValidation(root).length > 0 || inspectionStates.value[root.id]?.ok === false).length)
 const isDirty = computed(() => initialSnapshot.value !== JSON.stringify(sanitizeMediaRoots()))
+const libraryStatusOptions = computed(() => [
+  { label: `全部 (${mediaRoots.value.length})`, value: 'all' },
+  { label: `已启用 (${enabledRootCount.value})`, value: 'enabled' },
+  { label: `已停用 (${disabledRootCount.value})`, value: 'disabled' },
+  { label: `异常 (${invalidRootCount.value})`, value: 'invalid' },
+  { label: `监控中 (${watchedRootCount.value})`, value: 'watched' }
+])
+const filteredMediaRoots = computed(() => {
+  const keyword = librarySearch.value.trim().toLowerCase()
+  return mediaRoots.value.filter(root => {
+    if (keyword) {
+      const haystack = `${root.name || ''} ${root.path || ''}`.toLowerCase()
+      if (!haystack.includes(keyword)) return false
+    }
+    if (libraryStatusFilter.value === 'enabled' && root.enabled === false) return false
+    if (libraryStatusFilter.value === 'disabled' && root.enabled !== false) return false
+    if (libraryStatusFilter.value === 'invalid' && !rootValidation(root).length && inspectionStates.value[root.id]?.ok !== false) return false
+    if (libraryStatusFilter.value === 'watched' && !isRootWatched(root)) return false
+    return true
+  })
+})
 
 function watchedFolder(root: MediaRoot) {
   return watchFolders.value.find((folder: any) => folder.rootId === root.id && !folder.path)
@@ -329,9 +374,25 @@ function rootValidation(root: MediaRoot) {
   return validationMap.value.get(root.id) || []
 }
 
+function rootPosition(root: MediaRoot) {
+  return mediaRoots.value.indexOf(root) + 1
+}
+
 function selectRoot(id: string) {
   selectedRootId.value = id
 }
+
+function clearLibraryFilters() {
+  librarySearch.value = ''
+  libraryStatusFilter.value = 'all'
+}
+
+watch([librarySearch, libraryStatusFilter], () => {
+  const list = filteredMediaRoots.value
+  if (list.length && !list.some(root => root.id === selectedRootId.value)) {
+    selectedRootId.value = list[0]!.id
+  }
+})
 
 function ensureSelection() {
   if (selectedRoot.value) return
@@ -503,7 +564,7 @@ async function save() {
     }
 
     await $fetch('/api/config', { method: 'PUT', body: { mediaRoots: roots } })
-    clearNuxtData('/api/config')
+    clearNuxtData('app:config')
     await Promise.all([refresh(), refreshWatch()])
     config.value = data.value || config.value
     if (Array.isArray(config.value?.mediaRoots)) {

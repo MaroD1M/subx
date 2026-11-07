@@ -382,7 +382,7 @@ import { LANGUAGE_OPTIONS } from '~~/shared/languages'
 import type { FileNode } from '~~/types'
 
 const toast = useToast()
-const { data: appConfig } = await useFetch('/api/config')
+const { data: appConfig } = await useAppConfigData()
 const activeRootId = ref<string>('')
 const searchQuery = ref('')
 const selectedFile = ref<FileNode | null>(null)

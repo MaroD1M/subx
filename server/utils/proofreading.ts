@@ -15,11 +15,18 @@ import { createProvider, normalizeProviderType } from './providers/registry'
 
 export type ProofreadKind = 'glossary' | 'consistency'
 
-export const PROOFREAD_PROMPT_VERSION = 2
+export const PROOFREAD_PROMPT_VERSION = 3
 export const PROOFREAD_SAMPLE_LIMIT = 160
 
+export interface ProofreadTerm {
+  source: string
+  target: string
+  reason: string
+  subtitleIds?: string[]
+}
+
 export interface ProofreadResult {
-  terms: Array<{ source: string, target: string, reason: string }>
+  terms: ProofreadTerm[]
   issues: Array<{ subtitleId: string, type: string, message: string }>
 }
 
@@ -69,22 +76,33 @@ function extractJson(raw: string): any | null {
 }
 
 function normalizeProofreadResult(parsed: any): ProofreadResult {
-  const termKeys = new Set<string>()
-  const terms = Array.isArray(parsed?.terms)
-    ? parsed.terms
-      .map((item: any) => ({
-        source: String(item?.source || '').trim(),
-        target: String(item?.target || '').trim(),
-        reason: String(item?.reason || '').trim()
-      }))
-      .filter((item: any) => {
-        if (!item.source || !item.target) return false
-        const key = `${item.source}\u0000${item.target}`
-        if (termKeys.has(key)) return false
-        termKeys.add(key)
-        return true
-      })
-    : []
+  const termMap = new Map<string, ProofreadTerm>()
+  if (Array.isArray(parsed?.terms)) {
+    for (const item of parsed.terms) {
+      const source = String(item?.source || '').trim()
+      const target = String(item?.target || '').trim()
+      const reason = String(item?.reason || '').trim()
+      if (!source || !target) continue
+      const rawSubtitleIds: any[] = Array.isArray(item?.subtitleIds)
+        ? item.subtitleIds
+        : Array.isArray(item?.ids) ? item.ids : []
+      const subtitleIds: string[] = Array.from(new Set<string>(
+        rawSubtitleIds.map((value: any) => String(value || '').trim()).filter(Boolean)
+      ))
+      const key = `${source}\u0000${target}`
+      const existing = termMap.get(key)
+      if (existing) {
+        if (subtitleIds.length) {
+          existing.subtitleIds = Array.from(new Set([...(existing.subtitleIds || []), ...subtitleIds]))
+        }
+        continue
+      }
+      const term: ProofreadTerm = { source, target, reason }
+      if (subtitleIds.length) term.subtitleIds = subtitleIds
+      termMap.set(key, term)
+    }
+  }
+  const terms = Array.from(termMap.values())
   const issueKeys = new Set<string>()
   const issues = Array.isArray(parsed?.issues)
     ? parsed.issues
@@ -154,14 +172,16 @@ function buildPrompt(kind: ProofreadKind, rows: ProofreadRow[]): string {
     return `请从以下影视字幕中提取值得加入术语表的专有名词、人名、地名、组织名、称号和固定译法。
 只提取在译文中已经出现且值得保持一致的词条。不要编造。
 只输出 JSON：
-{"terms":[{"source":"原文","target":"建议译文","reason":"简要原因"}],"issues":[]}
+{"terms":[{"source":"原文","target":"建议译文","reason":"简要原因","subtitleIds":["1","2"]}],"issues":[]}
+subtitleIds 填该术语出现的字幕编号。
 
 字幕：
 ${lines}`
   }
   return `请检查以下影视字幕的译文一致性，重点检查人名、地名、术语、称号是否前后不一致，以及明显误译。
 只输出 JSON：
-{"terms":[{"source":"原文","target":"建议统一译法","reason":"简要原因"}],"issues":[{"subtitleId":"1","type":"name_inconsistency","message":"问题说明"}]}
+{"terms":[{"source":"原文","target":"建议统一译法","reason":"简要原因","subtitleIds":["1","2"]}],"issues":[{"subtitleId":"1","type":"name_inconsistency","message":"问题说明"}]}
+subtitleIds 填该术语涉及的字幕编号。
 
 字幕：
 ${lines}`

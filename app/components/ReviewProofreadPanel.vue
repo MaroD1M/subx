@@ -86,7 +86,11 @@
       <template v-else-if="state.result">
         <section v-if="terms.length" class="space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">术语建议 {{ terms.length }} 条</p>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">{{ termsTitle }} {{ terms.length }} 条</p>
+              <p v-if="kind === 'consistency'" class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">来自一致性检查的统一译法建议，可加入术语表。</p>
+              <p v-if="mergedTermCount" class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">已省略与「术语提取建议」重复的 {{ mergedTermCount }} 条术语；批量加入时会统一合并。</p>
+            </div>
             <UButton label="全部加入术语表" icon="i-lucide-plus" size="xs" color="primary" :loading="applyingTerms" :disabled="allTermsApplied" @click="emit('apply-terms')" />
           </div>
           <div class="space-y-2">
@@ -101,8 +105,22 @@
                   <p v-if="term.reason" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ term.reason }}</p>
                   <p v-if="conflict(term)" class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">术语表已有：{{ conflict(term) }}（加入后会覆盖）</p>
                   <p v-else-if="hasTerm(term)" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">术语表已存在相同译法</p>
+                  <div v-if="term.subtitleIds?.length" class="mt-1 flex flex-wrap items-center gap-1">
+                    <span class="text-[11px] text-gray-400">相关字幕</span>
+                    <UButton
+                      v-for="id in term.subtitleIds.slice(0, 5)"
+                      :key="id"
+                      :label="`#${id}`"
+                      size="xs"
+                      color="neutral"
+                      variant="ghost"
+                      :title="`定位到字幕 #${id}`"
+                      @click="emit('focus-subtitle', String(id))"
+                    />
+                    <span v-if="term.subtitleIds.length > 5" class="text-[11px] text-gray-400">+{{ term.subtitleIds.length - 5 }}</span>
+                  </div>
                 </div>
-                <UButton label="加入" size="xs" color="primary" variant="ghost" :loading="applyingTerms" :disabled="hasTerm(term)" @click="emit('apply-term', term)" />
+                <UButton :label="termActionLabel(term)" size="xs" color="primary" variant="ghost" :loading="applyingTerms" :disabled="hasTerm(term)" @click="emit('apply-term', term)" />
               </div>
             </div>
           </div>
@@ -175,12 +193,14 @@ const props = defineProps<{
   issueCount: number
   issueFilter: string
   applyingTerms: boolean
+  otherTerms?: any[]
 }>()
 
 const emit = defineEmits<{
   'update:kind': [value: ProofreadKind]
   generate: [refresh: boolean]
   'focus-issue': [issue: any]
+  'focus-subtitle': [subtitleId: string]
   'filter-issues': [type: string | null]
   'select-issues': []
   'retranslate-issues': []
@@ -192,7 +212,7 @@ const timeZone = useTimeZone()
 
 const kindItems: Array<{ label: string, value: ProofreadKind }> = [
   { label: '一致性检查', value: 'consistency' },
-  { label: '术语建议', value: 'glossary' }
+  { label: '术语提取建议', value: 'glossary' }
 ]
 
 const issueLabels: Record<string, string> = {
@@ -207,9 +227,24 @@ const issueLabels: Record<string, string> = {
   other: '其他问题'
 }
 
-const terms = computed(() => Array.isArray(props.state.result?.terms) ? props.state.result.terms : [])
+const rawTerms = computed(() => Array.isArray(props.state.result?.terms) ? props.state.result.terms : [])
 const issues = computed(() => Array.isArray(props.state.result?.issues) ? props.state.result.issues : [])
 const meta = computed(() => props.state.meta)
+const termsTitle = computed(() => props.kind === 'consistency' ? '统一译法建议' : '术语提取建议')
+
+function termKey(term: any) {
+  return `${String(term?.source || '')}\u0000${String(term?.target || '')}`
+}
+
+const otherTermKeys = computed(() => new Set((props.otherTerms || []).map(termKey)))
+const mergedTermCount = computed(() => {
+  if (props.kind !== 'consistency' || !otherTermKeys.value.size) return 0
+  return rawTerms.value.filter((term: any) => otherTermKeys.value.has(termKey(term))).length
+})
+const terms = computed(() => {
+  if (props.kind !== 'consistency' || !otherTermKeys.value.size) return rawTerms.value
+  return rawTerms.value.filter((term: any) => !otherTermKeys.value.has(termKey(term)))
+})
 const allTermsApplied = computed(() => terms.value.length > 0 && terms.value.every((term: any) => hasTerm(term)))
 
 function issueLabel(type: string) {
@@ -229,5 +264,11 @@ function conflict(term: any) {
 function hasTerm(term: any) {
   const existing = String(props.glossary?.[term?.source] || '')
   return Boolean(existing) && existing === term?.target
+}
+
+function termActionLabel(term: any) {
+  if (hasTerm(term)) return '已存在'
+  if (conflict(term)) return '覆盖'
+  return '加入'
 }
 </script>

@@ -640,7 +640,7 @@ const activeTab = ref(String(route.query.tab || 'folders'))
 if (!tabs.some(tab => tab.value === activeTab.value)) activeTab.value = 'folders'
 const refreshing = ref(false)
 
-const { data: configData, refresh: refreshConfig } = await useFetch('/api/config')
+const { data: configData, refresh: refreshConfig } = await useAppConfigData()
 const config = computed<any>(() => configData.value || {})
 const roots = computed(() => Array.isArray(config.value.mediaRoots) ? config.value.mediaRoots : [])
 const rootOptions = computed(() => roots.value.map((root: any) => ({ label: root.name, value: root.id })))
@@ -663,7 +663,7 @@ watch(configData, (value: any) => {
   automationConfig.targetLanguage = String(value.targetLanguage || 'zh-CN')
 }, { immediate: true })
 
-const { data: foldersData, refresh: refreshFolders } = await useFetch('/api/watch-folders')
+const { data: foldersData, refresh: refreshFolders } = await useWatchFoldersData()
 const folders = computed<WatchFolder[]>(() => foldersData.value?.folders || [])
 const { data: eventsData, refresh: refreshEvents } = await useFetch('/api/watch-events', { query: { limit: 150 } })
 const events = computed<WatchEvent[]>(() => eventsData.value?.events || [])

@@ -584,7 +584,7 @@ const settingsTabs = [
   { label: '存储与缓存', icon: 'i-lucide-hard-drive', value: 'storage' as const }
 ]
 const builtinStylePresets = STYLE_PRESETS
-const { data } = await useFetch('/api/config')
+const { data } = await useAppConfigData()
 const config = ref<any>(data.value || {})
 const pending = ref(false)
 const testingAsr = ref(false)
@@ -1133,7 +1133,7 @@ async function save() {
   try {
     await $fetch('/api/config', { method: 'PUT', body: { ...config.value } })
     // 清掉 Nuxt useFetch 的共享缓存，避免返回首页后仍拿到旧的 ASR/OCR 开关。
-    clearNuxtData('/api/config')
+    clearNuxtData('app:config')
     toast.add({ title: '保存成功', description: '设置已保存', color: 'success' })
     initialSnapshot.value = currentSnapshot.value
     emit('saved')

@@ -169,7 +169,7 @@ export function seedProofreadCache() {
     ORDER BY sort_order ASC, CAST(subtitle_id AS INTEGER) ASC
   `).all() as Array<{ subtitle_id: string, original_text: string, translated_text: string, final_text: string }>
   const payload = {
-    version: 2,
+    version: 3,
     kind: 'consistency',
     model: 'deepseek-chat',
     providerType: 'openai-compatible',
@@ -180,7 +180,11 @@ export function seedProofreadCache() {
   }
   const fingerprint = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
   const result = {
-    terms: [],
+    terms: [
+      { source: 'Charles', target: '夏尔', reason: '人名统一为「夏尔」', subtitleIds: ['2'] },
+      { source: 'Prix', target: '大奖赛', reason: '术语统一为「大奖赛」', subtitleIds: ['8'] },
+      { source: 'Kimmy', target: '基米', reason: '人名统一为「基米」', subtitleIds: ['2', '8'] }
+    ],
     issues: [
       { subtitleId: '2', type: 'name_inconsistency', message: '人名译法与前后文不一致' },
       { subtitleId: '8', type: 'terminology', message: '术语建议保持统一' }

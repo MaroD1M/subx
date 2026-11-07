@@ -20,6 +20,18 @@ describe('proofreading parsing', () => {
     expect(hasParsableProofreadResponse('{"terms":[],"issues":[]}')).toBe(true)
   })
 
+  it('parses related subtitle ids and merges duplicate terms', () => {
+    const result = parseProofreadResponse(JSON.stringify({
+      terms: [
+        { source: 'Charles', target: '夏尔', reason: '人名', subtitleIds: ['1', '2'] },
+        { source: 'Charles', target: '夏尔', reason: '人名', subtitleIds: ['2', '3'] }
+      ],
+      issues: []
+    }))
+    expect(result.terms).toHaveLength(1)
+    expect(result.terms[0]?.subtitleIds).toEqual(['1', '2', '3'])
+  })
+
   it('deduplicates identical terms and issues', () => {
     const result = parseProofreadResponse(JSON.stringify({
       terms: [
