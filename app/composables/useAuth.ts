@@ -1,5 +1,7 @@
 import { hashPasskeyClient } from '../utils/crypto'
 
+let inflightCheck: Promise<void> | null = null
+
 export const useAuth = () => {
     const authenticated = useState<boolean>('auth:authenticated', () => false)
     const hasPasskey = useState<boolean | null>('auth:hasPasskey', () => null)
@@ -12,21 +14,23 @@ export const useAuth = () => {
      * 检查认证状态
      */
     async function check() {
-        // 防止重复检查
-        if (checking.value) return
-        
+        if (inflightCheck) return inflightCheck
         checking.value = true
-        try {
-            const session = await fetcher('/api/auth/session')
-            hasPasskey.value = !!session.hasPasskey
-            authenticated.value = !!session.authenticated
-        } catch (e) {
-            console.error('[Auth] Check failed:', e)
-            hasPasskey.value = true
-            authenticated.value = false
-        } finally {
-            checking.value = false
-        }
+        inflightCheck = (async () => {
+            try {
+                const session = await fetcher('/api/auth/session')
+                hasPasskey.value = !!session.hasPasskey
+                authenticated.value = !!session.authenticated
+            } catch (e) {
+                console.error('[Auth] Check failed:', e)
+                hasPasskey.value = true
+                authenticated.value = false
+            } finally {
+                checking.value = false
+                inflightCheck = null
+            }
+        })()
+        return inflightCheck
     }
 
     /**

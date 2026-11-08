@@ -1,7 +1,8 @@
+import { apiError } from '../../../utils/apiError'
 import { useDb } from '../../../utils/db'
 import { ConfigService } from '../../../utils/config'
 import { SubtitleService } from '../../../utils/subtitle'
-import { translateChunkWithRetry } from '../../../utils/task'
+import { translateChunkWithRetry } from '../../../utils/taskTranslate'
 import { createProvider, normalizeProviderType } from '../../../utils/providers/registry'
 import { TRANSLATION_CONTEXT_WINDOW } from '../../../utils/translation'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
@@ -10,19 +11,22 @@ import { parseBody, reviewRetranslateSchema } from '../../../utils/validation'
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) {
-    throw createError({ statusCode: 400, message: 'Task ID is required' })
+    throw apiError(400, 'Task ID is required')
   }
 
   const body = await parseBody(event, reviewRetranslateSchema)
   const subtitleIds = Array.isArray(body?.subtitleIds) ? body.subtitleIds.map((value: any) => String(value)) : []
   if (!subtitleIds.length) {
-    throw createError({ statusCode: 400, message: 'subtitleIds are required' })
+    throw apiError(400, 'subtitleIds are required')
   }
 
   const db = useDb()
   const task = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(id) as any
   if (!task) {
-    throw createError({ statusCode: 404, message: 'Task not found' })
+    throw apiError(404, 'Task not found')
+  }
+  if (!['done', 'error', 'review', 'cancelled'].includes(String(task.status))) {
+    throw apiError(409, '任务仍在运行，暂时无法重新翻译')
   }
 
   const allRows = db.prepare(`
@@ -35,7 +39,7 @@ export default defineEventHandler(async (event) => {
   const selectedIdSet = new Set(subtitleIds)
   const rows = allRows.filter(row => selectedIdSet.has(String(row.subtitle_id)))
   if (!rows.length) {
-    throw createError({ statusCode: 404, message: 'No review entries found' })
+    throw apiError(404, 'No review entries found')
   }
 
   const config = await ConfigService.getConfig(true)
@@ -136,29 +140,37 @@ export default defineEventHandler(async (event) => {
     WHERE task_id = ? AND subtitle_id = ?
   `)
 
-  const updated = reviewedResults.map((entry: any) => {
-    const reasons = issueMap.get(String(entry.id)) || []
-    const status = reasons.length === 0
-      ? (SubtitleService.normalizeComparisonText(entry.translatedText) === SubtitleService.normalizeComparisonText(entry.text) ? 'accepted_same' : 'translated')
-      : 'needs_review'
+  db.exec('BEGIN')
+  let updated: any[] = []
+  try {
+    updated = reviewedResults.map((entry: any) => {
+      const reasons = issueMap.get(String(entry.id)) || []
+      const status = reasons.length === 0
+        ? (SubtitleService.normalizeComparisonText(entry.translatedText) === SubtitleService.normalizeComparisonText(entry.text) ? 'accepted_same' : 'translated')
+        : 'needs_review'
 
-    stmt.run(
-      String(entry.translatedText || ''),
-      String(entry.translatedText || entry.text || ''),
-      status,
-      JSON.stringify(reasons),
-      id,
-      String(entry.id)
-    )
+      stmt.run(
+        String(entry.translatedText || ''),
+        String(entry.translatedText || entry.text || ''),
+        status,
+        JSON.stringify(reasons),
+        id,
+        String(entry.id)
+      )
 
-    return {
-      subtitleId: String(entry.id),
-      translatedText: entry.translatedText || '',
-      finalText: entry.translatedText || entry.text || '',
-      reviewStatus: status,
-      reviewReasons: reasons
-    }
-  })
+      return {
+        subtitleId: String(entry.id),
+        translatedText: entry.translatedText || '',
+        finalText: entry.translatedText || entry.text || '',
+        reviewStatus: status,
+        reviewReasons: reasons
+      }
+    })
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* ignore rollback failure */ }
+    throw error
+  }
 
   db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, 'review', 'translation', 'info', ?, datetime('now'))")
     .run(id, `[核对重译] 已按 ${chunks.length} 个分块重新翻译 ${updated.length} 条字幕（已跳过任务级缓存）。`)

@@ -1,3 +1,4 @@
+import { apiError } from '../../utils/apiError'
 import { AuthService } from '../../utils/auth'
 import { authPasskeySchema, parseBody } from '../../utils/validation'
 
@@ -11,18 +12,18 @@ export default defineEventHandler(async (event) => {
     const ip = getRequestIP(event, { xForwardedFor: trustProxy }) || 'unknown'
 
     if (!AuthService.checkLoginRate(ip)) {
-        throw createError({ statusCode: 429, message: '登录尝试过于频繁，请稍后再试' })
+        throw apiError(429, '登录尝试过于频繁，请稍后再试')
     }
 
     const { passkey } = await parseBody(event, authPasskeySchema)
 
     if (!passkey) {
-        throw createError({ statusCode: 400, message: '请输入口令密钥' })
+        throw apiError(400, '请输入口令密钥')
     }
 
     const valid = AuthService.verifyPasskey(passkey)
     if (!valid) {
-        throw createError({ statusCode: 401, message: '口令密钥错误' })
+        throw apiError(401, '口令密钥错误')
     }
 
     const token = AuthService.createSession()

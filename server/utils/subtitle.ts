@@ -1,6 +1,6 @@
 import SrtParser from 'srt-parser-2'
 import { parse as parseAss, stringify as stringifyAss } from 'ass-compiler'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs'
 import * as chardet from 'chardet'
 import iconv from 'iconv-lite'
 import { createHash } from 'crypto'
@@ -8,20 +8,26 @@ import { join } from 'path'
 import type { SubtitleEntry } from '../../types'
 import { useDb } from './db'
 import { resolveMediaPath } from './mediaRoots'
+import { SubtitleFormatting, formattingPlaceholderPattern, type FormattingTarget, type FormattingToken } from './subtitleFormatting'
 
 const srtParser = new SrtParser()
+
+function atomicWriteFile(filePath: string, content: string) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  try {
+    writeFileSync(tempPath, content, 'utf-8')
+    renameSync(tempPath, filePath)
+  } catch (error) {
+    try { unlinkSync(tempPath) } catch { /* ignore cleanup failure */ }
+    throw error
+  }
+}
 const ASS_TEXT_SAMPLE_HEADER = `[Script Info]\nScriptType: V4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0.8,2,30,30,24,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,`
 
-const formattingTokenPattern = /\{[^}]+\}|<\/?\s*(?:i|b|u)\s*>|<\s*font[^>]*>|<\s*\/\s*font\s*>/gi
-const formattingPlaceholderPattern = /__SUBX_FMT_\d+__/g
 
 type OutputMode = 'translated' | 'bilingual' | 'original'
 type SubtitleFormat = 'srt' | 'ass' | 'both'
 type BilingualLayout = 'translated_first' | 'original_first'
-type FormattingTarget = 'srt' | 'ass'
-type FormattingToken = { placeholder: string, value: string }
-type TemplateSlot = { placeholder?: string, text: string }
-type AssSegment = { tags: string[], text: string, drawing?: unknown[] }
 type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate' | 'same_as_source_allowed' | 'suspected_contamination' | 'overlong_translation' | 'suspected_shift', original: string, translated: string, severity?: 'soft' | 'hard' }
 
 export async function safePath(userPath: string, rootId?: string | null): Promise<string> {
@@ -66,6 +72,7 @@ function normalizeVttTime(raw: string): string {
 }
 
 export const SubtitleService = {
+  ...SubtitleFormatting,
   isNonVerbal(text: string): boolean {
     const trimmed = text.trim()
     if (!trimmed) return true
@@ -184,204 +191,6 @@ export const SubtitleService = {
       prefixTag: match[1]!.trim(),
       body: normalized.slice(match[0].length).trim()
     }
-  },
-
-  buildFormattingPlaceholder(index: number): string {
-    return `__SUBX_FMT_${index}__`
-  },
-
-  protectFormattingTokens(text: unknown): { text: string, formattingTokens: FormattingToken[] } {
-    const normalized = this.normalizeSubtitleText(text).replace(/\\[nN]/g, '\n')
-    const formattingTokens: FormattingToken[] = []
-    let tokenIndex = 0
-
-    const protectedText = normalized.replace(formattingTokenPattern, (match) => {
-      tokenIndex += 1
-      const placeholder = this.buildFormattingPlaceholder(tokenIndex)
-      formattingTokens.push({ placeholder, value: match })
-      return placeholder
-    })
-
-    return { text: protectedText.trim(), formattingTokens }
-  },
-
-  hasAssDrawing(rawText: string): boolean {
-    const payload = this.parseAssTextPayload(rawText)
-    const parsed = Array.isArray((payload as any)?.parsed) ? (payload as any).parsed : []
-    return parsed.some((segment: any) => {
-      const tags = Array.isArray(segment?.tags) ? segment.tags : []
-      return tags.some((tag: any) => Number(tag?.p) > 0)
-    })
-  },
-
-  shouldPreserveAssRawText(rawText: string): boolean {
-    return this.hasAssDrawing(rawText)
-  },
-
-  convertFormattingTokenToAss(value: string): string {
-    if (/^<\s*i\s*>$/i.test(value)) return '{\\i1}'
-    if (/^<\s*\/\s*i\s*>$/i.test(value)) return '{\\i0}'
-    if (/^<\s*b\s*>$/i.test(value)) return '{\\b1}'
-    if (/^<\s*\/\s*b\s*>$/i.test(value)) return '{\\b0}'
-    if (/^<\s*u\s*>$/i.test(value)) return '{\\u1}'
-    if (/^<\s*\/\s*u\s*>$/i.test(value)) return '{\\u0}'
-    if (/^<\s*font[^>]*>$/i.test(value) || /^<\s*\/\s*font\s*>$/i.test(value)) return ''
-    return value
-  },
-
-  restoreFormattingTokens(text: unknown, formattingTokens: FormattingToken[] = [], target: FormattingTarget): string {
-    let restored = this.normalizeSubtitleText(text)
-    for (const token of formattingTokens) {
-      const value = target === 'ass'
-        ? this.convertFormattingTokenToAss(token.value)
-        : token.value
-      restored = restored.split(token.placeholder).join(value)
-    }
-    return restored
-  },
-
-  extractFormattingPlaceholderSequence(text: string): string[] {
-    return text.match(formattingPlaceholderPattern) || []
-  },
-
-  splitTemplateSlots(text: string, formattingTokens: FormattingToken[] = []): TemplateSlot[] {
-    if (formattingTokens.length === 0) {
-      return [{ text }]
-    }
-
-    const slots: TemplateSlot[] = []
-    let cursor = 0
-
-    for (const token of formattingTokens) {
-      const index = text.indexOf(token.placeholder, cursor)
-      if (index === -1) continue
-
-      slots.push({ text: text.slice(cursor, index) })
-      slots.push({ placeholder: token.placeholder, text: '' })
-      cursor = index + token.placeholder.length
-    }
-
-    slots.push({ text: text.slice(cursor) })
-    return slots.length > 0 ? slots : [{ text }]
-  },
-
-  splitTextByWeights(text: string, weights: number[]): string[] {
-    if (weights.length === 0) return [text]
-
-    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
-    if (totalWeight <= 0) {
-      return weights.map((_, index) => index === 0 ? text : '')
-    }
-
-    const characters = Array.from(text)
-    const totalChars = characters.length
-    const segments = new Array(weights.length).fill('')
-
-    let consumed = 0
-    for (let i = 0; i < weights.length; i++) {
-      const remainingWeight = weights.slice(i).reduce((sum, weight) => sum + weight, 0)
-      const remainingChars = totalChars - consumed
-      const take = i === weights.length - 1
-        ? remainingChars
-        : Math.max(0, Math.min(remainingChars, Math.round(((weights[i] || 0) / remainingWeight) * remainingChars)))
-
-      segments[i] = characters.slice(consumed, consumed + take).join('')
-      consumed += take
-    }
-
-    if (consumed < totalChars) {
-      segments[segments.length - 1] += characters.slice(consumed).join('')
-    }
-
-    return segments
-  },
-
-  remapReorderedFormattingPlaceholders(text: string, expectedSequence: string[], actualSequence: string[]): string | null {
-    if (expectedSequence.length === 0 || expectedSequence.length !== actualSequence.length) {
-      return null
-    }
-
-    const expectedSet = new Set(expectedSequence)
-    if (actualSequence.some(placeholder => !expectedSet.has(placeholder))) {
-      return null
-    }
-
-    const uniqueActual = new Set(actualSequence)
-    if (uniqueActual.size !== actualSequence.length) {
-      return null
-    }
-
-    const pattern = /(__SUBX_FMT_\d+__)/g
-    const segments = this.normalizeSubtitleText(text).split(pattern)
-    const mappedText = new Map<string, string>()
-
-    for (let i = 1; i < segments.length; i += 2) {
-      mappedText.set(segments[i]!, segments[i + 1] || '')
-    }
-
-    return expectedSequence.map(placeholder => `${placeholder}${mappedText.get(placeholder) || ''}`).join('')
-  },
-
-  rebuildFormattingPlaceholders(text: string, templateText: string, formattingTokens: FormattingToken[] = []): string {
-    if (formattingTokens.length === 0) return text
-
-    const plainText = this.normalizeSubtitleText(text).replace(formattingPlaceholderPattern, '')
-    const slots = this.splitTemplateSlots(templateText, formattingTokens)
-    const textSlots = slots.filter(slot => !slot.placeholder)
-    const weights = textSlots.map(slot => Array.from(slot.text.replace(/\s+/g, '')).length)
-    const distributed = this.splitTextByWeights(
-      plainText,
-      weights.some(Boolean) ? weights : textSlots.map((_, index) => index === 0 ? 1 : 0)
-    )
-
-    let textIndex = 0
-    return slots.map((slot) => {
-      if (slot.placeholder) return slot.placeholder
-      const value = distributed[textIndex] || ''
-      textIndex += 1
-      return value
-    }).join('')
-  },
-
-  stabilizeFormattingPlaceholders(text: unknown, templateText: unknown, formattingTokens: FormattingToken[] = []): string {
-    const normalized = this.normalizeSubtitleText(text).replace(/\\[nN]/g, '\n')
-    if (formattingTokens.length === 0) return normalized
-
-    const expectedSequence = formattingTokens.map(token => token.placeholder)
-    const actualSequence = this.extractFormattingPlaceholderSequence(normalized)
-    const isExactMatch = expectedSequence.length === actualSequence.length
-      && expectedSequence.every((placeholder, index) => placeholder === actualSequence[index])
-
-    if (isExactMatch) {
-      return normalized
-    }
-
-    const reordered = this.remapReorderedFormattingPlaceholders(normalized, expectedSequence, actualSequence)
-    if (reordered) {
-      return reordered
-    }
-
-    return this.rebuildFormattingPlaceholders(normalized, this.normalizeSubtitleText(templateText), formattingTokens)
-  },
-
-  stripInlineAssTags(text: string): string {
-    return text.replace(/\{[^}]+\}/g, '')
-  },
-
-  stripBasicHtmlTags(text: string): string {
-    return text
-      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
-      .replace(/<\/?\s*(i|b|u)\s*>/gi, '')
-      .replace(/<\s*font[^>]*>/gi, '')
-      .replace(/<\s*\/\s*font\s*>/gi, '')
-  },
-
-  normalizeModelOutputText(text: unknown): string {
-    const normalized = this.normalizeSubtitleText(text).replace(/\\[nN]/g, '\n')
-    const withoutCueTags = normalized.replace(/(^|\n)\s*(?:\{\\[^}]+\}\s*)+/g, '$1')
-    const withoutStrayLeadingSlash = withoutCueTags.replace(/(^|\n)\\(?![Nnh{}\\])/g, '$1')
-
-    return this.stripBasicHtmlTags(this.stripInlineAssTags(withoutStrayLeadingSlash)).trim()
   },
 
    parseVttContent(content: string): SubtitleEntry[] {
@@ -941,7 +750,7 @@ export const SubtitleService = {
 
     if (subtitleFormat === 'srt') {
       const srtPath = `${basePath}.srt`
-      writeFileSync(srtPath, srtContent, 'utf-8')
+      atomicWriteFile(srtPath, srtContent)
       console.log(`[Subtitle] 输出 SRT: ${srtPath} (${srtEntries.length} 条)`)
       return srtPath
     }
@@ -949,20 +758,20 @@ export const SubtitleService = {
     const sourceExt = sourceSubtitlePath?.split('.').pop()?.toLowerCase()
     const hasOriginalAss = !!sourceSubtitlePath && (sourceExt === 'ass' || sourceExt === 'ssa') && existsSync(sourceSubtitlePath)
     const assContent = hasOriginalAss
-      ? this.rewriteExistingAss(readFileSync(sourceSubtitlePath, 'utf-8'), entries, outputMode, bilingualLayout, subtitleStylePreset)
+      ? this.rewriteExistingAss(readSubtitleFile(sourceSubtitlePath), entries, outputMode, bilingualLayout, subtitleStylePreset)
       : this.buildAssContent(entries, subtitleStylePreset, outputMode, bilingualLayout)
 
     const assPath = `${basePath}.ass`
 
     if (subtitleFormat === 'ass') {
-      writeFileSync(assPath, assContent.replace(formattingPlaceholderPattern, ''), 'utf-8')
+      atomicWriteFile(assPath, assContent.replace(formattingPlaceholderPattern, ''))
       console.log(`[Subtitle] 输出 ASS: ${assPath} (${srtEntries.length} 条)`)
       return assPath
     }
 
     const srtPath = `${basePath}.srt`
-    writeFileSync(srtPath, srtContent, 'utf-8')
-    writeFileSync(assPath, assContent.replace(formattingPlaceholderPattern, ''), 'utf-8')
+    atomicWriteFile(srtPath, srtContent)
+    atomicWriteFile(assPath, assContent.replace(formattingPlaceholderPattern, ''))
     console.log(`[Subtitle] 输出 SRT+ASS: ${srtPath} + ${assPath} (${srtEntries.length} 条)`)
     return assPath
   },

@@ -1,10 +1,11 @@
+import { apiError } from '../../utils/apiError'
 import { taskEvents } from '../../utils/task'
 
 export default defineEventHandler((event) => {
     const { taskId } = getQuery(event) as { taskId: string }
 
     if (!taskId) {
-        throw createError({ statusCode: 400, message: 'TaskId is required' })
+        throw apiError(400, 'TaskId is required')
     }
 
     const { res } = event.node

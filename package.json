@@ -1,6 +1,6 @@
 {
   "name": "subx",
-  "version": "2.8.3",
+  "version": "2.8.4",
   "type": "module",
   "private": true,
   "scripts": {
@@ -8,7 +8,7 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare || true",
+    "postinstall": "nuxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
@@ -19,7 +19,8 @@
     "test:e2e:update": "playwright test --update-snapshots",
     "test:pg": "vitest run server/utils/__tests__/pgLive.test.ts",
     "test:ocr": "python3 -m unittest discover -s ocr-service/tests -v",
-    "preview:images": "playwright test --config playwright.preview.config.ts"
+    "preview:images": "playwright test --config playwright.preview.config.ts",
+    "check:versions": "node scripts/check-versions.mjs"
   },
   "dependencies": {
     "@nuxt/ui": "^4.12.0",
@@ -78,5 +79,8 @@
     "minimatch@10": {
       "brace-expansion": "5.0.12"
     }
+  },
+  "engines": {
+    "node": ">=22.22.3"
   }
 }

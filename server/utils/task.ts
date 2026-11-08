@@ -2,95 +2,36 @@
  * Task queue and end-to-end processing pipeline.
  *
  * Responsibilities: persistent queue claim/recovery, subtitle/ASR/OCR source
- * resolution, translation, quality checks, review persistence, export and task
+ * resolution, translation orchestration, quality checks, review persistence, export and task
  * lifecycle events. Keep long-running work out of request handlers.
  */
 
-import pLimit from 'p-limit'
-import { join, dirname, basename, relative } from 'path'
-import { existsSync, mkdirSync, rmSync, appendFileSync, readdirSync } from 'fs'
+import { join, dirname } from 'path'
+import { existsSync, rmSync, readdirSync } from 'fs'
 import { EventEmitter } from 'events'
 import { useDb } from './db'
-import { formatLogTimestamp, toUtcIsoString } from '~~/shared/time'
-import { VideoService } from './video'
+import { apiError } from './apiError'
+import { toUtcIsoString } from '~~/shared/time'
 import { SubtitleService } from './subtitle'
-import { getMediaRoot, resolveMediaPath } from './mediaRoots'
-import { TranslationService, TRANSLATION_CONTEXT_WINDOW, TRANSLATION_PROMPT_VERSION, type TranslationContext } from './translation'
-import { AsrService } from './asr/client'
-import { acquireAudioLease, extractAudioCached, releaseAudioLease, removeCachedAudio } from './asr/audioCache'
+import { TranslationService } from './translation'
+import { persistReviewEntries } from './taskSupport'
+import { TaskQueue } from './taskQueue'
+import { TaskCancelledError, assertTaskNotCancelled, cancelledTaskIds, isTaskCancelled, taskAbortControllers } from './taskState'
+import { releaseAudioLease, removeCachedAudio } from './asr/audioCache'
 import { markTaskActive, unmarkTaskActive } from './activeTasks'
-import { OcrService } from './ocr/client'
-import { QualityService } from './quality'
 import { ConfigService } from './config'
 import { classifyTaskError } from './taskError'
-import { resolveTaskLogCategory, type TaskLogCategory } from './taskLog'
-import { createProvider, normalizeProviderType } from './providers/registry'
-import type { BoundTranslationProvider } from './providers/types'
-import { STYLE_PRESETS } from '~~/shared/stylePresets'
-import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
-import { fileNameMatchesLanguage, resolveTrackPolicy, selectTrackForPolicy } from './trackPolicy'
-import { deriveOutputBaseName } from './outputNaming'
+import { resolveTaskLogCategory, writeTaskLog } from './taskLog'
+import { finalizeTaskOutput } from './taskFinalize'
+import { prepareTaskSource } from './taskSource'
+import { translateSubtitles } from './taskTranslate'
+import type { TranslationTask, TaskStatus } from '~~/types'
+import { deriveOutputBaseName, isSafeOutputSuffix } from './outputNaming'
+import { isPathInside } from './pathSafety'
+import { acquireOutputLocks } from './outputLock'
 
 export const taskEvents = new EventEmitter()
 taskEvents.setMaxListeners(0)
-const cancelledTaskIds = new Set<string>()
-const taskAbortControllers = new Map<string, AbortController>()
-
-class TaskCancelledError extends Error {
-    constructor(message = '任务已取消') {
-        super(message)
-        this.name = 'TaskCancelledError'
-    }
-}
-
-function isTaskCancelled(taskId: string) {
-    return cancelledTaskIds.has(taskId)
-}
-
-function assertTaskNotCancelled(taskId: string) {
-    if (isTaskCancelled(taskId)) {
-        throw new TaskCancelledError()
-    }
-}
-
-type ChunkRiskProfile = {
-    tags: string[]
-    stylePromptSuffix?: string
-}
-
-type ChunkDiagnostics = {
-    chunkIndex: number
-    initialSize: number
-    retryAttempts: number
-    validationFailures: number
-    singleRetryAttempts: number
-    singleRetrySuccesses: number
-    singleRetryFailures: number
-    fallbackCount: number
-    missingIds: string[]
-    contaminatedIds: string[]
-    reviewIds: string[]
-    finalStatus: 'ok' | 'partial' | 'fallback' | 'review'
-}
-
-function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'error' | 'warn', message: string, category?: TaskLogCategory) {
-    if (isTaskCancelled(taskId) && step !== 'cancelled' && step !== 'error') {
-        return
-    }
-    const db = useDb()
-    const resolvedCategory = category || resolveTaskLogCategory(step, level, message)
-    db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
-        .run(taskId, step, resolvedCategory, level, message)
-
-    try {
-        const logFile = join(process.cwd(), 'db', 'logs', `task_${taskId}.log`)
-        const dir = join(process.cwd(), 'db', 'logs')
-        if (!existsSync(dir)) { mkdirSync(dir, { recursive: true }) }
-        const ts = formatLogTimestamp(new Date())
-        appendFileSync(logFile, `[${ts}] [${level.toUpperCase()}] [${step || '-'}] ${message}\n`)
-    } catch {}
-}
-
 export function removeTaskArtifacts(taskId: string) {
     try {
         const logFile = join(process.cwd(), 'db', 'logs', `task_${taskId}.log`)
@@ -106,585 +47,6 @@ export function removeTaskArtifacts(taskId: string) {
             }
         }
     } catch { /* ignore */ }
-}
-
-function isTerminalStatus(status?: string | null) {
-    return ['done', 'error', 'review', 'cancelled'].includes(String(status || ''))
-}
-
-class TaskQueue {
-    private active = 0
-    private pumping = false
-    private workerId = process.env.SUBX_WORKER_ID || `${process.pid}`
-    private runtimeConfigs = new Map<string, { apiKey: string, baseUrl?: string }>()
-    private heartbeats = new Map<string, ReturnType<typeof setInterval>>()
-
-    async add(taskId: string, openaiConfig?: { apiKey: string, baseUrl?: string }): Promise<void> {
-        const db = useDb()
-        cancelledTaskIds.delete(taskId)
-        if (openaiConfig) this.runtimeConfigs.set(taskId, openaiConfig)
-        db.prepare(`
-            INSERT INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, locked_by, locked_at, heartbeat_at, last_error, created_at, updated_at)
-            VALUES (?, 'queued', 0, 3, datetime('now'), NULL, NULL, NULL, NULL, datetime('now'), datetime('now'))
-            ON CONFLICT(task_id) DO UPDATE SET
-                status='queued',
-                next_run_at=datetime('now'),
-                locked_by=NULL,
-                locked_at=NULL,
-                heartbeat_at=NULL,
-                last_error=NULL,
-                updated_at=datetime('now')
-        `).run(taskId)
-        void this.kick()
-    }
-
-    isActive(taskId: string) {
-        if (taskAbortControllers.has(taskId)) return true
-        try {
-            const row = useDb().prepare("SELECT status FROM task_jobs WHERE task_id = ?").get(taskId) as { status?: string } | undefined
-            return row?.status === 'running'
-        } catch {
-            return false
-        }
-    }
-
-    isQueued(taskId: string) {
-        try {
-            const row = useDb().prepare("SELECT status FROM task_jobs WHERE task_id = ?").get(taskId) as { status?: string } | undefined
-            return row?.status === 'queued'
-        } catch {
-            return false
-        }
-    }
-
-    cancel(taskId: string) {
-        cancelledTaskIds.add(taskId)
-        taskAbortControllers.get(taskId)?.abort()
-        this.runtimeConfigs.delete(taskId)
-
-        let removed = false
-        try {
-            const info = useDb().prepare(`
-                UPDATE task_jobs
-                SET status='cancelled', updated_at=datetime('now')
-                WHERE task_id = ? AND status IN ('queued', 'running')
-            `).run(taskId)
-            removed = info.changes > 0
-        } catch { /* ignore job table failures */ }
-        return removed
-    }
-
-    async recoverInterrupted() {
-        const db = useDb()
-        const staleSeconds = Math.max(60, Number(process.env.SUBX_WORKER_STALE_SECONDS || 120))
-        const recovered = db.prepare(`
-            UPDATE task_jobs
-            SET status='queued', locked_by=NULL, locked_at=NULL, heartbeat_at=NULL,
-                next_run_at=datetime('now'), updated_at=datetime('now')
-            WHERE status='running'
-              AND (heartbeat_at IS NULL OR heartbeat_at < datetime('now', ?))
-        `).run(`-${staleSeconds} seconds`)
-
-        const activeStatuses = ['queued', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting']
-        const created = db.prepare(`
-            INSERT INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, locked_by, locked_at, heartbeat_at, last_error, created_at, updated_at)
-            SELECT task_id, 'queued', 0, 3, datetime('now'), NULL, NULL, NULL, NULL, datetime('now'), datetime('now')
-            FROM tasks
-            WHERE status IN (${activeStatuses.map(() => '?').join(',')})
-              AND task_id NOT IN (SELECT task_id FROM task_jobs)
-        `).run(...activeStatuses)
-
-        if (recovered.changes > 0 || created.changes > 0) {
-            console.warn(`[Queue] Recovered ${recovered.changes} stale job(s), restored ${created.changes} legacy task(s)`)
-        }
-        void this.kick()
-    }
-
-    private claimJob(): string | null {
-        const db = useDb()
-        const candidate = db.prepare(`
-            SELECT task_id FROM task_jobs
-            WHERE status='queued' AND next_run_at <= datetime('now') AND attempts < max_attempts
-            ORDER BY created_at ASC
-            LIMIT 1
-        `).get() as { task_id?: string } | undefined
-        if (!candidate?.task_id) return null
-
-        const info = db.prepare(`
-            UPDATE task_jobs
-            SET status='running', attempts=attempts + 1, locked_by=?, locked_at=datetime('now'),
-                heartbeat_at=datetime('now'), updated_at=datetime('now')
-            WHERE task_id = ? AND status='queued'
-        `).run(this.workerId, candidate.task_id)
-        return info.changes > 0 ? candidate.task_id : null
-    }
-
-    private async kick() {
-        if (this.pumping) return
-        this.pumping = true
-        try {
-            while (true) {
-                const config = await ConfigService.getConfig()
-                const concurrency = Math.max(1, Number(config.concurrency) || 3)
-                if (this.active >= concurrency) break
-
-                const taskId = this.claimJob()
-                if (!taskId) break
-                if (isTaskCancelled(taskId)) {
-                    useDb().prepare("UPDATE task_jobs SET status='cancelled', updated_at=datetime('now') WHERE task_id = ?").run(taskId)
-                    cancelledTaskIds.delete(taskId)
-                    continue
-                }
-
-                const currentTask = TaskService.getTask(taskId)
-                if (isTerminalStatus(currentTask?.status)) {
-                    useDb().prepare("UPDATE task_jobs SET status='done', updated_at=datetime('now') WHERE task_id = ?").run(taskId)
-                    continue
-                }
-
-                this.active++
-                this.run(taskId)
-            }
-        } catch (e) {
-            console.error('[Queue] Failed to pump task queue:', e)
-        } finally {
-            this.pumping = false
-        }
-    }
-
-    private run(taskId: string) {
-        const heartbeat = setInterval(() => {
-            try {
-                useDb().prepare("UPDATE task_jobs SET heartbeat_at=datetime('now'), updated_at=datetime('now') WHERE task_id = ? AND status='running'").run(taskId)
-            } catch { /* ignore heartbeat failures */ }
-        }, 10_000)
-        this.heartbeats.set(taskId, heartbeat)
-
-        TaskService.process(taskId, this.runtimeConfigs.get(taskId))
-            .then(() => this.persistJobResult(taskId))
-            .catch((error) => this.handleUnexpectedFailure(taskId, error))
-            .finally(() => {
-                clearInterval(heartbeat)
-                this.heartbeats.delete(taskId)
-                this.runtimeConfigs.delete(taskId)
-                this.active = Math.max(0, this.active - 1)
-                void this.kick()
-            })
-    }
-
-    private persistJobResult(taskId: string) {
-        try {
-            const task = useDb().prepare('SELECT status FROM tasks WHERE task_id = ?').get(taskId) as { status?: string } | undefined
-            const status = String(task?.status || 'error')
-            const jobStatus = status === 'done' || status === 'review'
-                ? 'done'
-                : status === 'cancelled'
-                    ? 'cancelled'
-                    : 'error'
-            useDb().prepare("UPDATE task_jobs SET status=?, locked_by=NULL, locked_at=NULL, updated_at=datetime('now') WHERE task_id = ?").run(jobStatus, taskId)
-        } catch { /* ignore job persistence failures */ }
-    }
-
-    private handleUnexpectedFailure(taskId: string, error: any) {
-        const message = String(error?.message || error || 'unknown queue error')
-        console.error(`[Queue] Task ${taskId} failed unexpectedly:`, error)
-        try {
-            const db = useDb()
-            const job = db.prepare('SELECT attempts, max_attempts FROM task_jobs WHERE task_id = ?').get(taskId) as { attempts?: number, max_attempts?: number } | undefined
-            const attempts = Number(job?.attempts || 1)
-            const maxAttempts = Number(job?.max_attempts || 3)
-            if (attempts < maxAttempts) {
-                db.prepare("UPDATE task_jobs SET status='queued', next_run_at=datetime('now', ?), locked_by=NULL, locked_at=NULL, last_error=?, updated_at=datetime('now') WHERE task_id = ?")
-                    .run(`+${Math.min(300, 15 * attempts)} seconds`, message, taskId)
-            } else {
-                db.prepare("UPDATE task_jobs SET status='error', last_error=?, locked_by=NULL, locked_at=NULL, updated_at=datetime('now') WHERE task_id = ?").run(message, taskId)
-            }
-        } catch { /* ignore */ }
-    }
-}
-
-export const globalTaskQueue = new TaskQueue()
-
-function expandRetryEntries(entries: SubtitleEntry[], targetIds: string[]) {
-    if (!targetIds.length) return entries
-
-    const idSet = new Set(targetIds.map(id => String(id)))
-    const expandedIds = new Set<string>()
-    const targetIndexes: number[] = []
-
-    entries.forEach((entry, index) => {
-        const currentId = String(entry.id)
-        if (!idSet.has(currentId)) return
-
-        targetIndexes.push(index)
-
-        expandedIds.add(currentId)
-        if (index > 0) expandedIds.add(String(entries[index - 1]!.id))
-        if (index + 1 < entries.length) expandedIds.add(String(entries[index + 1]!.id))
-    })
-
-    if (targetIndexes.length >= 2) {
-        const minIndex = Math.max(0, Math.min(...targetIndexes) - 1)
-        const maxIndex = Math.min(entries.length - 1, Math.max(...targetIndexes) + 1)
-
-        for (let index = minIndex; index <= maxIndex; index++) {
-            expandedIds.add(String(entries[index]!.id))
-        }
-    }
-
-    return entries.filter(entry => expandedIds.has(String(entry.id)))
-}
-
-
-export async function translateChunkWithRetry(
-    provider: BoundTranslationProvider,
-    chunk: SubtitleEntry[],
-    targetLanguage: string,
-    glossary: Record<string, string>,
-    previousContext: SubtitleEntry[],
-    model: string,
-    taskId: string,
-    chunkIndex: number,
-    stylePrompt: string,
-    maxRetries: number,
-    callbacks?: { onEntryTranslated?: (entry: { id: string; translatedText: string }) => void },
-    streamUsage: boolean = false,
-    useStreaming: boolean = false,
-    logLabel?: string,
-    signal?: AbortSignal,
-    translationContext?: TranslationContext,
-    nextContext: SubtitleEntry[] = []
-): Promise<{ entries: SubtitleEntry[], diagnostics: ChunkDiagnostics }> {
-    const finalResults = new Map<string, SubtitleEntry>()
-    let unresolvedEntries = [...chunk]
-    const chunkLabel = logLabel || ('块 #' + (chunkIndex + 1))
-    const diagnostics: ChunkDiagnostics = {
-        chunkIndex,
-        initialSize: chunk.length,
-        retryAttempts: 0,
-        validationFailures: 0,
-        singleRetryAttempts: 0,
-        singleRetrySuccesses: 0,
-        singleRetryFailures: 0,
-        fallbackCount: 0,
-        missingIds: [],
-        contaminatedIds: [],
-        reviewIds: [],
-        finalStatus: 'ok'
-    }
-
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        assertTaskNotCancelled(taskId)
-        if (unresolvedEntries.length === 0) break
-
-        if (attempt > 0) {
-            diagnostics.retryAttempts = Math.max(diagnostics.retryAttempts, attempt)
-            console.log(`[Retry] Task ${taskId} chunk ${chunkIndex}: 正在进行第 ${attempt}/${maxRetries} 次增量重试，剩余 ${unresolvedEntries.length} 条待处理`)
-            writeTaskLog(taskId, 'translating', 'warn', '[重试] ' + chunkLabel + ' 第 ' + attempt + '/' + maxRetries + ' 次重试，仅补译剩余 ' + unresolvedEntries.length + ' 条')
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
-        }
-
-        try {
-            const results = await TranslationService.translateChunk(
-                provider, unresolvedEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming, signal, translationContext, nextContext
-            )
-            assertTaskNotCancelled(taskId)
-
-            const expectedCount = unresolvedEntries.length
-            const returnedIds = new Set<string>()
-            const acceptedIds = new Set<string>()
-            for (const entry of results) {
-                const id = String(entry.id)
-                const translatedText = String(entry.translatedText || '')
-                const accepted = translatedText.length > 0
-                if (accepted) {
-                    returnedIds.add(id)
-                    finalResults.set(id, entry)
-                    acceptedIds.add(id)
-                }
-            }
-
-            const missingIds = unresolvedEntries
-                .map(entry => String(entry.id))
-                .filter(id => !returnedIds.has(id))
-            const unresolvedIds = unresolvedEntries
-                .map(entry => String(entry.id))
-                .filter(id => !finalResults.has(id))
-
-            if (unresolvedIds.length === 0) {
-                unresolvedEntries = []
-                break
-            }
-
-            const retryIds = new Set([...unresolvedIds, ...expandRetryEntries(unresolvedEntries, missingIds).map(entry => String(entry.id))])
-            unresolvedEntries = unresolvedEntries.filter(entry => retryIds.has(String(entry.id)) && !finalResults.has(String(entry.id)))
-
-            if (unresolvedEntries.length === 0) {
-                break   // safety guard: should not be reachable since unresolvedIds.length===0 check above breaks first
-            }
-
-            const acceptedCount = expectedCount - unresolvedEntries.length
-            const sameTextCount = results.filter(entry => String(entry.translatedText || '') === String(entry.text || '')).length
-            const contaminatedIds = results
-                .filter(entry => SubtitleService.isLikelyContaminatedTranslation(String(entry.text || ''), String(entry.translatedText || '')))
-                .map(entry => String(entry.id))
-            diagnostics.validationFailures++
-            diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...missingIds])).slice(0, 20)
-            diagnostics.contaminatedIds = Array.from(new Set([...diagnostics.contaminatedIds, ...contaminatedIds])).slice(0, 20)
-            const missingSuffix = missingIds.length > 0 ? `，缺失 ID: ${missingIds.join(', ')}` : ''
-            const sameTextSuffix = sameTextCount > 0 ? `，未改动原文: ${sameTextCount} 条(将进入核对)` : ''
-            const contaminationSuffix = contaminatedIds.length > 0 ? `，疑似串条 ID: ${contaminatedIds.join(', ')}` : ''
-            writeTaskLog(
-                taskId,
-                'translating',
-                sameTextCount > 0 ? 'warn' : 'info',
-                '[校验] ' + chunkLabel + ' AI 返回 ' + results.length + '/' + expectedCount + '，有效 ' + acceptedCount + '/' + expectedCount + '，待处理 ' + unresolvedEntries.length + ' 条' + sameTextSuffix + missingSuffix + contaminationSuffix
-            )
-
-            if (acceptedCount === 0) {
-                const sampleIds = results.slice(0, 3).map(entry => `#${entry.id} "${String(entry.text || '').substring(0, 30)}" → "${String(entry.translatedText || '').substring(0, 30)}"`)
-                writeTaskLog(taskId, 'translating', 'warn', `[解析内容] ${chunkLabel} 已匹配全部 ID 但翻译均未通过校验(有效 ${acceptedCount}/${expectedCount})，示例: ${sampleIds.join(' | ')}`)
-
-                const diagLines: string[] = []
-                results.forEach(entry => {
-                    const orig = String(entry.text || '')
-                    const trans = String(entry.translatedText || '')
-                    const empty = !trans
-                    const same = !empty && trans === orig
-                    if (empty || same) {
-                        diagLines.push(`#${entry.id} ${empty ? 'EMPTY' : 'SAME'} orig="${orig}" trans="${trans}"`)
-                    }
-                })
-                if (diagLines.length > 0) {
-                    writeTaskLog(taskId, 'translating', 'error', `[诊断] ${chunkLabel} 全部被拒详情:\n${diagLines.join('\n')}`)
-                }
-
-                console.log(`[REJECTED ALL] taskId=${taskId} chunk=${chunkIndex} attempt=${attempt} entries=${results.length} accepted=0`)
-                results.slice(0, 5).forEach(entry => {
-                    const eid = entry.id
-                    const orig = String(entry.text || '')
-                    const trans = String(entry.translatedText || '')
-                    console.log(`  #${eid} orig="${orig.substring(0, 40)}" | trans="${trans.substring(0, 40)}" | same=${trans === orig} | transTruthy=${!!trans}`)
-                })
-                if (attempt >= 2) {
-                    writeTaskLog(taskId, 'translating', 'warn', '[止损] ' + chunkLabel + ' 连续 ' + (attempt + 1) + ' 次尝试均无有效翻译，停止整块重试并转入更细粒度补译')
-                    break
-                }
-            }
-        } catch (e: any) {
-            if (e instanceof TaskCancelledError) throw e
-            console.error(`[Retry] Task ${taskId} chunk ${chunkIndex} 尝试失败:`, e.message)
-            const detail = String(e?.message || 'unknown')
-            const reason = detail.includes('[条目缺失]') ? '返回缺条' : detail.includes('[解析为空]') ? '空响应/格式异常' : detail.includes('[疑似拒答]') ? '疑似拒答/过滤' : detail.includes('[无有效译文]') ? '无有效译文' : '请求失败'
-
-            if (Array.isArray(e?.partialResults) && e.partialResults.length > 0) {
-                for (const entry of e.partialResults) {
-                    const id = String(entry.id)
-                    if (entry?.translatedText) {
-                        finalResults.set(id, entry)
-                    }
-                }
-
-                const missingIds = (Array.isArray(e?.missingIds) ? e.missingIds : []).map((id: any) => String(id))
-                const expandedRetryIds = new Set(expandRetryEntries(unresolvedEntries, missingIds).map(entry => String(entry.id)))
-                unresolvedEntries = unresolvedEntries.filter(entry => expandedRetryIds.has(String(entry.id)))
-                diagnostics.validationFailures++
-                diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...missingIds])).slice(0, 20)
-
-                writeTaskLog(
-                    taskId,
-                    'translating',
-                    'warn',
-                    `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}；已保留 ${e.partialResults.length} 条有效结果，回炉 ${unresolvedEntries.length} 条（含相邻疑似串条）`
-                )
-                continue
-            }
-
-            writeTaskLog(taskId, 'translating', 'warn', `[重试失败] 块 #${chunkIndex + 1} 第 ${attempt + 1} 次尝试失败（${reason}）：${detail}`)
-        }
-    }
-
-    if (unresolvedEntries.length > 0) {
-        const ids = unresolvedEntries.map(entry => `#${entry.id}`).join(', ')
-        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 重试后仍有 ${unresolvedEntries.length} 条待处理，将回退为原文待人工核对。`)
-        writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} ${unresolvedEntries.length} 条未成功翻译，已回退原文，可在核对页手动处理：${ids}`)
-        for (const entry of unresolvedEntries) {
-            finalResults.set(String(entry.id), { ...entry, translatedText: entry.text })
-        }
-    }
-
-    const stillMissing = chunk.filter(entry => !finalResults.has(String(entry.id)))
-    if (stillMissing.length > 0) {
-        const ids = stillMissing.map(entry => `#${entry.id}`).join(', ')
-        diagnostics.missingIds = Array.from(new Set([...diagnostics.missingIds, ...stillMissing.map(entry => String(entry.id))])).slice(0, 20)
-        diagnostics.fallbackCount = stillMissing.length
-        diagnostics.finalStatus = 'fallback'
-        for (const entry of stillMissing) {
-            finalResults.set(String(entry.id), { ...entry, translatedText: entry.text })
-        }
-        console.warn(`[Task] Task ${taskId} chunk ${chunkIndex}: 仍有 ${stillMissing.length} 条缺失，已回退为原文。`)
-        writeTaskLog(taskId, 'translating', 'warn', `[降级] 块 #${chunkIndex + 1} ${stillMissing.length} 条未成功翻译，已回退原文：${ids}`)
-    } else if (diagnostics.validationFailures > 0 || diagnostics.singleRetryAttempts > 0) {
-        diagnostics.finalStatus = 'partial'
-    }
-
-    return {
-        entries: chunk.map(entry => {
-            const translated = finalResults.get(String(entry.id))
-            if (translated) return translated
-            return { ...entry, translatedText: entry.text }
-        }),
-        diagnostics
-    }
-}
-
-
-function mapReviewStatus(entry: SubtitleEntry, issuesById: Map<string, Array<{ reason: string, severity?: 'soft' | 'hard' }>>) {
-    const issueList = issuesById.get(String(entry.id)) || []
-    const reviewReasons = issueList.map(issue => issue.reason)
-    const lowAsrConfidence = entry.asrConfidence !== undefined && Number(entry.asrConfidence) > 0 && Number(entry.asrConfidence) < 0.6
-    if (lowAsrConfidence && !reviewReasons.includes('low_asr_confidence')) {
-        reviewReasons.push('low_asr_confidence')
-    }
-    const translated = String(entry.translatedText || '')
-    const original = String(entry.text || '')
-    const normalizedTranslated = SubtitleService.normalizeComparisonText(translated)
-    const normalizedOriginal = SubtitleService.normalizeComparisonText(original)
-
-    if (!normalizedTranslated) {
-        return { reviewStatus: 'missing', reviewReasons }
-    }
-    if (issueList.some(issue => issue.reason === 'same_as_source')) {
-        return { reviewStatus: 'fallback_original', reviewReasons }
-    }
-    if (normalizedOriginal && normalizedOriginal === normalizedTranslated) {
-        return { reviewStatus: 'accepted_same', reviewReasons }
-    }
-    if (issueList.length > 0 || lowAsrConfidence) {
-        return { reviewStatus: 'needs_review', reviewReasons }
-    }
-    return { reviewStatus: 'translated', reviewReasons }
-}
-
-function persistReviewEntriesSafe(taskId: string, entries: SubtitleEntry[], issues: Array<{ id: string, reason: string, severity?: 'soft' | 'hard' }>) {
-    try {
-        persistReviewEntries(taskId, entries, issues)
-    } catch (error: any) {
-        console.error(`[Review] 核对记录写入失败: ${error?.message || error}`)
-    }
-}
-
-function persistReviewEntries(taskId: string, entries: SubtitleEntry[], issues: Array<{ id: string, reason: string, severity?: 'soft' | 'hard' }>) {
-    const db = useDb()
-    const issueMap = new Map<string, Array<{ reason: string, severity?: 'soft' | 'hard' }>>()
-    for (const issue of issues) {
-        const list = issueMap.get(String(issue.id)) || []
-        list.push(issue)
-        issueMap.set(String(issue.id), list)
-    }
-
-    const stmt = db.prepare(`
-      INSERT INTO task_review_entries (
-        task_id, subtitle_id, start_time, end_time, original_text, translated_text, final_text, review_status, review_reasons, asr_confidence, quality_score, quality_issues, sort_order, selected, edited, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, datetime('now'), datetime('now'))
-      ON CONFLICT(task_id, subtitle_id) DO UPDATE SET
-        start_time=excluded.start_time,
-        end_time=excluded.end_time,
-        original_text=excluded.original_text,
-        translated_text=excluded.translated_text,
-        final_text=excluded.final_text,
-        review_status=excluded.review_status,
-        review_reasons=excluded.review_reasons,
-        asr_confidence=excluded.asr_confidence,
-        quality_score=excluded.quality_score,
-        quality_issues=excluded.quality_issues,
-        sort_order=excluded.sort_order,
-        updated_at=datetime('now')
-    `)
-
-    entries.forEach((entry, index) => {
-        const review = mapReviewStatus(entry, issueMap)
-        stmt.run(
-            taskId,
-            String(entry.id),
-            String(entry.startTime || ''),
-            String(entry.endTime || ''),
-            String(entry.text || ''),
-            String(entry.translatedText || ''),
-            String(entry.translatedText || entry.text || ''),
-            review.reviewStatus,
-            JSON.stringify(review.reviewReasons || []),
-            entry.asrConfidence ?? null,
-            entry.qualityScore ?? null,
-            JSON.stringify(entry.qualityIssues || []),
-            index
-        )
-    })
-}
-
-
-function analyzeChunkRisk(entries: SubtitleEntry[]): ChunkRiskProfile {
-    const tags = new Set<string>()
-
-    for (const entry of entries) {
-        const text = String(entry.text || '')
-        const normalized = SubtitleService.normalizeSubtitleText(text)
-        const lines = normalized.split('\n').map(line => line.trim()).filter(Boolean)
-
-        if (SubtitleService.isLikelySongLyric(text)) {
-            tags.add('lyrics')
-        }
-        if (lines.length > 0 && lines.every(line => /^[\[(（【].*[\])）】]$/.test(line))) {
-            tags.add('non_dialogue')
-        }
-        if (normalized.includes('__SUBX_FMT_')) {
-            tags.add('formatting_tokens')
-        }
-        if (lines.length >= 2 && lines.some(line => /[\u4e00-\u9fff]/.test(line)) && lines.some(line => /[A-Za-z]/.test(line))) {
-            tags.add('bilingual_source')
-        }
-        if (lines.length >= 3) {
-            tags.add('multi_line_dialogue')
-        }
-        if (normalized.length >= 120) {
-            tags.add('long_text')
-        }
-    }
-
-    const styleHints: string[] = []
-    if (tags.has('lyrics')) styleHints.push('当前块疑似歌词，请保留歌词节奏与换行，不要省略短句，不要把多行歌词合并成一行。')
-    if (tags.has('non_dialogue')) styleHints.push('当前块包含环境音/旁白括号描述，请保留括号结构并进行简洁汉化。')
-    if (tags.has('bilingual_source')) styleHints.push('当前块疑似已含双语源字幕，请只翻译原语言内容，避免重复拼接双语。')
-    if (tags.has('formatting_tokens')) styleHints.push('当前块包含格式占位符，必须严格保留所有 __SUBX_FMT_n__ 占位符及顺序。')
-
-    return {
-        tags: Array.from(tags),
-        stylePromptSuffix: styleHints.length ? styleHints.join('\n') : undefined
-    }
-}
-
-function findExternalSubtitle(videoAbsolutePath: string, rootPath: string, preferredLanguage = ''): string | null {
-    try {
-        const base = basename(videoAbsolutePath).replace(/\.[^.]+$/, '')
-        const entries = readdirSync(dirname(videoAbsolutePath), { withFileTypes: true })
-        const priority = ['.srt', '.ass', '.ssa', '.vtt']
-        const candidates = entries
-            .filter(entry => entry.isFile() && !entry.name.startsWith('.'))
-            .filter(entry => {
-                const ext = entry.name.toLowerCase().match(/\.[^.]+$/)?.[0] || ''
-                return priority.includes(ext) && (entry.name === `${base}${ext}` || entry.name.startsWith(`${base}.`))
-            })
-            .sort((a, b) => {
-                const aLang = preferredLanguage && fileNameMatchesLanguage(a.name, preferredLanguage) ? 0 : 1
-                const bLang = preferredLanguage && fileNameMatchesLanguage(b.name, preferredLanguage) ? 0 : 1
-                const aExt = a.name.toLowerCase().match(/\.[^.]+$/)?.[0] || ''
-                const bExt = b.name.toLowerCase().match(/\.[^.]+$/)?.[0] || ''
-                return aLang - bLang || priority.indexOf(aExt) - priority.indexOf(bExt) || a.name.localeCompare(b.name)
-            })
-        return candidates[0] ? relative(rootPath, join(dirname(videoAbsolutePath), candidates[0].name)).replaceAll('\\', '/') : null
-    } catch {
-        return null
-    }
 }
 
 export const TaskService = {
@@ -732,6 +94,7 @@ export const TaskService = {
     getTask(taskId: string): TranslationTask {
         const db = useDb()
         const task = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId) as any
+        if (!task) throw apiError(404, '任务不存在')
         return {
             ...task,
             taskId: task.task_id,
@@ -771,10 +134,13 @@ export const TaskService = {
 
     async updateStatus(taskId: string, status: TaskStatus, progress: number, data: any = {}) {
         const db = useDb()
-        const existing = db.prepare('SELECT status, progress, total_chunks, step_progress, step_message FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, total_chunks?: number, step_progress?: number, step_message?: string | null } | undefined
+        const existing = db.prepare('SELECT status, progress, total_chunks, step_progress, step_message, error FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, total_chunks?: number, step_progress?: number, step_message?: string | null, error?: string | null } | undefined
         const currentStatus = String(existing?.status || '')
 
-        if ((currentStatus === 'cancelled' && status !== 'cancelled') || (currentStatus === 'review' && status !== 'review')) {
+        if ((currentStatus === 'cancelled' || currentStatus === 'done' || currentStatus === 'error') && status !== currentStatus) {
+            return
+        }
+        if (currentStatus === 'review' && status !== 'review' && status !== 'done') {
             return
         }
 
@@ -793,8 +159,12 @@ export const TaskService = {
             ? (data.stepMessage === null ? null : String(data.stepMessage))
             : (sameStatus ? (existing?.step_message ?? null) : null)
 
-        const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, done_chunks = COALESCE(?, done_chunks), step_progress = ?, step_message = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
-        stmt.run(status, progress, completedChunks, stepProgress, stepMessage, taskId)
+        const nextError = data.error !== undefined
+            ? (data.error == null ? null : String(data.error))
+            : (existing?.error ?? null)
+        const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, done_chunks = COALESCE(?, done_chunks), step_progress = ?, step_message = ?, error = ?, updated_at = datetime(\'now\') WHERE task_id = ? AND status = ?')
+        const info = stmt.run(status, progress, completedChunks, stepProgress, stepMessage, nextError, taskId, currentStatus)
+        if (Number(info?.changes || 0) === 0) return
 
         const payload: any = { taskId, step: status, progress, ...data, stepProgress, stepMessage }
 
@@ -828,103 +198,34 @@ export const TaskService = {
         let audioPath = ''
         let keepAsrAudio = false
         let taskSucceeded = false
+        let releaseOutputLocks: (() => void) | null = null
         let runtimeConfig: { apiKey: string, baseUrl?: string } | null = openaiConfig || null
 
         try {
             const task = this.getTask(taskId)
             runtimeConfig = runtimeConfig || await ConfigService.getConfig()
             taskForCleanup = task
-            const root = await getMediaRoot(task.rootId)
-
-            if (!existsSync(tempDir)) {
-                mkdirSync(tempDir, { recursive: true })
-            }
-
             const db = useDb()
-            if (task.sourceType === 'auto') {
-                await this.updateStatus(taskId, 'probing', 5, { stepProgress: 0, stepMessage: '正在分析媒体字幕与音频轨道...', log: '正在分析媒体字幕与音频轨道...' })
-                const media = await VideoService.probeMedia(task.filePath, task.rootId)
-                const autoConfig = await ConfigService.getConfig()
-                const trackPolicy = resolveTrackPolicy(task.trackPolicy)
-                const textTracks = media.subtitleTracks.filter(track => track.isSupported)
-                const bitmapTracks = media.subtitleTracks.filter(track => ['hdmv_pgs_subtitle', 'pgssub', 'dvd_subtitle', 'dvdsub', 'dvb_subtitle', 'xsub'].includes(String(track.codec || '').toLowerCase()))
-                const subtitleTrack = selectTrackForPolicy(textTracks, trackPolicy, 'subtitle')
-                const bitmapTrack = selectTrackForPolicy(bitmapTracks, trackPolicy, 'subtitle')
-                if (subtitleTrack) {
-                    task.sourceType = 'embedded'
-                    task.trackIndex = subtitleTrack.index
-                } else if (bitmapTrack && autoConfig.ocrEnabled) {
-                    task.sourceType = 'ocr'
-                    task.trackIndex = bitmapTrack.index
-                } else {
-                    const videoAbsolute = await resolveMediaPath(task.filePath, task.rootId)
-                    const externalSubtitle = findExternalSubtitle(videoAbsolute, root.path, trackPolicy.subtitleLanguage)
-                    if (externalSubtitle) {
-                        task.sourceType = 'external'
-                        task.sourceSubtitlePath = externalSubtitle
-                        task.trackIndex = 0
-                    } else {
-                        if (!trackPolicy.fallbackToAsr) {
-                            throw new Error(trackPolicy.allowForcedSubtitle
-                                ? '未发现可用的文本字幕、外挂字幕或已启用的图像字幕，且已关闭自动语音识别'
-                                : '未发现可用的非强制字幕轨道，且已关闭自动语音识别。可尝试允许强制字幕轨或启用 ASR')
-                        }
-                        const audioTrack = selectTrackForPolicy(media.audioTracks, trackPolicy, 'audio')
-                        if (!audioTrack) {
-                            throw new Error(bitmapTrack
-                                ? '发现图像字幕但 OCR 未启用，且没有可用音频轨道'
-                                : '未发现可用的文本字幕轨道或音频轨道')
-                        }
-                        task.sourceType = 'asr'
-                        task.trackIndex = audioTrack.index
-                    }
-                }
-                db.prepare('UPDATE tasks SET source_type = ?, source_subtitle_path = ?, track_index = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
-                    .run(task.sourceType, task.sourceSubtitlePath || null, task.trackIndex, taskId)
-                const selectedTrack = media.subtitleTracks.find(track => track.index === task.trackIndex)
-                if (selectedTrack) {
-                    writeTaskLog(taskId, 'probing', 'info', `已选择字幕轨 #${selectedTrack.index} ${selectedTrack.codec} ${selectedTrack.language || 'und'}${selectedTrack.isForced ? ' [强制]' : selectedTrack.isDefault ? ' [默认]' : ''}`)
-                } else if (task.sourceType === 'asr') {
-                    const selectedAudio = media.audioTracks.find(track => track.index === task.trackIndex)
-                    if (selectedAudio) {
-                        writeTaskLog(taskId, 'probing', 'info', `已选择音频轨 #${selectedAudio.index} ${selectedAudio.codec} ${selectedAudio.language || 'und'}${selectedAudio.isDefault ? ' [默认]' : ''}`)
-                    }
-                }
-                if (trackPolicy.subtitleLanguage) {
-                    writeTaskLog(taskId, 'probing', 'info', `字幕语言优先：${trackPolicy.subtitleLanguage}`)
-                }
-                if (trackPolicy.audioLanguage) {
-                    writeTaskLog(taskId, 'probing', 'info', `音轨语言优先：${trackPolicy.audioLanguage}`)
-                }
-                await this.updateStatus(taskId, 'probing', 8, {
-                    stepProgress: 100,
-                    stepMessage: task.sourceType === 'asr'
-                        ? '未发现文本字幕，将使用语音识别。'
-                        : task.sourceType === 'ocr'
-                            ? '发现图像字幕，将使用 OCR 识别。'
-                            : task.sourceType === 'external'
-                                ? '发现外挂字幕，将直接使用外挂字幕。'
-                                : '发现文本字幕，将直接提取字幕。',
-                    log: task.sourceType === 'asr'
-                        ? '未发现文本字幕，将使用语音识别。'
-                        : task.sourceType === 'ocr'
-                            ? '发现图像字幕，将使用 OCR 识别。'
-                            : task.sourceType === 'external'
-                                ? '发现外挂字幕，将直接使用外挂字幕。'
-                                : '发现文本字幕，将直接提取字幕。'
-                })
-            }
-
-            srtPath = task.sourceType === 'external'
-                ? await resolveMediaPath(task.sourceSubtitlePath || task.filePath, task.rootId)
-                : task.sourceType === 'asr'
-                    ? ''
-                    : join(tempDir, `${taskId}.srt`)
-            const outputExt = task.subtitleFormat === 'both' ? 'ass' : (task.subtitleFormat || 'srt')
-            const outputSuffix = task.outputMode === 'original' ? 'original' : task.targetLanguage
-            const inputPath = await resolveMediaPath(task.filePath, task.rootId)
-            const outputBaseName = deriveOutputBaseName(task.filePath, task.sourceType)
             const config = await ConfigService.getConfig()
+            const prepared = await prepareTaskSource({
+                taskId,
+                task,
+                config,
+                tempDir,
+                signal,
+                updateStatus: (id, status, progress, data) => this.updateStatus(id, status, progress, data)
+            })
+            srtPath = prepared.srtPath
+            audioPath = prepared.audioPath
+            let allEntries = prepared.allEntries
+            const inputPath = prepared.inputPath
+
+            const outputExt = task.subtitleFormat === 'both' ? 'ass' : (task.subtitleFormat || 'srt')
+            const outputSuffix = task.outputMode === 'original' ? 'original' : String(task.targetLanguage || '')
+            if (!['srt', 'ass'].includes(outputExt) || !isSafeOutputSuffix(outputSuffix)) {
+                throw new Error('输出格式或目标语言不合法')
+            }
+            const outputBaseName = deriveOutputBaseName(task.filePath, task.sourceType)
             const embyCompatible = config.embyCompatibleOutput === true && task.sourceType !== 'external'
             const outputPath = embyCompatible
                 ? join(dirname(inputPath), `${outputBaseName}.${outputExt}`)
@@ -940,144 +241,11 @@ export const TaskService = {
             if (plannedOutputPaths.some(candidate => protectedSourcePaths.includes(candidate))) {
                 throw new Error('输出路径与源字幕文件相同，请更改目标语言或输出模式')
             }
-            keepAsrAudio = Boolean(config.asrKeepAudio)
-            let allEntries: SubtitleEntry[] = []
-
-            assertTaskNotCancelled(taskId)
-            if (task.sourceType === 'ocr') {
-                if (!config.ocrEnabled) {
-                    throw new Error('OCR 未启用，请先在设置中开启图像字幕 OCR 并配置 OCR 服务地址')
-                }
-                await this.updateStatus(taskId, 'ocr', 12, { stepProgress: 0, stepMessage: '正在识别图像字幕（PGS/VobSub/DVD）...', log: '正在识别图像字幕（PGS/VobSub/DVD）...' })
-                const ocrResult = await OcrService.transcribe(inputPath, {
-                    baseUrl: config.ocrBaseUrl || process.env.OCR_INTERNAL_URL || 'http://127.0.0.1:8001',
-                    language: config.ocrLanguage || 'en',
-                    apiKey: config.ocrApiKey || '',
-                    trackIndex: task.trackIndex ?? 0,
-                    engine: config.ocrEngine || 'auto',
-                    minConfidence: config.ocrMinConfidence ?? 25,
-                    maxSeconds: config.ocrMaxSeconds,
-                    chunkSeconds: config.ocrChunkSeconds,
-                    pgsripTimeoutSeconds: config.ocrPgsripTimeoutSeconds,
-                    ffmpegTimeoutSeconds: config.ocrFfmpegTimeoutSeconds,
-                    chunkRetries: config.ocrChunkRetries,
-                    resumeTtlHours: config.ocrResumeTtlHours,
-                    idleTimeoutMs: config.ocrJobIdleTimeoutMs,
-                    absoluteTimeoutMs: config.ocrJobAbsoluteTimeoutMs,
-                    onProgress: (progress, message) => {
-                        const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
-                        const mapped = 12 + Math.round(stepProgress * 0.08)
-                        void this.updateStatus(taskId, 'ocr', mapped, { stepProgress, stepMessage: message, currentText: message }).catch(error => console.error('[Task] Failed to update OCR progress', error))
-                    }
-                }, signal)
-                const persisted = AsrService.persistResult(taskId, ocrResult)
-                allEntries = AsrService.toSubtitleEntries(ocrResult)
-                if (allEntries.length === 0) {
-                    throw new Error('OCR 未生成有效字幕')
-                }
-                if (ocrResult.diagnostics) {
-                    const level = ocrResult.diagnostics.pgsError ? 'warn' : 'info'
-                    writeTaskLog(taskId, 'ocr', level, `[OCR] ${JSON.stringify(ocrResult.diagnostics)}`, 'system')
-                }
-                task.sourceLanguage = ocrResult.language
-                task.asrRunId = persisted.runId
-                task.asrConfidence = persisted.confidence
-                db.prepare('UPDATE tasks SET source_lang = ?, asr_run_id = ?, asr_confidence = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
-                    .run(ocrResult.language, persisted.runId, persisted.confidence, taskId)
-                await this.updateStatus(taskId, 'parsing', 22, {
-                    stepProgress: 100,
-                    stepMessage: `OCR 完成：${allEntries.length} 条`,
-                    log: `OCR 完成：${allEntries.length} 条`
-                })
-            } else if (task.sourceType === 'asr') {
-                if (!config.asrEnabled) {
-                    throw new Error('语音识别未启用，请先在设置中开启语音识别并配置 ASR 服务地址')
-                }
-                await this.updateStatus(taskId, 'extracting_audio', 8, {
-                    stepProgress: 0,
-                    stepMessage: '正在从视频中提取音频...',
-                    log: '正在从视频中提取音频...'
-                })
-                audioPath = await extractAudioCached(
-                    task.filePath,
-                    task.trackIndex ?? 0,
-                    task.rootId,
-                    (progress, message) => {
-                        const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
-                        void this.updateStatus(taskId, 'extracting_audio', 8 + Math.round(stepProgress * 0.08), {
-                            stepProgress,
-                            stepMessage: message,
-                            currentText: message
-                        }).catch(error => console.error('[Task] Failed to update audio extraction progress', error))
-                    }
-                )
-                acquireAudioLease(audioPath)
-                await this.updateStatus(taskId, 'transcribing', 16, {
-                    stepProgress: 0,
-                    stepMessage: '音频已就绪，正在启动语音识别...',
-                    currentText: '音频已就绪，正在启动语音识别...',
-                    log: '正在使用本地语音识别生成字幕...'
-                })
-
-                const asrResult = await AsrService.transcribe(audioPath, {
-                    baseUrl: config.asrBaseUrl || process.env.ASR_INTERNAL_URL || 'http://127.0.0.1:8000',
-                    apiKey: config.asrApiKey,
-                    model: config.asrModel || 'small',
-                    device: config.asrDevice || 'auto',
-                    computeType: config.asrComputeType || 'int8',
-                    uploadTimeoutMs: config.asrUploadTimeoutMs,
-                    pollTimeoutMs: config.asrPollTimeoutMs,
-                    jobIdleTimeoutMs: config.asrJobIdleTimeoutMs,
-                    jobAbsoluteTimeoutMs: config.asrJobAbsoluteTimeoutMs,
-                    language: config.asrLanguage || 'auto',
-                    vad: config.asrVad !== false,
-                    wordTimestamps: config.asrWordTimestamps !== false,
-                    engine: (config.asrEngine || 'auto') as any,
-                    preprocess: (config.asrPreprocess || 'off') as any,
-                    diarize: config.asrDiarization === true,
-                    cloudEnabled: config.asrCloudEnabled === true,
-                    cloudBaseUrl: config.asrCloudBaseUrl || 'https://api.openai.com/v1',
-                    cloudApiKey: config.asrCloudApiKey || '',
-                    cloudModel: config.asrCloudModel || 'whisper-1',
-                    cloudFallback: config.asrCloudFallback !== false,
-                    onProgress: (progress, message) => {
-                        const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
-                        void this.updateStatus(taskId, 'transcribing', 16 + Math.round(stepProgress * 0.12), {
-                            stepProgress,
-                            stepMessage: message,
-                            currentText: message
-                        }).catch(error => console.error('[Task] Failed to update ASR progress', error))
-                    }
-                }, signal)
-                const persisted = AsrService.persistResult(taskId, asrResult)
-                allEntries = AsrService.toSubtitleEntries(asrResult)
-                if (allEntries.length === 0) {
-                    throw new Error('语音识别未生成有效字幕')
-                }
-                task.sourceLanguage = asrResult.language
-                task.asrRunId = persisted.runId
-                task.asrConfidence = persisted.confidence
-                db.prepare('UPDATE tasks SET source_lang = ?, asr_run_id = ?, asr_confidence = ?, updated_at = datetime(\'now\') WHERE task_id = ?')
-                    .run(asrResult.language, persisted.runId, persisted.confidence, taskId)
-                await this.updateStatus(taskId, 'parsing', 28, {
-                    stepProgress: 100,
-                    stepMessage: `语音识别完成：${allEntries.length} 条`,
-                    log: `语音识别完成：语言 ${asrResult.language}，${allEntries.length} 条，平均置信度 ${(persisted.confidence * 100).toFixed(1)}%`
-                })
-            } else {
-                await this.updateStatus(taskId, 'extracting', 10, { stepProgress: 0, stepMessage: '正在从原视频中提取字幕流...', log: '正在从原视频中提取字幕流...' })
-                if (task.sourceType === 'embedded') {
-                    assertTaskNotCancelled(taskId)
-                    await VideoService.extractSubtitle(task.filePath, task.trackIndex!, srtPath, task.rootId)
-                    await this.updateStatus(taskId, 'extracting', 15, { stepProgress: 100, stepMessage: '字幕提取成功', log: '字幕提取成功，保存至临时文件。' })
-                } else {
-                    await this.updateStatus(taskId, 'extracting', 15, { stepProgress: 100, stepMessage: '使用外部字幕文件', log: '使用外部字幕文件。' })
-                }
-
-                assertTaskNotCancelled(taskId)
-                await this.updateStatus(taskId, 'parsing', 20, { stepProgress: 0, stepMessage: '正在解析 SRT 并进行智能分块...', log: '正在解析 SRT 并进行智能分块...' })
-                allEntries = await SubtitleService.parseSubtitle(srtPath)
+            if (!isPathInside(prepared.rootPath, outputPath) || (embyVariantPath && !isPathInside(prepared.rootPath, embyVariantPath))) {
+                throw new Error('输出路径超出媒体库范围')
             }
+            releaseOutputLocks = acquireOutputLocks([outputPath, embyVariantPath].filter(Boolean))
+            keepAsrAudio = Boolean(config.asrKeepAudio)
 
             const chunkSize = Math.min(50000, Math.max(500, config.chunkSize || 5000))
             const subtitleFormat = task.subtitleFormat || config.subtitleFormat || 'srt'
@@ -1116,7 +284,7 @@ export const TaskService = {
                 if (embyVariantPath) {
                     await SubtitleService.writeSubtitle(originalEntries, embyVariantPath, 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
                 }
-                persistReviewEntriesSafe(taskId, originalEntries, [])
+                persistReviewEntries(taskId, originalEntries, [])
                 await this.updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}` })
                 db.prepare('UPDATE tasks SET output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(savedPath, taskId)
                 taskSucceeded = true
@@ -1124,303 +292,40 @@ export const TaskService = {
                 return
             }
 
-            await this.updateStatus(taskId, 'translating', 30, {
+            const translated = await translateSubtitles({
+                taskId,
+                task,
+                config,
+                runtimeConfig: runtimeConfig!,
+                allEntries,
+                chunks,
+                chunkOffsets,
                 totalChunks,
-                completedChunks: 0,
-                stepProgress: 0,
-                stepMessage: '正在准备翻译...'
+                signal,
+                updateStatus: (id, status, progress, data) => this.updateStatus(id, status, progress, data)
             })
 
-            const provider = createProvider({
-                type: normalizeProviderType((config as any).providerType),
-                apiKey: runtimeConfig.apiKey,
-                baseUrl: runtimeConfig.baseUrl,
-                model: task.model
+            assertTaskNotCancelled(taskId)
+            const savedPath = await finalizeTaskOutput({
+                taskId,
+                task,
+                config,
+                runtimeConfig: runtimeConfig!,
+                translatedEntries: translated.translatedEntries,
+                outputPath,
+                embyVariantPath,
+                srtPath,
+                subtitleFormat,
+                subtitleStylePreset,
+                bilingualLayout,
+                totalChunks,
+                stylePrompt: translated.stylePrompt,
+                translationContext: translated.translationContext,
+                fallbackCount: translated.fallbackCount,
+                signal,
+                updateStatus: (id, status, progress, data) => this.updateStatus(id, status, progress, data)
             })
-            // Chunks execute serially so the rolling context always comes from the previous chunk.
-            const limit = pLimit(1)
-            const maxRetries = config.maxRetries || 3
-
-            const glossary = config.glossary || {}
-
-            const allStylePresets = [...STYLE_PRESETS, ...(Array.isArray(config.customStylePresets) ? config.customStylePresets : [])]
-            const stylePresetConfig = allStylePresets.find(s => s.id === task.stylePreset)
-            const stylePrompt = String(task.stylePrompt || stylePresetConfig?.prompt || '')
-            const translationContext: TranslationContext = {
-                title: task.contentTitle,
-                background: task.contentBackground,
-                instructions: task.customInstructions
-            }
-            if (stylePrompt) {
-                await this.updateStatus(taskId, 'translating', 30, { log: `使用翻译风格: ${stylePresetConfig?.name || task.stylePreset}` })
-            }
-            if (translationContext.title || translationContext.background || translationContext.instructions) {
-                await this.updateStatus(taskId, 'translating', 30, { log: '已附加片名/背景/额外要求到翻译上下文。' })
-            }
-            if (task.forceRetranslate) {
-                await this.updateStatus(taskId, 'translating', 30, { log: '已启用重新翻译：本次任务将跳过本地缓存。' })
-            }
-
-            const translatedMap = new Map<string, SubtitleEntry>()
-            const completedChunksPerChunk = new Map<number, number>()
-            let globalCompletedChunks = 0
-
-            const updateGlobalProgress = () => {
-                globalCompletedChunks = 0
-                for (const count of completedChunksPerChunk.values()) {
-                    globalCompletedChunks += count > 0 ? 1 : 0
-                }
-                const stepProgress = totalChunks > 0 ? Math.floor((globalCompletedChunks / totalChunks) * 100) : 100
-                const progress = 30 + Math.floor(stepProgress * 0.6)
-                this.updateStatus(taskId, 'translating', progress, {
-                    totalChunks,
-                    completedChunks: globalCompletedChunks,
-                    stepProgress,
-                    stepMessage: `已翻译 ${globalCompletedChunks}/${totalChunks} 个文本块`,
-                    currentText: `翻译进度: ${globalCompletedChunks}/${totalChunks}`
-                }).catch(error => console.error('[Task] Failed to update translation progress', error))
-            }
-
-            const promises = chunks.map((chunk, index) => limit(async () => {
-                assertTaskNotCancelled(taskId)
-                const chunkStart = chunkOffsets[index] ?? 0
-                const chunkEnd = chunkStart + chunk.length
-                const previousContext = allEntries
-                    .slice(Math.max(0, chunkStart - TRANSLATION_CONTEXT_WINDOW), chunkStart)
-                    .map(entry => translatedMap.get(String(entry.id)) || entry)
-                const nextContext = allEntries.slice(chunkEnd, chunkEnd + TRANSLATION_CONTEXT_WINDOW)
-
-                const uncachedEntries: SubtitleEntry[] = []
-                const cachedResults = new Map<string, string>()
-                const nonVerbalResults = new Map<string, string>()
-
-                const shouldUseCache = !task.forceRetranslate
-                const effectiveStylePromptForCache = stylePrompt
-                const contextWindowKey = [...previousContext, ...nextContext].map(entry => String(entry.text || '')).join('\u0001')
-                const contextCacheKey = [task.contentTitle, task.contentBackground, task.customInstructions, contextWindowKey].filter(Boolean).join('|')
-                for (const entry of chunk) {
-                    if (SubtitleService.isNonVerbal(entry.text)) {
-                        nonVerbalResults.set(String(entry.id), entry.text)
-                        continue
-                    }
-
-                    const sourceText = entry.text
-                    if (!shouldUseCache) {
-                        uncachedEntries.push(entry)
-                        continue
-                    }
-                    const cacheHash = SubtitleService.computeCacheHash(sourceText, task.model, task.targetLanguage, { glossary, stylePrompt: effectiveStylePromptForCache, promptVersion: TRANSLATION_PROMPT_VERSION, outputMode: task.outputMode, context: contextCacheKey })
-                    const cached = SubtitleService.getCachedTranslation(cacheHash)
-                    if (cached) {
-                        cachedResults.set(String(entry.id), cached)
-                    } else {
-                        uncachedEntries.push(entry)
-                    }
-                }
-
-                if (cachedResults.size > 0 || nonVerbalResults.size > 0) {
-                    console.log(`[Cache] Chunk ${index}: ${cachedResults.size} from cache, ${nonVerbalResults.size} non-verbal skipped, ${uncachedEntries.length} to translate`)
-                }
-
-                let translatedChunk: SubtitleEntry[]
-                const diagnosticsCollection: ChunkDiagnostics[] = []
-
-                if (uncachedEntries.length === 0) {
-                    translatedChunk = chunk.map(entry => {
-                        const cachedText = cachedResults.get(String(entry.id))
-                        if (cachedText) {
-                            return { ...entry, translatedText: cachedText }
-                        }
-                        const nonVerbalText = nonVerbalResults.get(String(entry.id))
-                        if (nonVerbalText) {
-                            return { ...entry, translatedText: nonVerbalText }
-                        }
-                        return entry
-                    })
-                } else {
-                    const chunkRisk = analyzeChunkRisk(uncachedEntries)
-                    const effectiveStylePrompt = [stylePrompt, chunkRisk.stylePromptSuffix].filter(Boolean).join('\n\n')
-                    const idMapping = new Map<string, string>()
-                    const remappedChunk: SubtitleEntry[] = uncachedEntries.map((entry, i) => {
-                        const sequentialId = String(i + 1)
-                        idMapping.set(sequentialId, String(entry.id))
-                        return { ...entry, id: sequentialId }
-                    })
-
-                    const chunkResult = await translateChunkWithRetry(
-                        provider, remappedChunk, task.targetLanguage, glossary,
-                        previousContext, task.model, taskId, index,
-                        effectiveStylePrompt, maxRetries,
-                        undefined,
-                        (config.translationMode === 'stream') && (config.streamUsage || false),
-                        config.translationMode === 'stream',
-                        '块 #' + (index + 1),
-                        signal,
-                        translationContext,
-                        nextContext
-                    )
-
-                    diagnosticsCollection.push(chunkResult.diagnostics)
-                    const allowCache = chunkResult.diagnostics.validationFailures === 0
-                        && chunkResult.diagnostics.singleRetryAttempts === 0
-                        && chunkResult.diagnostics.fallbackCount === 0
-
-                    const aiResultByOriginalId = new Map<string, SubtitleEntry>()
-                    for (const entry of chunkResult.entries) {
-                        const originalId = idMapping.get(String(entry.id))
-                        if (!originalId) continue
-                        const originalEntry = uncachedEntries.find(e => String(e.id) === originalId)
-                        if (!originalEntry) continue
-
-                        const restoredEntry: SubtitleEntry = {
-                            ...originalEntry,
-                            id: originalId,
-                            translatedText: entry.translatedText
-                        }
-                        aiResultByOriginalId.set(originalId, restoredEntry)
-
-                        if (allowCache && entry.translatedText
-                            && entry.translatedText !== originalEntry.text
-                            && !SubtitleService.isNonVerbal(originalEntry.text)
-                        ) {
-                            const cacheHash = SubtitleService.computeCacheHash(originalEntry.text, task.model, task.targetLanguage, { glossary, stylePrompt, promptVersion: TRANSLATION_PROMPT_VERSION, outputMode: task.outputMode, context: contextCacheKey })
-                            SubtitleService.setCachedTranslation(cacheHash, originalEntry.text, entry.translatedText, task.model, task.targetLanguage)
-                        }
-                    }
-
-                    try {
-                        const responseRow = db.prepare('SELECT id, response_meta FROM task_responses WHERE task_id = ? AND chunk_index = ? ORDER BY id DESC LIMIT 1').get(taskId, index) as { id?: number, response_meta?: string } | undefined
-                        if (responseRow?.id) {
-                            const currentMeta = responseRow.response_meta ? JSON.parse(String(responseRow.response_meta)) : {}
-                            const combinedDiagnostics = diagnosticsCollection.length <= 1
-                                ? diagnosticsCollection[0]
-                                : {
-                                    chunkIndex: index,
-                                    initialSize: uncachedEntries.length,
-                                    retryAttempts: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.retryAttempts || 0), 0),
-                                    validationFailures: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.validationFailures || 0), 0),
-                                    singleRetryAttempts: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.singleRetryAttempts || 0), 0),
-                                    singleRetrySuccesses: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.singleRetrySuccesses || 0), 0),
-                                    singleRetryFailures: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.singleRetryFailures || 0), 0),
-                                    fallbackCount: diagnosticsCollection.reduce((sum, item) => sum + Number(item?.fallbackCount || 0), 0),
-                                    missingIds: Array.from(new Set(diagnosticsCollection.flatMap(item => item?.missingIds || []))).slice(0, 20),
-                                    contaminatedIds: Array.from(new Set(diagnosticsCollection.flatMap(item => item?.contaminatedIds || []))).slice(0, 20),
-                                    reviewIds: Array.from(new Set(diagnosticsCollection.flatMap(item => item?.reviewIds || []))).slice(0, 50),
-                                    finalStatus: diagnosticsCollection.some(item => item?.finalStatus === 'review')
-                                        ? 'review'
-                                        : diagnosticsCollection.some(item => item?.finalStatus === 'fallback')
-                                            ? 'fallback'
-                                            : diagnosticsCollection.some(item => item?.finalStatus === 'partial')
-                                                ? 'partial'
-                                                : 'ok'
-                                }
-                            db.prepare('UPDATE task_responses SET response_meta = ? WHERE id = ?').run(JSON.stringify({ ...currentMeta, chunkRisk, chunkDiagnostics: combinedDiagnostics }), responseRow.id)
-                        }
-                    } catch { /* ignore diagnostics patch failure */ }
-
-                    translatedChunk = chunk.map(entry => {
-                        const cachedText = cachedResults.get(String(entry.id))
-                        if (cachedText) {
-                            return { ...entry, translatedText: cachedText }
-                        }
-                        const nonVerbalText = nonVerbalResults.get(String(entry.id))
-                        if (nonVerbalText) {
-                            return { ...entry, translatedText: nonVerbalText }
-                        }
-                        const aiResult = aiResultByOriginalId.get(String(entry.id))
-                        return aiResult || entry
-                    })
-                }
-
-                completedChunksPerChunk.set(index, translatedChunk.length)
-                for (const entry of translatedChunk) {
-                    translatedMap.set(String(entry.id), entry)
-                }
-
-                updateGlobalProgress()
-
-                this.updateStatus(taskId, 'translating', 30 + Math.floor((globalCompletedChunks / totalChunks) * 60), {
-                    totalChunks,
-                    completedChunks: globalCompletedChunks,
-                    log: `[AI] 块 #${index + 1} 翻译完成 (${globalCompletedChunks}/${totalChunks})`
-                }).catch(error => console.error('[Task] Failed to update chunk progress', error))
-            }))
-
-            await Promise.all(promises)
-
-            assertTaskNotCancelled(taskId)
-            await this.updateStatus(taskId, 'exporting', 90, { stepProgress: 0, stepMessage: '正在合成并保存最终字幕文件...', log: '正在合成并保存最终字幕文件...' })
-            let translatedEntries = Array.from(translatedMap.values())
-            translatedEntries.sort((a, b) => Number(a.id) - Number(b.id))
-
-            if ((task.outputMode as string) !== 'original') {
-                const repaired = SubtitleService.repairTranslatedEntries(
-                    translatedEntries,
-                    task.targetLanguage,
-                    task.outputMode as 'translated' | 'bilingual' | 'original'
-                )
-                translatedEntries = repaired.entries
-
-                if (repaired.repaired > 0) {
-                    const repairSummary = Object.entries(repaired.issueCounts)
-                        .map(([issueReason, count]) => issueReason + ':' + count)
-                        .join(', ')
-                    writeTaskLog(taskId, 'exporting', repaired.fallbacked > 0 ? 'warn' : 'info', '[修复] 已自动修正 ' + repaired.repaired + ' 条字幕（' + (repairSummary || 'no-details') + '）')
-                }
-
-                const issues = SubtitleService.validateTranslatedEntries(translatedEntries, task.targetLanguage)
-                let allIssues: Array<{ id: string, reason: string, severity?: 'soft' | 'hard' }> = issues
-
-                if (config.qualityCheckEnabled === true && config.qualityCheckModel && config.qualityCheckModel !== task.model) {
-                    try {
-                        await this.updateStatus(taskId, 'translating', 87, { log: `正在进行双模型质量校验：${config.qualityCheckModel}` })
-                        const quality = await QualityService.evaluate(taskId, translatedEntries, {
-                            providerType: String((config as any).providerType || 'openai-compatible'),
-                            apiKey: runtimeConfig.apiKey,
-                            baseUrl: runtimeConfig.baseUrl,
-                            model: config.qualityCheckModel,
-                            targetLanguage: task.targetLanguage,
-                            threshold: Number(config.qualityScoreThreshold ?? 0.7),
-                            maxEntries: Number(config.qualityCheckMaxEntries ?? 200),
-                            stylePrompt: stylePrompt,
-                            context: translationContext
-                        }, signal)
-                        for (const entry of translatedEntries) {
-                            const score = quality.scores.get(String(entry.id))
-                            if (score) {
-                                entry.qualityScore = score.score
-                                entry.qualityIssues = score.issues
-                            }
-                        }
-                        allIssues = [...allIssues, ...quality.issues]
-                        writeTaskLog(taskId, 'exporting', quality.issues.length ? 'warn' : 'info', `[质量] 双模型校验 ${quality.checked} 条，平均评分 ${(quality.avgScore * 100).toFixed(1)}，低于阈值 ${quality.issues.length} 条`)
-                    } catch (qualityError: any) {
-                        writeTaskLog(taskId, 'exporting', 'warn', `[质量] 双模型校验失败，已跳过：${qualityError?.message || qualityError}`)
-                    }
-                }
-
-                if (allIssues.length > 0) {
-                    const preview = allIssues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
-                    persistReviewEntriesSafe(taskId, translatedEntries, allIssues)
-                    writeTaskLog(taskId, 'exporting', 'warn', `[核对] 检测到 ${allIssues.length} 条字幕需注意：${preview}`)
-                } else {
-                    persistReviewEntriesSafe(taskId, translatedEntries, [])
-                }
-            }
-
-            assertTaskNotCancelled(taskId)
-            const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
-            if (embyVariantPath) {
-                await SubtitleService.writeSubtitle(translatedEntries, embyVariantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
-            }
-            await this.updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}${embyVariantPath ? '（SubX/ 变体已同步）' : ''}` })
-
-            TranslationService.cleanupPartialFiles(taskId, totalChunks)
-
-            db.prepare('UPDATE tasks SET output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(savedPath, taskId)
             taskSucceeded = true
-            await this.updateStatus(taskId, 'done', 100, { stepProgress: 100, stepMessage: '任务完成' })
-            console.log(`[Task] 完成任务: ${taskId} 输出: ${savedPath}`)
 
         } catch (e: any) {
             if (e instanceof TaskCancelledError || isTaskCancelled(taskId)) {
@@ -1430,7 +335,6 @@ export const TaskService = {
                     log: '任务已取消，后台执行已停止。',
                     level: 'warn'
                 })
-                useDb().prepare("UPDATE tasks SET status = 'cancelled', error = ?, updated_at = datetime('now') WHERE task_id = ?").run('用户取消任务', taskId)
                 return
             }
 
@@ -1454,8 +358,8 @@ export const TaskService = {
                 stepMessage: classified.summary,
                 log: `!!! 任务失败: ${classified.summary}${e.stack ? '\n堆栈信息: ' + e.stack.split('\n').slice(0, 3).join('\n') : ''}`
             })
-            useDb().prepare('UPDATE tasks SET status = \'error\', error = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(`${classified.summary} (${message})`, taskId)
         } finally {
+            releaseOutputLocks?.()
             cancelledTaskIds.delete(taskId)
             taskAbortControllers.delete(taskId)
             unmarkTaskActive(taskId)
@@ -1478,3 +382,8 @@ export const TaskService = {
         }
     }
 }
+
+export const globalTaskQueue = new TaskQueue({
+  getTask: (taskId) => TaskService.getTask(taskId),
+  process: (taskId, config) => TaskService.process(taskId, config)
+})

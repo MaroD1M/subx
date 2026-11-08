@@ -24,6 +24,22 @@ export interface MediaProbeInfo {
     audioTracks: TrackInfo[]
 }
 
+const VIDEO_EXTRACT_TIMEOUT_MS = 2 * 60 * 60 * 1000
+
+function guardMediaCommand(command: any, label: string, reject: (error: Error) => void) {
+    let settled = false
+    const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        try { command.kill('SIGKILL') } catch { /* ignore kill failure */ }
+        reject(new Error(`${label}超时`))
+    }, VIDEO_EXTRACT_TIMEOUT_MS)
+    return () => {
+        settled = true
+        clearTimeout(timer)
+    }
+}
+
 export const VideoService = {
     /**
      * Probe media streams for subtitles and audio tracks.
@@ -89,11 +105,13 @@ export const VideoService = {
         const fullPath = await resolveMediaPath(videoFilePath, rootId)
 
         return new Promise((resolve, reject) => {
-            ffmpeg(fullPath)
+            const command = ffmpeg(fullPath)
                 .outputOptions([`-map 0:${trackIndex}`, '-c:s srt'])
                 .output(outputPath)
-                .on('error', (err) => reject(err))
-                .on('end', () => resolve(outputPath))
+            const cleanup = guardMediaCommand(command, '字幕提取', reject)
+            command
+                .on('error', (err) => { cleanup(); reject(err) })
+                .on('end', () => { cleanup(); resolve(outputPath) })
                 .run()
         })
     },
@@ -104,7 +122,7 @@ export const VideoService = {
     async extractAudioClip(videoFilePath: string, startSec: number, durationSec: number, outputPath: string, rootId?: string | null, audioTrackIndex?: number | null): Promise<string> {
         const fullPath = await resolveMediaPath(videoFilePath, rootId)
         return new Promise((resolve, reject) => {
-            ffmpeg(fullPath)
+            const command = ffmpeg(fullPath)
                 .seekInput(Math.max(0, startSec))
                 .duration(Math.max(1, durationSec))
                 .outputOptions([
@@ -116,8 +134,10 @@ export const VideoService = {
                     '-b:a 48k'
                 ])
                 .output(outputPath)
-                .on('error', (err) => reject(err))
-                .on('end', () => resolve(outputPath))
+            const cleanup = guardMediaCommand(command, '音频片段提取', reject)
+            command
+                .on('error', (err) => { cleanup(); reject(err) })
+                .on('end', () => { cleanup(); resolve(outputPath) })
                 .run()
         })
     },
@@ -127,7 +147,7 @@ export const VideoService = {
      */
     async compressAudioForCloud(inputPath: string, outputPath: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            ffmpeg(inputPath)
+            const command = ffmpeg(inputPath)
                 .outputOptions([
                     '-vn',
                     '-ac 1',
@@ -136,8 +156,10 @@ export const VideoService = {
                     '-b:a 32k'
                 ])
                 .output(outputPath)
-                .on('error', (err) => reject(err))
-                .on('end', () => resolve(outputPath))
+            const cleanup = guardMediaCommand(command, '音频压缩', reject)
+            command
+                .on('error', (err) => { cleanup(); reject(err) })
+                .on('end', () => { cleanup(); resolve(outputPath) })
                 .run()
         })
     },
@@ -163,7 +185,7 @@ export const VideoService = {
                 try { onProgress?.(percent, message) } catch { /* progress must not break extraction */ }
             }
             report(0, '正在提取音频...')
-            ffmpeg(fullPath)
+            const command = ffmpeg(fullPath)
                 .outputOptions([
                     `-map 0:${audioTrackIndex}`,
                     '-vn',
@@ -172,13 +194,16 @@ export const VideoService = {
                     '-c:a pcm_s16le'
                 ])
                 .output(outputPath)
+            const cleanup = guardMediaCommand(command, '音频提取', reject)
+            command
                 .on('progress', (progress: any) => {
                     const percent = Number(progress?.percent)
                     if (!Number.isFinite(percent)) return
                     report(percent, `正在提取音频 ${Math.floor(percent)}%`)
                 })
-                .on('error', (err) => reject(err))
+                .on('error', (err) => { cleanup(); reject(err) })
                 .on('end', () => {
+                    cleanup()
                     report(100, '音频提取完成')
                     resolve(outputPath)
                 })

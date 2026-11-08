@@ -1,3 +1,4 @@
+import { apiError } from '../../../utils/apiError'
 import { useDb } from '../../../utils/db'
 import { createReadStream, existsSync } from 'fs'
 import { basename } from 'path'
@@ -5,29 +6,29 @@ import { basename } from 'path'
 export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id')
     if (!id) {
-        throw createError({ statusCode: 400, message: 'Task ID is required' })
+        throw apiError(400, 'Task ID is required')
     }
 
     const query = getQuery(event)
     const requestFormat = String(query.format || '').toLowerCase()
     const validFormats = ['srt', 'ass']
     if (requestFormat && !validFormats.includes(requestFormat)) {
-        throw createError({ statusCode: 400, message: `Invalid format: ${requestFormat}. Use srt or ass` })
+        throw apiError(400, `Invalid format: ${requestFormat}. Use srt or ass`)
     }
 
     const db = useDb()
     const row = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(id) as any
     if (!row) {
-        throw createError({ statusCode: 404, message: 'Task not found' })
+        throw apiError(404, 'Task not found')
     }
 
     if (row.status !== 'done') {
-        throw createError({ statusCode: 400, message: `Task is not complete yet (status: ${row.status})` })
+        throw apiError(400, `Task is not complete yet (status: ${row.status})`)
     }
 
     let outputPath = row.output_path
     if (!outputPath) {
-        throw createError({ statusCode: 404, message: 'Output path not recorded for this task' })
+        throw apiError(404, 'Output path not recorded for this task')
     }
 
     if (requestFormat) {
@@ -35,11 +36,11 @@ export default defineEventHandler(async (event) => {
         if (existsSync(altPath)) {
             outputPath = altPath
         } else {
-            throw createError({ statusCode: 404, message: `${requestFormat.toUpperCase()} file not found` })
+            throw apiError(404, `${requestFormat.toUpperCase()} file not found`)
         }
     } else {
         if (!existsSync(outputPath)) {
-            throw createError({ statusCode: 404, message: `Output file not found at: ${outputPath}` })
+            throw apiError(404, `Output file not found at: ${outputPath}`)
         }
     }
 

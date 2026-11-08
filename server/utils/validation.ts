@@ -3,6 +3,8 @@ import type { H3Event } from 'h3'
 
 const outputModeSchema = z.enum(['translated', 'bilingual', 'original'])
 const subtitleFormatSchema = z.enum(['srt', 'ass', 'both'])
+const singleSubtitleFormatSchema = z.enum(['srt', 'ass'])
+export const languageTagSchema = z.string().min(1).max(35).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, '目标语言格式不合法')
 const bilingualLayoutSchema = z.enum(['translated_first', 'original_first'])
 
 const trackPolicySchema = z.object({
@@ -20,7 +22,7 @@ export const taskCreateSchema = z.object({
   trackIndex: z.coerce.number().int().min(0).optional(),
   trackPolicy: trackPolicySchema,
   dedupeEpisodes: z.boolean().optional(),
-  targetLanguage: z.string().min(1).optional(),
+  targetLanguage: languageTagSchema.optional(),
   outputMode: outputModeSchema.optional(),
   model: z.string().optional(),
   stylePreset: z.string().optional(),
@@ -50,6 +52,13 @@ export const reviewPatchSchema = z.object({
     selected: z.boolean().optional(),
     edited: z.boolean().optional()
   })).optional(),
+  bilingualLayout: bilingualLayoutSchema.optional()
+}).passthrough()
+
+export const reviewExportSchema = z.object({
+  subtitleFormat: singleSubtitleFormatSchema.optional(),
+  outputMode: outputModeSchema.optional(),
+  subtitleStylePreset: z.string().max(80).optional(),
   bilingualLayout: bilingualLayoutSchema.optional()
 }).passthrough()
 

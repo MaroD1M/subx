@@ -28,8 +28,13 @@ export interface ReviewFilterOptions {
   qualityThreshold?: number
 }
 
+const normalizedTextCache = new Map<string, string>()
+
 export function normalizeReviewText(text: unknown): string {
-  return String(text ?? '')
+  const raw = String(text ?? '')
+  const cached = normalizedTextCache.get(raw)
+  if (cached !== undefined) return cached
+  const normalizedText = raw
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .trim()
@@ -39,6 +44,9 @@ export function normalizeReviewText(text: unknown): string {
     .replace(/<[^>]+>/g, '')
     .replace(/[\s\p{P}]+/gu, '')
     .toLowerCase()
+  if (normalizedTextCache.size > 10000) normalizedTextCache.clear()
+  normalizedTextCache.set(raw, normalizedText)
+  return normalizedText
 }
 
 function normalized(value: unknown): string {

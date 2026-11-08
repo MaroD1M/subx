@@ -106,7 +106,7 @@
         <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-white/40 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
         <div role="tree" aria-label="文件目录树" class="h-full max-h-[70vh] overflow-y-auto space-y-1 pr-1 custom-scrollbar lg:max-h-none">
           <template v-for="node in displayNodes" :key="`${node.rootId || 'group'}:${node.path || node.name}`">
-            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :active-key="activeTreeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeysArray" :folder-totals="folderVideoTotals" :scanning-keys="folderScanningKeysArray" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
+            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :active-key="activeTreeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeys" :folder-totals="folderVideoTotals" :scanning-keys="folderScanningKeysArray" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
           </template>
           <div v-if="!loadingFiles && (!displayNodes || !displayNodes.length)" class="h-full min-h-[180px] flex items-center justify-center text-center px-3">
             <div v-if="isRootUnavailable" class="space-y-3">
@@ -429,7 +429,6 @@ const files = ref<FileNode[]>([])
 const loadingFiles = ref(false)
 const selectedFileKeys = ref<Set<string>>(new Set())
 const selectedFileMeta = ref<Map<string, FileNode>>(new Map())
-const selectedFileKeysArray = computed(() => Array.from(selectedFileKeys.value))
 const selectedFileCount = computed(() => selectedFileKeys.value.size)
 const folderVideoTotals = ref<Record<string, number>>({})
 const folderScanningKeys = ref<Set<string>>(new Set())
@@ -728,7 +727,7 @@ watch(appConfig, (cfg: any) => {
     contentBackground: options.value.contentBackground,
     customInstructions: options.value.customInstructions
   }
-}, { immediate: true })
+}, { immediate: true, once: true })
 
 watch(() => options.value.outputMode, (mode) => {
   const allowed = subtitleStyleOptions.value.map(item => item.value)
@@ -800,7 +799,10 @@ const isSubtitleFile = computed(() => {
   return name.endsWith('.srt') || name.endsWith('.vtt') || name.endsWith('.ass') || name.endsWith('.ssa')
 })
 
+let selectionSeq = 0
+
 async function onSelect(node: FileNode) {
+  const seq = ++selectionSeq
   selectedNode.value = node
   if (node.isDir) {
     selectedFile.value = null
@@ -833,10 +835,13 @@ async function onSelect(node: FileNode) {
     pendingSubtitle.value = true
     try {
       const res = await $fetch('/api/subtitle-content', { query: { path: node.path, rootId: node.rootId || activeRootId.value } })
+      if (seq !== selectionSeq) return
       subtitlePreview.value = res.entries
       totalSubtitleEntries.value = res.total
+    } catch {
+      if (seq === selectionSeq) toast.add({ title: toastText.error, description: '无法读取字幕内容', color: 'error' })
     } finally {
-      pendingSubtitle.value = false
+      if (seq === selectionSeq) pendingSubtitle.value = false
     }
     return
   }
@@ -844,6 +849,7 @@ async function onSelect(node: FileNode) {
   pendingTracks.value = true
   try {
     const res = await $fetch('/api/tracks', { query: { path: node.path, rootId: node.rootId || activeRootId.value } })
+    if (seq !== selectionSeq) return
     tracks.value = res.tracks || []
     audioTracks.value = res.audioTracks || []
     const fullTextTrack = tracks.value.find((t: any) => t.isSupported && !t.isForced)
@@ -856,9 +862,9 @@ async function onSelect(node: FileNode) {
     selectedAudioTrackIndex.value = firstAudio ? firstAudio.index : null
     useAsr.value = !preferredTrack && Boolean(firstAudio) && Boolean(appConfig.value?.asrEnabled)
   } catch {
-    toast.add({ title: toastText.error, description: '无法分析视频轨道', color: 'error' })
+    if (seq === selectionSeq) toast.add({ title: toastText.error, description: '无法分析视频轨道', color: 'error' })
   } finally {
-    pendingTracks.value = false
+    if (seq === selectionSeq) pendingTracks.value = false
   }
 }
 
@@ -1084,7 +1090,7 @@ async function startBatchTasks() {
           allowForcedSubtitle: batchPolicy.allowForcedSubtitle,
           fallbackToAsr: batchPolicy.fallbackToAsr
         },
-        ...options.value
+        ...Object.fromEntries(Object.entries(options.value).filter(([key]) => !['contentTitle', 'contentBackground', 'customInstructions'].includes(key)))
       }
     })
     const skipped = Number(res.skippedDuplicates || 0)
@@ -1124,7 +1130,7 @@ async function startTask(silent = false) {
         rootId: selectedFile.value.rootId || activeRootId.value,
         sourceType: isSubtitleFile.value ? 'external' : useAsr.value ? 'asr' : selectedIsOcr ? 'ocr' : 'embedded',
         trackIndex: isSubtitleFile.value ? 0 : useAsr.value ? selectedAudioTrackIndex.value : selectedTrackIndex.value,
-        ...options.value
+        ...Object.fromEntries(Object.entries(options.value).filter(([key]) => !['contentTitle', 'contentBackground', 'customInstructions'].includes(key)))
       }
     })
     toast.add({ title: silent ? '已加入队列' : '任务已创建', description: silent ? '可前往「任务历史」查看进度' : '正在打开任务详情', color: 'success' })

@@ -22,6 +22,15 @@ export interface ApiAuthContext {
   scopes: string[]
 }
 
+function safeScopeList(value: unknown): string[] {
+  try {
+    const parsed = JSON.parse(String(value || '[]'))
+    return Array.isArray(parsed) ? parsed.map(String) : []
+  } catch {
+    return []
+  }
+}
+
 export function hashApiToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
@@ -59,7 +68,7 @@ export const ApiTokenService = {
       id: Number(row.id),
       name: String(row.name),
       prefix: String(row.prefix),
-      scopes: JSON.parse(row.scopes_json || '[]'),
+      scopes: safeScopeList(row.scopes_json),
       expiresAt: row.expires_at ? toUtcIsoString(row.expires_at) : null,
       lastUsedAt: row.last_used_at ? toUtcIsoString(row.last_used_at) : null,
       createdAt: toUtcIsoString(row.created_at),
@@ -67,10 +76,14 @@ export const ApiTokenService = {
     }))
   },
 
-  create(input: { name?: unknown, scopes?: unknown, expiresInDays?: unknown, expiresAt?: unknown }) {
+  create(input: { name?: unknown, scopes?: unknown, expiresInDays?: unknown, expiresAt?: unknown }, caller?: ApiAuthContext | null) {
     const name = String(input.name || '').trim()
     if (!name) throw new Error('Token 名称不能为空')
     const scopes = sanitizeScopes(input.scopes)
+    if (caller && caller.type !== 'session' && !caller.scopes.includes('*')) {
+      const unauthorized = scopes.find(scope => !caller.scopes.includes(scope))
+      if (unauthorized) throw new Error(`不能授予超出当前 Token 权限的 scope：${unauthorized}`)
+    }
     const expiresAt = normalizeExpiry(input.expiresInDays ?? input.expiresAt)
     const token = `subx_${randomBytes(24).toString('hex')}`
     const db = useDb()
@@ -132,7 +145,7 @@ export const ApiTokenService = {
       type: 'token',
       tokenId: Number(row.id),
       name: String(row.name),
-      scopes: JSON.parse(row.scopes_json || '[]')
+      scopes: safeScopeList(row.scopes_json)
     }
   }
 }

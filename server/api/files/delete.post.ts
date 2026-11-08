@@ -1,3 +1,4 @@
+import { apiError } from '../../utils/apiError'
 import { rm, lstat } from 'fs/promises'
 import { resolve, normalize } from 'path'
 import { getMediaRoot } from '../../utils/mediaRoots'
@@ -10,14 +11,14 @@ export default defineEventHandler(async (event) => {
   const rootId = String(body?.rootId || '').trim() || undefined
 
   if (!relPath) {
-    throw createError({ statusCode: 400, message: '路径不能为空' })
+    throw apiError(400, '路径不能为空')
   }
 
   const root = await getMediaRoot(rootId)
   const videoDir = normalize(resolve(root.path))
   const fullPath = await resolvePathEntry(videoDir, relPath)
   if (resolve(fullPath) === videoDir) {
-    throw createError({ statusCode: 400, message: '不能删除媒体库根目录' })
+    throw apiError(400, '不能删除媒体库根目录')
   }
 
   let targetStat: Awaited<ReturnType<typeof lstat>>
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
   try {
     targetStat = await lstat(fullPath)
   } catch {
-    throw createError({ statusCode: 404, message: '目标不存在' })
+    throw apiError(404, '目标不存在')
   }
 
   if (targetStat.isSymbolicLink()) {

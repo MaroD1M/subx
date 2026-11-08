@@ -142,55 +142,12 @@
         </div>
         </div>
 
-        <div v-show="activeTab === 'logs'" class="rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white p-4 shadow-sm dark:bg-gray-950/70">
-          <div class="mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div class="space-y-1">
-              <div class="flex items-center gap-2 text-gray-700 dark:text-gray-200">
-                <UIcon name="i-lucide-logs" class="w-4 h-4 text-primary-700" />
-                <span class="text-sm font-semibold">任务执行日志</span>
-              </div>
-              <p class="text-xs text-gray-500 dark:text-gray-400">仅记录任务处理过程，不包含页面实时连接状态。</p>
-            </div>
-            <div class="flex items-center gap-2 self-start sm:self-auto">
-              <UBadge color="neutral" variant="subtle">显示 {{ displayedLogs.length }} / {{ logs.length }} 条</UBadge>
-              <UButton
-                v-if="logs.length > compactLogLimit"
-                :label="showAllLogs ? '收起次要日志' : '显示全部日志'"
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                class="h-7 px-2"
-                @click="showAllLogs = !showAllLogs"
-              />
-            </div>
-          </div>
-          <div class="space-y-3 h-56 overflow-y-auto custom-scrollbar pr-1 sm:pr-2" ref="logContainer" role="log" aria-label="任务执行日志">
-            <div
-              v-for="(log, i) in displayedLogs"
-              :key="i"
-              class="rounded-2xl border px-3 py-3 flex flex-col sm:flex-row items-start gap-3 shadow-sm"
-              :class="logItemClass(log)"
-            >
-              <div class="flex w-full sm:w-auto flex-row sm:flex-col items-center sm:items-start justify-between gap-2 shrink-0 sm:min-w-[78px]">
-                <ClientOnly><span class="text-[10px] text-gray-500 dark:text-gray-400 leading-none">{{ log.timestamp }}</span></ClientOnly>
-                <UBadge size="sm" variant="soft" :color="logBadgeColor(log)" class="shrink-0">{{ logCategoryLabel(log) }}</UBadge>
-              </div>
-              <div class="min-w-0 w-full flex-1 border-t sm:border-t-0 sm:border-l border-black/5 dark:border-white/10 pt-3 sm:pt-0 sm:pl-3">
-                <p class="text-sm leading-6 break-words" :class="logMessageClass(log)">{{ log.message }}</p>
-              </div>
-            </div>
-            <div v-if="task.currentText" class="rounded-2xl border border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-3 flex flex-col sm:flex-row items-start gap-3 shadow-sm">
-              <div class="flex w-full sm:w-auto flex-row sm:flex-col items-center sm:items-start justify-between gap-2 shrink-0 sm:min-w-[78px]">
-                <ClientOnly><span class="text-[10px] text-gray-500 dark:text-gray-400 leading-none">{{ currentTextTimestamp || formatTime() }}</span></ClientOnly>
-                <UBadge size="sm" variant="soft" color="success" class="shrink-0">实时进度</UBadge>
-              </div>
-              <div class="min-w-0 w-full flex-1 border-t sm:border-t-0 sm:border-l border-emerald-500/20 pt-3 sm:pt-0 sm:pl-3">
-                <p class="text-sm leading-6 break-words text-emerald-700 dark:text-emerald-300">{{ task.currentText }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        <TaskLogsPanel
+          v-show="activeTab === 'logs'"
+          :logs="logs"
+          :current-text="task.currentText"
+          :current-text-timestamp="currentTextTimestamp"
+        />
         <div class="flex items-center justify-between pt-4 gap-3 flex-wrap">
           <div class="flex items-center gap-3 flex-wrap">
             <UButton v-if="task.step === 'done'" label="下载结果" icon="i-lucide-download" color="primary" @click="downloadSrt" />
@@ -456,6 +413,7 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({ key: route => String(route.params.id || '') })
 import { formatClock as formatClockInZone } from '~~/shared/time'
 
 const route = useRoute()
@@ -579,12 +537,9 @@ const responseDiagnosticsSummary = computed(() => {
 const showDiagnosticsSection = computed(() => !!connectionBanner.value || task.value.step === 'done')
 const cancelling = ref(false)
 const toast = useToast()
-const logContainer = ref<HTMLElement | null>(null)
 const eventSource = ref<EventSource | null>(null)
 const reconnectTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const logs = ref<Array<{ type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }>>([])
-const showAllLogs = ref(false)
-const compactLogLimit = 12
 const currentTextTimestamp = ref('')
 const logKeys = ref(new Set<string>())
 const connectionState = ref<'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'history-only' | 'idle'>('connecting')
@@ -678,115 +633,24 @@ async function cancelTask() {
   }
 }
 
-watch(logs, () => {
-  nextTick(() => {
-    if (logContainer.value) logContainer.value.scrollTop = logContainer.value.scrollHeight
-  })
-}, { deep: true })
-
 function appendLog(entry: { type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
   const key = [entry.type, entry.timestamp, entry.category || '', entry.message].join('|')
   if (logKeys.value.has(key)) return
   logKeys.value.add(key)
   logs.value.push(entry)
+  const maxLogs = 2000
+  if (logs.value.length > maxLogs) {
+    const removed = logs.value.splice(0, logs.value.length - maxLogs)
+    for (const old of removed) {
+      logKeys.value.delete([old.type, old.timestamp, old.category || '', old.message].join('|'))
+    }
+  }
 }
 
 function resetLogs(entries: Array<{ type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }>) {
   logs.value = []
   logKeys.value = new Set()
   for (const entry of entries) appendLog(entry)
-}
-
-function resolveLogCategory(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
-  if (log.category) return log.category
-  const text = log.message || ''
-  if (log.type === 'error' || /\b(?:error|failed|failure)\b|失败|错误|中断|断开|异常|取消/i.test(text)) return 'error'
-  if (/导出|保存|输出文件|write/i.test(text)) return 'export'
-  if (/翻译|文本块|chunk|tokens|模型|术语表|风格/i.test(text)) return 'translation'
-  if (/提取|解析|SRT|字幕|初始化|队列|状态变更|创建|加载/i.test(text)) return 'system'
-  return 'process'
-}
-
-function logCategoryLabel(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
-  switch (resolveLogCategory(log)) {
-    case 'error':
-      return '错误'
-    case 'export':
-      return '导出'
-    case 'translation':
-      return '翻译'
-    case 'system':
-      return '系统'
-    default:
-      return '过程'
-  }
-}
-
-function logBadgeColor(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
-  switch (resolveLogCategory(log)) {
-    case 'error':
-      return 'error'
-    case 'export':
-      return 'success'
-    case 'translation':
-      return 'primary'
-    case 'system':
-      return 'warning'
-    default:
-      return 'neutral'
-  }
-}
-
-const displayedLogs = computed(() => {
-  if (showAllLogs.value || logs.value.length <= compactLogLimit) return logs.value
-
-  const importantIndices = new Set<number>()
-  for (let i = 0; i < logs.value.length; i++) {
-    const log = logs.value[i]!
-    const category = resolveLogCategory(log)
-    if (log.type === 'error' || category === 'system' || category === 'export') {
-      importantIndices.add(i)
-    }
-  }
-
-  const recentStart = Math.max(0, logs.value.length - 4)
-  for (let i = recentStart; i < logs.value.length; i++) importantIndices.add(i)
-
-  return logs.value.filter((_, index) => importantIndices.has(index))
-})
-
-watch(() => task.value.currentText, (value) => {
-  if (value) currentTextTimestamp.value = formatTime()
-})
-
-function logItemClass(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
-  switch (resolveLogCategory(log)) {
-    case 'error':
-      return 'border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10'
-    case 'export':
-      return 'border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10'
-    case 'translation':
-      return 'border-primary-200 dark:border-primary-500/20 bg-primary-50 dark:bg-primary-500/10'
-    case 'system':
-      return 'border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10'
-    default:
-      return 'border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5'
-  }
-}
-
-function logMessageClass(log: { type: 'info' | 'error', message: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
-  switch (resolveLogCategory(log)) {
-    case 'error':
-      return 'text-red-700 dark:text-red-300'
-    case 'export':
-      return 'text-emerald-700 dark:text-emerald-300'
-    case 'translation':
-      return 'text-primary-700 dark:text-primary-200'
-    case 'system':
-      return 'text-amber-700 dark:text-amber-200'
-    default:
-      return 'text-gray-700 dark:text-gray-300'
-  }
 }
 
 const stepProgressValue = computed(() => Math.max(0, Math.min(100, Number(task.value.stepProgress || 0))))
@@ -803,6 +667,7 @@ const statusLabel = computed(() => {
     case 'parsing': return '正在解析文本分块'
     case 'translating': return 'AI 翻译进行中'
     case 'exporting': return '正在生成输出文件'
+    case 'cancelled': return '任务已取消'
     case 'done': return '任务圆满完成'
     case 'error': return '任务失败'
     default: return '正在处理...'
@@ -1101,8 +966,37 @@ onMounted(async () => {
   let lastLoggedStep = task.value.step || null
   let isIntentionalClose = false
 
-  function connectSSE() {
+  async function syncTaskSnapshot() {
+    try {
+      const result: any = await $fetch(`/api/tasks/${taskId}`)
+      const snapshot = result?.task
+      if (!snapshot) return false
+      task.value = {
+        ...task.value,
+        step: snapshot.status,
+        progress: snapshot.progress || 0,
+        stepProgress: snapshot.stepProgress || 0,
+        stepMessage: snapshot.stepMessage || '',
+        completedChunks: snapshot.completedChunks || 0,
+        totalChunks: snapshot.totalChunks || 0,
+        error: snapshot.error || null,
+        currentText: ['done', 'error', 'review', 'cancelled'].includes(String(snapshot.status)) ? null : task.value.currentText
+      }
+      return ['done', 'error', 'review', 'cancelled'].includes(String(snapshot.status))
+    } catch {
+      return false
+    }
+  }
+
+  async function connectSSE() {
     connectionState.value = reconnectAttempts > 0 ? 'reconnecting' : 'connecting'
+    try {
+      const terminal = await syncTaskSnapshot()
+      if (terminal) {
+        connectionState.value = 'history-only'
+        return
+      }
+    } catch { /* use stream fallback */ }
     const es = new EventSource(`/api/sse/progress?taskId=${taskId}`)
     eventSource.value = es
 

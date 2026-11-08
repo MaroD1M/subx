@@ -1,3 +1,4 @@
+import { apiError } from '../utils/apiError'
 import { requireScope } from '../utils/apiTokens'
 import { testNotificationProxy } from '../utils/notifications'
 
@@ -7,6 +8,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await testNotificationProxy(String(body?.proxyUrl || '').trim())
   } catch (e: any) {
-    throw createError({ statusCode: 502, message: e?.message || '代理测试失败' })
+    throw apiError(502, e?.message || '代理测试失败')
   }
 })

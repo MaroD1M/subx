@@ -24,3 +24,31 @@ export function resolveTaskLogCategory(
   }
   return 'process'
 }
+
+import { appendFileSync, existsSync, mkdirSync } from 'fs'
+import { join } from 'path'
+import { formatLogTimestamp } from '~~/shared/time'
+import { useDb } from './db'
+import { isTaskCancelled } from './taskState'
+
+export function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'error' | 'warn', message: string, category?: TaskLogCategory) {
+  if (isTaskCancelled(taskId) && step !== 'cancelled' && step !== 'error') {
+    return
+  }
+  const resolvedCategory = category || resolveTaskLogCategory(step, level, message)
+  try {
+    const db = useDb()
+    db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
+      .run(taskId, step, resolvedCategory, level, message)
+  } catch (error) {
+    console.error('[TaskLog] Failed to write task log to database', error)
+  }
+
+  try {
+    const logFile = join(process.cwd(), 'db', 'logs', `task_${taskId}.log`)
+    const dir = join(process.cwd(), 'db', 'logs')
+    if (!existsSync(dir)) { mkdirSync(dir, { recursive: true }) }
+    const ts = formatLogTimestamp(new Date())
+    appendFileSync(logFile, `[${ts}] [${level.toUpperCase()}] [${step || '-'}] ${message}\n`)
+  } catch { /* best effort */ }
+}

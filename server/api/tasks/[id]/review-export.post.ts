@@ -1,20 +1,27 @@
+import { apiError } from '../../../utils/apiError'
+import { existsSync } from 'fs'
 import { dirname, join } from 'path'
 import { useDb } from '../../../utils/db'
+import { ConfigService } from '../../../utils/config'
 import { SubtitleService } from '../../../utils/subtitle'
-import { resolveMediaPath } from '../../../utils/mediaRoots'
-import { deriveOutputBaseName } from '../../../utils/outputNaming'
+import { getMediaRoot, resolveMediaPath } from '../../../utils/mediaRoots'
+import { deriveOutputBaseName, isSafeOutputSuffix } from '../../../utils/outputNaming'
+import { isPathInside } from '../../../utils/pathSafety'
+import { acquireOutputLocks } from '../../../utils/outputLock'
+import { parseBody, reviewExportSchema } from '../../../utils/validation'
+import { TaskService } from '../../../utils/task'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) {
-    throw createError({ statusCode: 400, message: 'Task ID is required' })
+    throw apiError(400, 'Task ID is required')
   }
 
+  const body = await parseBody(event, reviewExportSchema)
   const db = useDb()
-  const body = await readBody(event)
   const task = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(id) as any
   if (!task) {
-    throw createError({ statusCode: 404, message: 'Task not found' })
+    throw apiError(404, 'Task not found')
   }
 
   const rows = db.prepare(`
@@ -25,21 +32,34 @@ export default defineEventHandler(async (event) => {
   `).all(id) as any[]
 
   if (!rows.length) {
-    throw createError({ statusCode: 400, message: 'No review entries found' })
+    throw apiError(400, 'No review entries found')
   }
 
+  const config = await ConfigService.getConfig()
   const inputPath = await resolveMediaPath(task.file_path, task.root_id)
+  const root = await getMediaRoot(task.root_id)
   const subtitleFormat = body.subtitleFormat || (String(task.subtitle_format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt')
   const requestedOutputMode = String(body.outputMode || task.output_mode || 'translated')
-  const outputSuffix = requestedOutputMode === 'original' ? 'original' : task.target_lang
-  const outputBaseName = deriveOutputBaseName(task.file_path, task.source_type)
-  const outputPath = join(dirname(inputPath), `${outputBaseName}.${outputSuffix}.${subtitleFormat}`)
-  if (outputPath === inputPath) {
-    throw createError({ statusCode: 400, message: '输出路径与源文件冲突，请更改输出设置' })
+  const outputSuffix = requestedOutputMode === 'original' ? 'original' : String(task.target_lang || '')
+  if (!['srt', 'ass'].includes(subtitleFormat) || !isSafeOutputSuffix(outputSuffix)) {
+    throw apiError(400, '导出格式或目标语言不合法')
   }
+
+  const outputBaseName = deriveOutputBaseName(task.file_path, task.source_type)
+  const embyCompatible = config.embyCompatibleOutput === true && task.source_type !== 'external'
+  const outputPath = embyCompatible
+    ? join(dirname(inputPath), `${outputBaseName}.${subtitleFormat}`)
+    : join(dirname(inputPath), `${outputBaseName}.${outputSuffix}.${subtitleFormat}`)
+  if (outputPath === inputPath) {
+    throw apiError(400, '输出路径与源文件冲突，请更改输出设置')
+  }
+  if (!isPathInside(root.path, outputPath)) {
+    throw apiError(400, '输出路径超出媒体库范围')
+  }
+
   const sourceSubtitlePath = task.source_type === 'external'
-    ? await resolveMediaPath(task.file_path, task.root_id)
-    : join(process.cwd(), 'temp', `${id}.srt`)
+    ? await resolveMediaPath(String(task.source_subtitle_path || task.file_path), task.root_id)
+    : (existsSync(join(process.cwd(), 'temp', `${id}.srt`)) ? join(process.cwd(), 'temp', `${id}.srt`) : '')
 
   const entries = rows.map(row => ({
     id: String(row.subtitle_id),
@@ -49,18 +69,28 @@ export default defineEventHandler(async (event) => {
     translatedText: row.final_text || row.translated_text || row.original_text
   }))
 
-  const savedPath = await SubtitleService.writeSubtitle(
-    entries as any,
-    outputPath,
-    requestedOutputMode as any,
-    subtitleFormat,
-    body.subtitleStylePreset || task.subtitle_style_preset || 'bilingual_simple',
-    body.bilingualLayout || task.bilingual_layout || 'translated_first',
-    sourceSubtitlePath
-  )
+  const releaseOutputLock = acquireOutputLocks([outputPath])
+  try {
+    const savedPath = await SubtitleService.writeSubtitle(
+      entries as any,
+      outputPath,
+      requestedOutputMode as any,
+      subtitleFormat,
+      body.subtitleStylePreset || task.subtitle_style_preset || 'bilingual_simple',
+      body.bilingualLayout || task.bilingual_layout || 'translated_first',
+      sourceSubtitlePath
+    )
 
-  db.prepare("UPDATE tasks SET status = 'done', progress = 100, output_path = ?, error = NULL, updated_at = datetime('now') WHERE task_id = ?").run(savedPath, id)
-  db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, 'exporting', 'export', 'info', ?, datetime('now'))").run(id, '字幕核对完成，已导出最终文件。')
+    db.prepare("UPDATE tasks SET output_path = ?, updated_at = datetime('now') WHERE task_id = ?").run(savedPath, id)
+    await TaskService.updateStatus(id, 'done', 100, {
+      error: null,
+      stepProgress: 100,
+      stepMessage: '核对导出完成',
+      log: '字幕核对完成，已导出最终文件。'
+    })
 
-  return { success: true, outputPath: savedPath }
+    return { success: true, outputPath: savedPath }
+  } finally {
+    releaseOutputLock()
+  }
 })

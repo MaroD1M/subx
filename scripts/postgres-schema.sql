@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   content_title TEXT,
   content_background TEXT,
   custom_instructions TEXT,
+  translation_mode TEXT NOT NULL DEFAULT 'non_stream',
   subtitle_format TEXT NOT NULL DEFAULT 'srt',
   subtitle_style_preset TEXT NOT NULL DEFAULT 'bilingual_simple',
   bilingual_layout TEXT NOT NULL DEFAULT 'translated_first',

@@ -1,3 +1,4 @@
+import { apiError } from '../utils/apiError'
 import { ConfigService } from '../utils/config'
 import { createProvider, normalizeProviderType } from '../utils/providers/registry'
 
@@ -6,21 +7,21 @@ export default defineEventHandler(async (event) => {
     let apiKey = String(body?.apiKey || '').trim()
     let baseURL = String(body?.baseURL || body?.baseUrl || '').trim()
     let providerType = normalizeProviderType(body?.providerType)
+    const usingSavedKey = apiKey.includes('*')
 
-    if (apiKey.includes('*')) {
+    if (usingSavedKey) {
         const config = await ConfigService.getConfig()
         apiKey = config.apiKey
         providerType = normalizeProviderType((config as any).providerType)
-        if (!baseURL || baseURL.includes('openai.com/v1')) {
-            baseURL = config.apiBaseUrl
-        }
+        // 使用服务端保存的密钥时必须固定服务端地址，避免把真实 Key 发往调用者指定地址。
+        baseURL = config.apiBaseUrl
     }
 
     if (!apiKey || !baseURL) {
-        throw createError({ statusCode: 400, message: 'API 密钥和 URL 不能为空' })
+        throw apiError(400, 'API 密钥和 URL 不能为空')
     }
 
-    console.log(`[Model List] 尝试连接: ${providerType} ${baseURL}`)
+    console.log(`[Model List] 尝试连接: ${providerType} ${usingSavedKey ? '(configured)' : baseURL}`)
 
     try {
         const provider = createProvider({
@@ -37,9 +38,6 @@ export default defineEventHandler(async (event) => {
         if (e.response) {
             console.error('[Detail]', e.response.status, e.response.data)
         }
-        throw createError({
-            statusCode: e.status || 502,
-            message: e.message || '无法连接到模型服务'
-        })
+        throw apiError(e.status || 502, e.message || '无法连接到模型服务')
     }
 })

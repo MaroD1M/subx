@@ -4,6 +4,7 @@ import {
   deriveOutputBaseName,
   getMediaBaseName,
   isKnownLanguageTag,
+  isSafeOutputSuffix,
   stripKnownLanguageSuffix
 } from '../outputNaming'
 
@@ -59,6 +60,14 @@ describe('output naming', () => {
     const english = deriveOutputBaseName('Show.S01E01.H264.English-MWR.mkv', 'asr')
     const japanese = deriveOutputBaseName('Show.S01E01.H264.Japanese-XYZ.mkv', 'asr')
     expect(english).not.toBe(japanese)
+  })
+
+  it('rejects unsafe output suffixes', () => {
+    expect(isSafeOutputSuffix('zh-CN')).toBe(true)
+    expect(isSafeOutputSuffix('pt_BR')).toBe(true)
+    expect(isSafeOutputSuffix('../../tmp/pwn')).toBe(false)
+    expect(isSafeOutputSuffix('zh/../../x')).toBe(false)
+    expect(isSafeOutputSuffix('')).toBe(false)
   })
 
   it('builds original-subtitle candidates inside the media directory', () => {

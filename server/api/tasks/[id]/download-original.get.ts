@@ -1,3 +1,4 @@
+import { apiError } from '../../../utils/apiError'
 import { useDb } from '../../../utils/db'
 import { safePath } from '../../../utils/subtitle'
 import { VideoService } from '../../../utils/video'
@@ -11,13 +12,13 @@ import { buildOriginalSubtitleCandidates, getMediaBaseName } from '../../../util
 export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id')
     if (!id) {
-        throw createError({ statusCode: 400, message: 'Task ID is required' })
+        throw apiError(400, 'Task ID is required')
     }
 
     const db = useDb()
     const row = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(id) as any
     if (!row) {
-        throw createError({ statusCode: 404, message: 'Task not found' })
+        throw apiError(404, 'Task not found')
     }
 
     const root = await getMediaRoot(row.root_id)
@@ -28,20 +29,20 @@ export default defineEventHandler(async (event) => {
     }
 
     let sourcePath: string
-    if (row.source_type === 'asr') {
+    if (row.source_type === 'asr' || row.source_type === 'ocr') {
         const run = db.prepare('SELECT id FROM transcription_runs WHERE task_id = ? ORDER BY id DESC LIMIT 1').get(id) as { id?: number } | undefined
         if (!run?.id) {
-            throw createError({ statusCode: 404, message: '该任务没有可下载的 ASR 原始字幕' })
+            throw apiError(404, '该任务没有可下载的语音识别原始字幕')
         }
         const segments = db.prepare('SELECT start_ms, end_ms, text FROM asr_segments WHERE run_id = ? ORDER BY start_ms ASC').all(run.id) as Array<{ start_ms: number, end_ms: number, text: string }>
         if (!segments.length) {
-            throw createError({ statusCode: 404, message: 'ASR 原始分段为空' })
+            throw apiError(404, '语音识别原始分段为空')
         }
         const content = segments.map((segment, index) => `${index + 1}\n${SubtitleService.msToSrtTime(segment.start_ms)} --> ${SubtitleService.msToSrtTime(segment.end_ms)}\n${segment.text}\n`).join('\n')
         sourcePath = join(tempDir, `download_asr_${id}.srt`)
         writeFileSync(sourcePath, content, 'utf-8')
     } else if (row.source_type === 'external') {
-        sourcePath = await safePath(row.file_path, row.root_id)
+        sourcePath = await safePath(row.source_subtitle_path || row.file_path, row.root_id)
     } else {
         // 尝试寻找同名外部文件
         let foundPath = ''
@@ -70,13 +71,13 @@ export default defineEventHandler(async (event) => {
                 }
                 sourcePath = tempSrtPath
             } catch (err: any) {
-                throw createError({ statusCode: 500, message: `提取原始字幕失败: ${err.message}` })
+                throw apiError(500, `提取原始字幕失败: ${err.message}`)
             }
         }
     }
 
     if (!sourcePath || !existsSync(sourcePath)) {
-        throw createError({ statusCode: 404, message: '无法找到原始字幕文件' })
+        throw apiError(404, '无法找到原始字幕文件')
     }
 
     const baseName = getMediaBaseName(row.file_path || 'subtitle')

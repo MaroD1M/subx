@@ -1,3 +1,4 @@
+import { apiError } from '../utils/apiError'
 import { toUtcIsoString } from '~~/shared/time'
 import { useDb } from '../utils/db'
 import { getMediaRoot } from '../utils/mediaRoots'
@@ -11,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const parsed = taskListQuerySchema.safeParse(query)
   if (!parsed.success) {
-    throw createError({ statusCode: 400, message: '分页参数不合法' })
+    throw apiError(400, '分页参数不合法')
   }
   const { page, pageSize, status, q } = parsed.data
   const db = useDb()

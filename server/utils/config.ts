@@ -13,6 +13,14 @@ const LOCAL_OCR_URL = String(process.env.OCR_INTERNAL_URL || 'http://127.0.0.1:8
 const LOCAL_SERVICE_MIGRATION_KEY = 'subxLocalServiceMigration'
 let localServiceMigrationChecked = false
 
+function safeJsonParse<T>(value: unknown, fallback: T): T {
+    try {
+        return JSON.parse(String(value ?? '')) as T
+    } catch {
+        return fallback
+    }
+}
+
 export const ConfigService = {
     /**
      * Get all configuration
@@ -86,11 +94,11 @@ export const ConfigService = {
         // Override with DB values
         rows.forEach(row => {
             if (row.key === 'glossary') {
-                config.glossary = JSON.parse(row.value)
+                config.glossary = safeJsonParse<Record<string, string>>(row.value, {})
             } else if (row.key === 'mediaRoots') {
-                config.mediaRoots = JSON.parse(row.value) as MediaRoot[]
+                config.mediaRoots = safeJsonParse<MediaRoot[]>(row.value, [])
             } else if (row.key === 'customStylePresets') {
-                config.customStylePresets = JSON.parse(row.value)
+                config.customStylePresets = safeJsonParse<AppConfig['customStylePresets']>(row.value, [])
             } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {

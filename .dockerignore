@@ -28,6 +28,13 @@ coverage/
 temp/
 videos/
 demo_db/
+db/
+data/
+models/
+*.db
+*.sqlite
+*.sqlite3
+**/@eaDir/
 
 # ---- macOS 系统文件 ----
 .DS_Store

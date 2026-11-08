@@ -1,3 +1,4 @@
+import { apiError } from '../../../utils/apiError'
 import { useDb } from '../../../utils/db'
 
 function detectResponseIssue(value: string | null | undefined) {
@@ -35,7 +36,7 @@ function toPreview(value: string | null | undefined, maxLength = 320) {
 export default defineEventHandler(async (event) => {
     const id = getRouterParam(event, 'id')
     if (!id) {
-        throw createError({ statusCode: 400, message: 'Task ID is required' })
+        throw apiError(400, 'Task ID is required')
     }
 
     const db = useDb()

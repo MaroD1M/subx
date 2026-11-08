@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const productionMode = process.env.PLAYWRIGHT_PRODUCTION === '1'
+const serverCommand = productionMode
+  ? 'node tests/e2e/prepare-env.mjs && node .output/server/index.mjs'
+  : 'node tests/e2e/prepare-env.mjs && ./node_modules/.bin/nuxt dev --port 3100 --host 127.0.0.1'
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 60_000,
@@ -20,7 +25,7 @@ export default defineConfig({
       : {})
   },
   webServer: {
-    command: 'node tests/e2e/prepare-env.mjs && ./node_modules/.bin/nuxt dev --port 3100 --host 127.0.0.1',
+    command: serverCommand,
     port: 3100,
     reuseExistingServer: false,
     stdout: 'pipe',
@@ -31,7 +36,11 @@ export default defineConfig({
       VIDEO_DIR: './.test-artifacts/media',
       SUBX_SECRET_KEY: 'playwright-test-secret',
       NODE_ENV: 'development',
-      NUXT_DEVTOOLS: 'false'
+      NUXT_DEVTOOLS: 'false',
+      PORT: '3100',
+      HOST: '127.0.0.1',
+      NITRO_PORT: '3100',
+      NITRO_HOST: '127.0.0.1'
     }
   },
   projects: [

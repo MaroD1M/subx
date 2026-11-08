@@ -51,9 +51,10 @@ const mockDb = {
         }
 
         if (sql.includes('UPDATE tasks SET status = ?, progress = ?')) {
-          const [status, progress, , stepProgress, stepMessage, taskId] = args
+          const [status, progress, , stepProgress, stepMessage, error, taskId, expectedStatus] = args
           const current = dbState.get(taskId) ?? { status: 'queued', progress: 0, error: null }
-          dbState.set(taskId, { ...current, status: String(status), progress: Number(progress), stepProgress: Number(stepProgress), stepMessage: stepMessage == null ? null : String(stepMessage) })
+          if (expectedStatus !== undefined && current.status !== expectedStatus) return { changes: 0 }
+          dbState.set(taskId, { ...current, status: String(status), progress: Number(progress), error: error == null ? null : String(error), stepProgress: Number(stepProgress), stepMessage: stepMessage == null ? null : String(stepMessage) })
           return { changes: 1 }
         }
 
@@ -196,8 +197,8 @@ describe('Task cancellation guards', () => {
   it('keeps review as terminal-like status for later progress updates', async () => {
     dbState.set('task-review', { status: 'review', progress: 96, error: '待字幕核对' })
 
-    await TaskService.updateStatus('task-review', 'done', 100, {
-      log: '这条完成更新应被丢弃'
+    await TaskService.updateStatus('task-review', 'translating', 97, {
+      log: '这条进度更新应被丢弃'
     })
 
     expect(dbState.get('task-review')).toEqual({
@@ -205,6 +206,18 @@ describe('Task cancellation guards', () => {
       progress: 96,
       error: '待字幕核对'
     })
+  })
+
+  it('allows review export to complete the task', async () => {
+    dbState.set('task-review-export', { status: 'review', progress: 96, error: null })
+
+    await TaskService.updateStatus('task-review-export', 'done', 100, {
+      error: null,
+      stepMessage: '核对导出完成'
+    })
+
+    expect(dbState.get('task-review-export')?.status).toBe('done')
+    expect(emitted.some(entry => entry.event === 'done')).toBe(true)
   })
 
   it('skips queued tasks that were cancelled before execution starts', async () => {

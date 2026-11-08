@@ -1,10 +1,11 @@
+import { apiError } from '../../../utils/apiError'
 import { useDb } from '../../../utils/db'
 import { SubtitleService } from '../../../utils/subtitle'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) {
-    throw createError({ statusCode: 400, message: 'Task ID is required' })
+    throw apiError(400, 'Task ID is required')
   }
 
   const query = getQuery(event)

@@ -1,3 +1,4 @@
+import { apiError } from '../../../utils/apiError'
 import { toUtcIsoString } from '~~/shared/time'
 import { useDb } from '../../../utils/db'
 import { SubtitleService } from '../../../utils/subtitle'
@@ -11,13 +12,13 @@ function isSubtitlePath(value: unknown) {
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) {
-    throw createError({ statusCode: 400, message: 'Task ID is required' })
+    throw apiError(400, 'Task ID is required')
   }
 
   const db = useDb()
   const task = db.prepare('SELECT task_id, status, output_mode, subtitle_format, subtitle_style_preset, bilingual_layout, target_lang, file_path, output_path, source_subtitle_path, root_id FROM tasks WHERE task_id = ?').get(id) as any
   if (!task) {
-    throw createError({ statusCode: 404, message: 'Task not found' })
+    throw apiError(404, 'Task not found')
   }
 
   let entries = db.prepare(`

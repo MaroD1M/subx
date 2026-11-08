@@ -1,3 +1,4 @@
+import { apiError } from '../../../utils/apiError'
 import { createReadStream, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { TaskService } from '../../../utils/task'
@@ -11,16 +12,16 @@ function parseSrtTime(value: string): number {
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
-  if (!id) throw createError({ statusCode: 400, message: 'Task ID is required' })
+  if (!id) throw apiError(400, 'Task ID is required')
   const query = getQuery(event) as { start?: string, end?: string }
   const start = Number(query.start)
   const end = Number(query.end)
   if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) {
-    throw createError({ statusCode: 400, message: '音频片段范围不合法' })
+    throw apiError(400, '音频片段范围不合法')
   }
   const duration = Math.min(30, Math.max(1, end - start))
   const task = TaskService.getTask(id)
-  if (!task) throw createError({ statusCode: 404, message: '任务不存在' })
+  if (!task) throw apiError(404, '任务不存在')
 
   const tempDir = join(process.cwd(), 'temp')
   if (!existsSync(tempDir)) mkdirSync(tempDir, { recursive: true })
@@ -38,7 +39,7 @@ export default defineEventHandler(async (event) => {
       }
       await VideoService.extractAudioClip(task.filePath, start, duration, outputPath, task.rootId, audioTrackIndex)
     } catch (e: any) {
-      throw createError({ statusCode: 500, message: `音频片段生成失败：${e?.message || e}` })
+      throw apiError(500, `音频片段生成失败：${e?.message || e}`)
     }
   }
 

@@ -1,3 +1,4 @@
+import { apiError } from '../utils/apiError'
 import { readdir, lstat, access } from 'fs/promises'
 import { constants } from 'fs'
 import { join, relative, resolve, normalize } from 'path'
@@ -18,10 +19,7 @@ async function readDirectoryNodes(root: MediaRoot, dirPath = ''): Promise<FileNo
   try {
     await access(normalizedRoot, constants.R_OK)
   } catch (e: any) {
-    throw createError({
-      statusCode: 500,
-      message: `视频目录不可读: ${normalizedRoot}，请检查挂载路径和权限 (${e?.code || 'UNKNOWN'})`
-    })
+    throw apiError(500, `视频目录不可读: ${normalizedRoot}，请检查挂载路径和权限 (${e?.code || 'UNKNOWN'})`)
   }
 
   await resolveInsideRoot(normalizedRoot, dirPath || '.', { allowMissing: false })
@@ -31,10 +29,7 @@ async function readDirectoryNodes(root: MediaRoot, dirPath = ''): Promise<FileNo
   try {
     entries = await readdir(absoluteDir, { withFileTypes: true })
   } catch (e: any) {
-    throw createError({
-      statusCode: 500,
-      message: `目录读取失败: ${dirPath || '/'} (${e?.code || 'UNKNOWN'})`
-    })
+    throw apiError(500, `目录读取失败: ${dirPath || '/'} (${e?.code || 'UNKNOWN'})`)
   }
 
   const nodes: FileNode[] = []

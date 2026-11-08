@@ -1,5 +1,5 @@
 <template>
-  <div class="relative w-full h-screen flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-gray-950">
+  <div class="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden bg-gray-50 py-10 dark:bg-gray-950">
     <!-- Animated Background Orbs -->
     <div class="absolute inset-0 z-0">
       <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-400/20 dark:bg-primary-600/10 blur-[120px] rounded-full animate-blob"></div>
@@ -77,7 +77,7 @@
             </UFormField>
           </div>
 
-          <div v-if="error" class="p-3 rounded-xl bg-red-50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 flex items-start gap-2 animate-in fade-in zoom-in-95 duration-300">
+          <div v-if="error" role="alert" aria-live="assertive" class="p-3 rounded-xl bg-red-50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 flex items-start gap-2 animate-in fade-in zoom-in-95 duration-300">
             <UIcon name="i-lucide-alert-circle" class="w-4 h-4 text-red-500 mt-0.5" />
             <span class="text-xs text-red-600 dark:text-red-400 font-medium">{{ error }}</span>
           </div>
@@ -127,7 +127,7 @@
             </UInput>
           </UFormField>
 
-          <div v-if="error" class="p-3 rounded-xl bg-red-50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 flex items-start gap-2 animate-in fade-in zoom-in-95 duration-300">
+          <div v-if="error" role="alert" aria-live="assertive" class="p-3 rounded-xl bg-red-50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 flex items-start gap-2 animate-in fade-in zoom-in-95 duration-300">
             <UIcon name="i-lucide-alert-circle" class="w-4 h-4 text-red-500 mt-0.5" />
             <span class="text-xs text-red-600 dark:text-red-400 font-medium">{{ error }}</span>
           </div>

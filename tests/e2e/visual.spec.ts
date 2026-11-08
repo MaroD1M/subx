@@ -278,8 +278,11 @@ test('original-only export creates review entries and output fallback works', as
     const listData = await list.json()
     expect(listData.tasks.find((item: any) => item.taskId === taskId)?.reviewAvailable).toBe(true)
 
+    const reviewPageResponse = page.waitForResponse(item => item.url().includes(`/api/tasks/${taskId}/review`) && item.status() === 200, { timeout: 30_000 }).catch(() => null)
     await page.goto(`/review/${taskId}`)
-    await expect(page.getByText('该任务为「仅原文字幕」')).toBeVisible()
+    await reviewPageResponse
+    await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__), null, { timeout: 30_000 })
+    await expect(page.getByText('该任务为「仅原文字幕」')).toBeVisible({ timeout: 20_000 })
     await expect(page.getByText('Hello').first()).toBeVisible()
 
     const db = new Database(process.env.DB_PATH || join(process.cwd(), '.test-artifacts', 'subx.db'))

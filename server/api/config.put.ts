@@ -79,6 +79,13 @@ export default defineEventHandler(async (event) => {
   for (const [key, value] of Object.entries(body)) {
     if (!ALLOWED_KEYS.has(key)) continue
     if ((key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken') && String(value).includes('*')) continue
+    if (key === 'integrationWebhookToken' && !String(value).trim()) continue
+    if (key === 'targetLanguage' && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,34}$/.test(String(value || '').trim())) {
+      throw apiError(400, '目标语言格式不合法')
+    }
+    if (key === 'subtitleFormat' && !['srt', 'ass', 'both'].includes(String(value))) {
+      throw apiError(400, '字幕格式不合法')
+    }
     if (key === 'mediaRoots') {
       const roots = validateMediaRoots(value)
       await ConfigService.updateConfig(key, roots)
@@ -88,7 +95,7 @@ export default defineEventHandler(async (event) => {
         const watchFolders = db.prepare('SELECT id, root_id FROM watch_folders').all() as any[]
         for (const folder of watchFolders) {
           const root = rootMap.get(String(folder.root_id))
-          if (!root || root.enabled === false) {
+          if (!root) {
             db.prepare('DELETE FROM watch_events WHERE folder_id = ?').run(folder.id)
             db.prepare('DELETE FROM watch_folders WHERE id = ?').run(folder.id)
           }

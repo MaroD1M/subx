@@ -16,6 +16,10 @@ export function getMediaBaseName(filePath: string): string {
   return basename(filePath).replace(/\.[^.]+$/, '')
 }
 
+export function isSafeOutputSuffix(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_-]{0,34}$/.test(String(value || ''))
+}
+
 export function isKnownLanguageTag(value: string): boolean {
   const tag = String(value || '').trim().toLowerCase()
   if (!tag) return false

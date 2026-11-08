@@ -1,14 +1,15 @@
+import { apiError } from '../../utils/apiError'
 import { useDb } from '../../utils/db'
 import { globalTaskQueue, removeTaskArtifacts } from '../../utils/task'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) {
-    throw createError({ statusCode: 400, message: 'Task ID is required' })
+    throw apiError(400, 'Task ID is required')
   }
 
   if (globalTaskQueue.isActive(id) || globalTaskQueue.isQueued(id)) {
-    throw createError({ statusCode: 409, message: '任务仍在运行或排队中，请先取消任务' })
+    throw apiError(409, '任务仍在运行或排队中，请先取消任务')
   }
 
   const db = useDb()
@@ -16,10 +17,10 @@ export default defineEventHandler(async (event) => {
   try {
     const task = db.prepare('SELECT task_id, status FROM tasks WHERE task_id = ?').get(id) as any
     if (!task) {
-      throw createError({ statusCode: 404, message: 'Task not found' })
+      throw apiError(404, 'Task not found')
     }
     if (['queued', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(String(task.status || ''))) {
-      throw createError({ statusCode: 409, message: '任务仍在运行或排队中，请先取消任务' })
+      throw apiError(409, '任务仍在运行或排队中，请先取消任务')
     }
 
     db.prepare('DELETE FROM task_jobs WHERE task_id = ?').run(id)
@@ -38,6 +39,6 @@ export default defineEventHandler(async (event) => {
   } catch (error: any) {
     if (error?.statusCode) throw error
     console.error('Failed to delete task:', error)
-    throw createError({ statusCode: 500, message: 'Failed to delete task' })
+    throw apiError(500, 'Failed to delete task')
   }
 })

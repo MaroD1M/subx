@@ -1,3 +1,4 @@
+import { apiError } from '../../utils/apiError'
 import { mkdir, stat } from 'fs/promises'
 import { join, resolve, normalize, relative } from 'path'
 import { getMediaRoot } from '../../utils/mediaRoots'
@@ -6,10 +7,10 @@ import { parseBody, fileCreateSchema } from '../../utils/validation'
 
 function validateName(name: string) {
   if (!name || !name.trim()) {
-    throw createError({ statusCode: 400, message: '文件夹名称不能为空' })
+    throw apiError(400, '文件夹名称不能为空')
   }
   if (name.includes('/') || name.includes('\\') || name.includes('..')) {
-    throw createError({ statusCode: 400, message: '文件夹名称不合法' })
+    throw apiError(400, '文件夹名称不合法')
   }
 }
 
@@ -30,11 +31,11 @@ export default defineEventHandler(async (event) => {
   try {
     const parentStats = await stat(parentFullPath)
     if (!parentStats.isDirectory()) {
-      throw createError({ statusCode: 400, message: '目标路径不是目录' })
+      throw apiError(400, '目标路径不是目录')
     }
   } catch (e: any) {
     if (e?.statusCode) throw e
-    throw createError({ statusCode: 404, message: '目标目录不存在' })
+    throw apiError(404, '目标目录不存在')
   }
 
   const targetPath = join(parentFullPath, folderName)

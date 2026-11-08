@@ -10,7 +10,7 @@ const STREAM_REQUEST_TIMEOUT_MS = 5 * 60 * 1000
 const RAW_RESPONSE_MAX_CHARS = 12000
 export const TRANSLATION_PROMPT_VERSION = 3
 
-export const TRANSLATION_CONTEXT_WINDOW = 4
+export const TRANSLATION_CONTEXT_WINDOW = 6
 
 export interface TranslationContext {
     title?: string

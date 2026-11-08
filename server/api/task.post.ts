@@ -1,3 +1,4 @@
+import { apiError } from '../utils/apiError'
 import { v4 as uuidv4 } from 'uuid'
 import { TaskService, globalTaskQueue } from '../utils/task'
 import { ConfigService } from '../utils/config'
@@ -16,6 +17,22 @@ export default defineEventHandler(async (event) => {
   const allStylePresets = [...STYLE_PRESETS, ...(Array.isArray(config.customStylePresets) ? config.customStylePresets : [])]
   const selectedStyleId = stylePreset || 'default'
   const resolvedStylePrompt = stylePrompt || allStylePresets.find(preset => preset.id === selectedStyleId)?.prompt || ''
+
+  const enqueueTask = async (taskId: string) => {
+    try {
+      await globalTaskQueue.add(taskId, {
+        apiKey: config.apiKey,
+        baseUrl: config.apiBaseUrl
+      })
+    } catch (error: any) {
+      await TaskService.updateStatus(taskId, 'error', 0, {
+        error: '任务入队失败',
+        stepMessage: '任务入队失败',
+        log: `任务入队失败：${error?.message || error}`
+      })
+      throw apiError(500, '任务入队失败，请稍后重试')
+    }
+  }
 
   const processFile = async (path: string, type: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr', track: number, currentRootId?: string, policy?: TrackPolicy) => {
     const taskId = uuidv4()
@@ -40,12 +57,7 @@ export default defineEventHandler(async (event) => {
       trackPolicy: policy
     })
 
-    globalTaskQueue.add(taskId, {
-      apiKey: config.apiKey,
-      baseUrl: config.apiBaseUrl
-    }).catch(err => {
-      console.error('Task execution error:', err)
-    })
+    await enqueueTask(taskId)
 
     return taskId
   }
@@ -55,7 +67,7 @@ export default defineEventHandler(async (event) => {
     try {
       oldTask = TaskService.getTask(String(body.retryTaskId))
     } catch {
-      throw createError({ statusCode: 404, message: '要重试的任务不存在' })
+      throw apiError(404, '要重试的任务不存在')
     }
     const newTaskId = uuidv4()
     await TaskService.createTask({
@@ -80,12 +92,7 @@ export default defineEventHandler(async (event) => {
       forceRetranslate: true
     })
 
-    globalTaskQueue.add(newTaskId, {
-      apiKey: config.apiKey,
-      baseUrl: config.apiBaseUrl
-    }).catch(err => {
-      console.error('Task execution error:', err)
-    })
+    await enqueueTask(newTaskId)
     return { taskId: newTaskId, taskIds: [newTaskId], retriedFrom: body.retryTaskId }
   }
 
@@ -115,7 +122,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (taskIds.length === 0) {
-      throw createError({ statusCode: 400, message: 'No valid files or tracks found' })
+      throw apiError(400, 'No valid files or tracks found')
     }
     return {
       taskIds,
@@ -126,7 +133,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!filePath) {
-    throw createError({ statusCode: 400, message: 'File path or files array is required' })
+    throw apiError(400, 'File path or files array is required')
   }
 
   const taskId = await processFile(filePath, sourceType || 'embedded', trackIndex || 0, rootId, trackPolicy)

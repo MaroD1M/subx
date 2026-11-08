@@ -82,7 +82,7 @@ const props = defineProps({
   activeKey: { type: String, default: '' },
   expandedKeys: { type: Array as () => string[], default: () => [] },
   selectable: { type: Boolean, default: false },
-  selectedKeys: { type: Array as () => string[], default: () => [] },
+  selectedKeys: { type: Object as () => Set<string>, default: () => new Set<string>() },
   folderTotals: { type: Object as () => Record<string, number>, default: () => ({}) },
   scanningKeys: { type: Array as () => string[], default: () => [] },
   depth: { type: Number, default: 0 }
@@ -91,7 +91,7 @@ const emit = defineEmits(['select', 'toggle-dir', 'toggle-select'])
 
 const nodeKey = computed(() => `${props.node.rootId || 'default'}:${props.node.path || ''}`)
 const isSelected = computed(() => !!props.selectedPath && props.selectedPath === nodeKey.value)
-const isChecked = computed(() => props.selectedKeys.includes(nodeKey.value))
+const isChecked = computed(() => props.selectedKeys.has(nodeKey.value))
 const isOpen = computed(() => props.node.isDir && props.expandedKeys.includes(nodeKey.value))
 const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.ts', '.m2ts', '.mts', '.mov']
 
@@ -128,7 +128,11 @@ const folderTotal = computed<number | null>(() => {
 const selectedVideoCount = computed(() => {
   if (!props.node.isDir) return 0
   const prefix = `${nodeKey.value}/`
-  return props.selectedKeys.filter(key => key.startsWith(prefix) && isVideoKey(key)).length
+  let count = 0
+  for (const key of props.selectedKeys) {
+    if (key.startsWith(prefix) && isVideoKey(key)) count += 1
+  }
+  return count
 })
 const isFolderChecked = computed(() => props.node.isDir && folderTotal.value !== null && folderTotal.value > 0 && selectedVideoCount.value >= folderTotal.value)
 const isFolderIndeterminate = computed(() => props.node.isDir && selectedVideoCount.value > 0 && !isFolderChecked.value)

@@ -4,7 +4,8 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { PgDatabase, translateSql } from '../pgSync'
 
 const databaseUrl = process.env.PG_TEST_DATABASE_URL
-const live = databaseUrl ? describe : describe.skip
+const allowReset = process.env.PG_TEST_ALLOW_RESET === '1'
+const live = databaseUrl && allowReset ? describe : describe.skip
 
 live('live PostgreSQL bridge', () => {
   const db = new PgDatabase(databaseUrl!)
@@ -32,5 +33,13 @@ live('live PostgreSQL bridge', () => {
     db.prepare("INSERT INTO task_jobs (task_id, status, next_run_at) VALUES (?, 'queued', datetime('now', ?))").run('task-1', '-1 minutes')
     const job = db.prepare('SELECT status FROM task_jobs WHERE task_id = ?').get('task-1')
     expect(job?.status).toBe('queued')
+  })
+
+  it('keeps transaction queries on one connection', () => {
+    db.exec('BEGIN')
+    db.prepare(translateSql("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, datetime('now'))")).run('tx-test', 'value')
+    expect(db.prepare('SELECT value FROM config WHERE key = ?').get('tx-test')?.value).toBe('value')
+    db.exec('ROLLBACK')
+    expect(db.prepare('SELECT value FROM config WHERE key = ?').get('tx-test')).toBeUndefined()
   })
 })

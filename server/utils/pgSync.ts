@@ -21,7 +21,7 @@ const IDENTITY_TABLES = new Set([
 ])
 
 const BUFFER_BYTES = 32 * 1024 * 1024
-const QUERY_TIMEOUT_MS = 120_000
+const QUERY_TIMEOUT_MS = Math.max(1000, Number(process.env.PG_QUERY_TIMEOUT_MS || 120_000))
 
 function convertPlaceholders(sql: string): string {
   let result = ''

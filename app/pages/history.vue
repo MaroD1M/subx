@@ -222,7 +222,7 @@
       </div>
     </div>
 
-    <UModal v-model:open="isClearModalOpen" title="确认清空历史记录" description="此操作将永久删除所有已完成和失败的任务，不可撤销。">
+    <UModal v-model:open="isClearModalOpen" title="确认清空历史记录" description="此操作将永久删除已完成和失败任务及其日志、核对数据，不可撤销；不会清空全局翻译缓存。">
       <template #body>
         <div class="flex items-start gap-4">
           <div class="shrink-0 w-10 h-10 rounded-full bg-error-50 dark:bg-error-500/10 flex items-center justify-center ring-4 ring-error-50/50 dark:ring-error-500/20">
@@ -230,7 +230,7 @@
           </div>
           <div class="space-y-1">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">确认清空历史？</h3>
-            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">已完成和失败任务将被删除，运行中任务不受影响。</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">已完成和失败任务及其日志、核对数据将被删除，运行中任务和全局翻译缓存不受影响。</p>
           </div>
         </div>
       </template>
@@ -268,6 +268,8 @@ const pageSizeItems = [
 ]
 const statusFilter = ref('all')
 const searchQuery = ref('')
+const debouncedSearch = ref('')
+let searchDebounceTimer = null
 const statusOptions = [
   { label: '全部状态', value: 'all' },
   { label: '完成', value: 'done' },
@@ -281,18 +283,20 @@ const taskQuery = computed(() => ({
   page: page.value,
   pageSize: pageSize.value,
   status: statusFilter.value === 'all' ? '' : statusFilter.value,
-  q: searchQuery.value.trim()
+  q: debouncedSearch.value.trim()
 }))
 const { data, pending, refresh } = await useFetch('/api/tasks', { query: taskQuery })
-let historyRefreshTimer = null
-watch([page, pageSize, statusFilter, searchQuery], () => {
-  if (historyRefreshTimer) clearTimeout(historyRefreshTimer)
-  historyRefreshTimer = setTimeout(() => {
-    historyRefreshTimer = null
-    void refresh()
-  }, 30)
+watch(searchQuery, (value) => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    searchDebounceTimer = null
+    debouncedSearch.value = value
+  }, 250)
 })
 watch([statusFilter, searchQuery, pageSize], () => { page.value = 1 })
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+})
 
 const totalPages = computed(() => Math.max(1, Math.ceil(Number(data.value?.total || 0) / pageSize.value)))
 const pageNumbers = computed(() => {
@@ -390,6 +394,13 @@ async function clearHistory() {
 }
 
 async function retryTask(taskId) {
+  if (!(await confirm({
+    title: '重新翻译这个任务？',
+    description: '将创建新任务并重新调用翻译模型，可能产生额外费用。',
+    confirmLabel: '重新翻译',
+    color: 'warning'
+  }))) return
+
   retryingTaskId.value = taskId
   try {
     const res = await $fetch('/api/task', { method: 'POST', body: { retryTaskId: taskId } })

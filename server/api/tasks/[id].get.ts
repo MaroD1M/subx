@@ -1,3 +1,4 @@
+import { apiError } from '../../utils/apiError'
 import { TaskService } from '../../utils/task'
 import { getMediaRoot } from '../../utils/mediaRoots'
 import { useDb } from '../../utils/db'
@@ -5,7 +6,7 @@ import { useDb } from '../../utils/db'
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id') || event.context.params?.id
   if (!id) {
-    throw createError({ statusCode: 400, message: 'Task ID is required' })
+    throw apiError(400, 'Task ID is required')
   }
 
   try {
@@ -58,6 +59,6 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch {
-    throw createError({ statusCode: 404, message: 'Task not found' })
+    throw apiError(404, 'Task not found')
   }
 })

@@ -2,6 +2,17 @@ export const DEFAULT_TIME_ZONE = 'Asia/Shanghai'
 
 const SQLITE_UTC_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/
 const NAIVE_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
+
+function getFormatter(locale: string, options: Intl.DateTimeFormatOptions, timeZone: string): Intl.DateTimeFormat {
+  const key = `${locale}|${timeZone}|${JSON.stringify(options)}`
+  let formatter = formatterCache.get(key)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone })
+    formatterCache.set(key, formatter)
+  }
+  return formatter
+}
 
 export function normalizeTimeZone(value?: unknown, fallback = DEFAULT_TIME_ZONE): string {
   const candidate = String(value || '').trim()
@@ -48,40 +59,37 @@ export function toUtcIsoString(value: unknown): string {
 export function formatDateTime(value: unknown, timeZone = resolveServerTimeZone(), options: Intl.DateTimeFormatOptions = {}): string {
   const parsed = parseTimestamp(value)
   if (!parsed) return value == null || value === '' ? '-' : String(value)
-  return new Intl.DateTimeFormat('zh-CN', {
+  return getFormatter('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-    ...options,
-    timeZone: normalizeTimeZone(timeZone)
-  }).format(parsed)
+    ...options
+  }, normalizeTimeZone(timeZone)).format(parsed)
 }
 
 export function formatClock(value: unknown, timeZone = resolveServerTimeZone()): string {
   const parsed = parseTimestamp(value)
   if (!parsed) return value == null || value === '' ? '-' : String(value)
-  return new Intl.DateTimeFormat('zh-CN', {
+  return getFormatter('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false,
-    timeZone: normalizeTimeZone(timeZone)
-  }).format(parsed)
+    hour12: false
+  }, normalizeTimeZone(timeZone)).format(parsed)
 }
 
 export function formatLogTimestamp(value: unknown, timeZone = resolveServerTimeZone()): string {
   const parsed = parseTimestamp(value) || new Date()
-  return new Intl.DateTimeFormat('sv-SE', {
+  return getFormatter('sv-SE', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false,
-    timeZone: normalizeTimeZone(timeZone)
-  }).format(parsed)
+    hour12: false
+  }, normalizeTimeZone(timeZone)).format(parsed)
 }

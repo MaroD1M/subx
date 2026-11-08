@@ -4,14 +4,36 @@ on:
   push:
     branches: [ "master" ]
     tags: [ "v*" ]
+  workflow_dispatch:
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
   packages: write
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
   build-amd64:
     runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 60
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
@@ -69,6 +91,8 @@ jobs:
 
   build-arm64:
     runs-on: ubuntu-24.04-arm
+    needs: verify
+    timeout-minutes: 60
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
@@ -127,6 +151,7 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     needs: [build-amd64, build-arm64]
+    timeout-minutes: 20
     steps:
       - name: Prepare image name
         run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/subx" >> "$GITHUB_ENV"

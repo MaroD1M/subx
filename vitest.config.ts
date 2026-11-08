@@ -11,6 +11,19 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['server/**/*.test.ts', 'tests/unit/**/*.test.ts'],
-    exclude: ['node_modules/**', '.nuxt/**', '.output/**', 'tests/e2e/**']
+    exclude: ['node_modules/**', '.nuxt/**', '.output/**', 'tests/e2e/**'],
+    coverage: {
+      provider: 'v8',
+      include: ['server/**/*.ts', 'shared/**/*.ts'],
+      exclude: ['server/**/*.test.ts', 'server/utils/__tests__/**', 'server/utils/pgWorker.cjs'],
+      reporter: ['text-summary', 'json-summary', 'html'],
+      reportsDirectory: 'coverage',
+      thresholds: {
+        statements: 34,
+        branches: 29,
+        functions: 38,
+        lines: 35
+      }
+    }
   }
 })

@@ -70,6 +70,7 @@
           size="sm"
           color="warning"
           :variant="contentFilter === 'needs_attention' ? 'soft' : 'ghost'"
+          :aria-pressed="contentFilter === 'needs_attention'"
           title="空译文、同文、待核对、低质量、低置信度或有核对原因的条目"
           @click="toggleFilterPreset('needs_attention')"
         />
@@ -78,6 +79,7 @@
           size="sm"
           color="error"
           :variant="contentFilter === 'untranslated' ? 'soft' : 'ghost'"
+          :aria-pressed="contentFilter === 'untranslated'"
           title="译文为空，或译文与原文完全相同"
           @click="toggleFilterPreset('untranslated')"
         />
@@ -87,6 +89,7 @@
           size="sm"
           color="warning"
           :variant="proofreadIssueFilter !== 'all' ? 'soft' : 'ghost'"
+          :aria-pressed="proofreadIssueFilter !== 'all'"
           title="只看 AI 一致性问题涉及的字幕"
           @click="toggleProofreadIssueFilter"
         />
@@ -95,6 +98,7 @@
           size="sm"
           color="warning"
           :variant="qualityFilter === 'low' ? 'soft' : 'ghost'"
+          :aria-pressed="qualityFilter === 'low'"
           title="质量分低于设置阈值"
           @click="toggleFilterPreset('low_quality')"
         />
@@ -103,6 +107,7 @@
           size="sm"
           color="neutral"
           :variant="statusFilter === 'dirty' ? 'soft' : 'ghost'"
+          :aria-pressed="statusFilter === 'dirty'"
           title="只看尚未保存的修改"
           @click="toggleFilterPreset('dirty')"
         />
@@ -197,95 +202,28 @@
           </div>
 
           <div class="divide-y divide-gray-100 dark:divide-gray-800 xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto">
-            <div
+            <ReviewEntryCard
               v-for="entry in pagedEntries"
               :key="entry.subtitleId"
               v-memo="[entry.finalText, entry.translatedText, entry.originalText, entry.reviewStatus, entry.reviewReasons?.join(','), entry.selected, entry.edited, entry.asrConfidence, entry.qualityScore, entry.qualityIssues?.join(','), focusedSubtitleId === String(entry.subtitleId), proofreadRevision]"
               :id="`review-entry-${entry.subtitleId}`"
               tabindex="-1"
-              class="space-y-2.5 p-3"
-              :class="focusedSubtitleId === String(entry.subtitleId) ? 'rounded-2xl bg-warning-50/40 ring-2 ring-warning-400/70 dark:bg-warning-900/10' : ''"
-            >
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0 space-y-2">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="inline-flex" @click.prevent="onCheckboxClick(entry, $event)">
-                      <UCheckbox :model-value="entry.selected" :aria-label="`选择字幕 #${entry.subtitleId}`" />
-                    </span>
-                    <UButton icon="i-lucide-arrow-up" variant="ghost" size="xs" color="neutral" title="上移" aria-label="上移" @click="moveUp(entry)" />
-                    <UButton icon="i-lucide-arrow-down" variant="ghost" size="xs" color="neutral" title="下移" aria-label="下移" @click="moveDown(entry)" />
-                    <UBadge size="sm" color="neutral" variant="soft">#{{ entry.subtitleId }}</UBadge>
-                    <UBadge size="sm" :color="statusColor(entry.reviewStatus)" variant="soft">{{ statusLabel(entry.reviewStatus) }}</UBadge>
-                    <UBadge v-if="entry.asrConfidence != null" size="sm" :color="Number(entry.asrConfidence) < 0.6 ? 'warning' : 'success'" variant="subtle">
-                      ASR {{ (Number(entry.asrConfidence) * 100).toFixed(0) }}%
-                    </UBadge>
-                    <UBadge v-if="entry.qualityScore != null" size="sm" :color="Number(entry.qualityScore) < qualityThreshold ? 'warning' : 'success'" variant="subtle">
-                      质量 {{ (Number(entry.qualityScore) * 100).toFixed(0) }}%
-                    </UBadge>
-                    <UBadge v-if="isReviewTranslationEmpty(entry)" size="sm" color="error" variant="subtle">译文为空</UBadge>
-                    <UBadge v-else-if="isReviewSameAsSource(entry)" size="sm" color="warning" variant="subtle">译文与原文相同</UBadge>
-                    <UBadge v-if="isReviewFinalDiffersFromTranslation(entry)" size="sm" color="info" variant="subtle">导出已调整</UBadge>
-                    <UBadge v-else-if="isReviewFinalSameAsSource(entry) && !isReviewSameAsSource(entry)" size="sm" color="neutral" variant="subtle">导出=原文</UBadge>
-                    <UBadge
-                      v-if="proofreadIssueList(entry).length"
-                      size="sm"
-                      color="warning"
-                      variant="subtle"
-                      :title="proofreadIssueList(entry).map((issue: any) => `${issue.type}: ${issue.message}`).join('\n')"
-                    >
-                      AI 校对 {{ proofreadIssueList(entry).length }}
-                    </UBadge>
-                    <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ entry.startTime }} → {{ entry.endTime }}</span>
-                  </div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <UBadge v-for="reason in entry.reviewReasons" :key="reason" size="xs" color="warning" variant="subtle">{{ reasonLabel(reason) }}</UBadge>
-                    <UBadge v-for="issue in entry.qualityIssues" :key="`quality-${issue}`" size="xs" color="error" variant="subtle">{{ qualityIssueLabel(issue) }}</UBadge>
-                  </div>
-                </div>
-                <div class="flex items-center gap-1">
-                  <UButton icon="i-lucide-play" size="xs" color="neutral" variant="ghost" :aria-label="`播放片段 #${entry.subtitleId}`" title="播放音频片段" @click="playClip(entry)" />
-                  <UButton label="重译" size="xs" color="primary" variant="ghost" :loading="retranslatingSingleId === entry.subtitleId" title="重译此条；会覆盖当前译文和最终导出" @click="retranslateSingle(entry)" />
-                </div>
-              </div>
-
-              <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(180px,0.9fr)_minmax(180px,0.9fr)_minmax(240px,1.2fr)]">
-                <div class="space-y-1.5 rounded-2xl bg-gray-50 p-3 dark:bg-gray-900/60">
-                  <p class="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400">原文</p>
-                  <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
-                </div>
-                <div class="space-y-1.5 rounded-2xl bg-gray-50 p-3 dark:bg-gray-900/60">
-                  <div class="flex items-center justify-between gap-1">
-                    <p class="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400" title="AI 当前译文；重译会覆盖此列">当前译文</p>
-                    <div class="flex items-center gap-0.5">
-                      <UButton icon="i-lucide-chevron-up" variant="ghost" size="xs" color="neutral" title="译文上移" aria-label="译文上移" @click="shiftTranslation(entry, -1)" />
-                      <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="neutral" title="译文下移" aria-label="译文下移" @click="shiftTranslation(entry, 1)" />
-                    </div>
-                  </div>
-                  <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
-                </div>
-                <div class="space-y-2 rounded-2xl border border-primary-100 bg-white p-3 dark:border-primary-900/40 dark:bg-gray-950/60">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-[10px] uppercase tracking-widest text-primary-700" title="此列内容会写入最终字幕文件">最终导出</p>
-                    <div class="flex items-center gap-0.5">
-                      <UButton icon="i-lucide-chevron-up" variant="ghost" size="xs" color="primary" title="最终导出上移" aria-label="最终导出上移" @click="shiftFinal(entry, -1)" />
-                      <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="primary" title="最终导出下移" aria-label="最终导出下移" @click="shiftFinal(entry, 1)" />
-                      <UButton label="恢复译文" size="xs" color="primary" variant="ghost" @click="restoreTranslated(entry)" />
-                      <UButton label="使用原文" size="xs" color="neutral" variant="ghost" @click="useOriginal(entry)" />
-                    </div>
-                  </div>
-                  <UTextarea
-                    v-model="entry.finalText"
-                    :rows="4"
-                    autoresize
-                    :maxrows="8"
-                    class="w-full"
-                    :aria-label="`最终导出 #${entry.subtitleId}`"
-                    placeholder="此列内容会写入字幕文件"
-                    @update:model-value="markEdited(entry)"
-                  />
-                </div>
-              </div>
-            </div>
+              :entry="entry"
+              :focused="focusedSubtitleId === String(entry.subtitleId)"
+              :proofread-issues="proofreadIssueList(entry)"
+              :quality-threshold="qualityThreshold"
+              :retranslating="retranslatingSingleId === entry.subtitleId"
+              @toggle-select="onCheckboxClick"
+              @move-up="moveUp"
+              @move-down="moveDown"
+              @play="playClip"
+              @retranslate="retranslateSingle"
+              @shift-translation="shiftTranslation"
+              @shift-final="shiftFinal"
+              @restore-translated="restoreTranslated"
+              @use-original="useOriginal"
+              @update-final="updateFinalText"
+            />
 
             <div v-if="reviewLoading && !entries.length" class="flex items-center justify-center gap-2 p-8 text-center text-sm text-gray-500 dark:text-gray-400">
               <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" /> 正在加载核对数据...
@@ -372,59 +310,7 @@
       </div>
     </div>
 
-    <UModal v-model:open="guideOpen" title="字幕核对操作指南" description="先筛选，再选择，最后重译或编辑；只有「最终导出」列会写入字幕文件。" :ui="{ content: 'sm:max-w-3xl' }">
-      <template #body>
-        <div class="max-h-[72vh] space-y-3 overflow-y-auto pr-1 text-sm leading-6 text-gray-700 dark:text-gray-300">
-          <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
-            <p class="font-semibold text-gray-900 dark:text-white">1. 先筛选，再决定处理范围</p>
-            <p class="mt-1">搜索框可查原文、译文、最终导出和字幕编号。内容筛选中的「译文与原文相同」会忽略标点、空格、大小写和格式标签，适合找出 AI 没有真正翻译的条目。</p>
-            <p class="mt-1">快捷筛选：<span class="font-medium">需要处理</span> 会合并空译文、同文、待核对、低质量、低置信度和有核对原因的条目；<span class="font-medium">未翻译 / 同文</span> 只筛空译文和同文。</p>
-          </section>
-          <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
-            <p class="font-semibold text-gray-900 dark:text-white">2. 勾选要处理的条目</p>
-            <p class="mt-1">勾选单条后可按住 Shift 再点另一条，连续选中一段。「全选筛选结果」会选中当前筛选出的所有条目（跨页生效）；「反选」用于快速切换。</p>
-          </section>
-          <section class="rounded-2xl border border-primary-100 bg-primary-50/70 p-4 dark:border-primary-900/40 dark:bg-primary-950/20">
-            <p class="font-semibold text-primary-900 dark:text-primary-100">3. 重译会覆盖内容</p>
-            <p class="mt-1 text-primary-800 dark:text-primary-200">「重译选中」和「重译筛选」都会调用当前翻译模型，覆盖这些条目的「当前译文」和「最终导出」，并清除旧质量评分。开始时系统会先保存未保存修改，但随后手动改动仍会被重译结果覆盖，也会产生模型调用费用。</p>
-          </section>
-          <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
-            <p class="font-semibold text-gray-900 dark:text-white">4. 三列文本分别是什么</p>
-            <ul class="mt-1 list-disc space-y-1 pl-5">
-              <li><span class="font-medium">原文</span>：只读，字幕识别或源字幕内容。</li>
-              <li><span class="font-medium">当前译文</span>：AI 翻译结果，供对照和恢复使用，不直接导出。</li>
-              <li><span class="font-medium">最终导出</span>：可编辑，导出文件实际写入的内容。</li>
-            </ul>
-            <p class="mt-1">「使用原文」只把最终导出改成原文，适合人名、歌曲、无需翻译的台词；「恢复译文」把最终导出恢复成当前译文。</p>
-          </section>
-          <section class="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
-            <p class="font-semibold text-amber-900 dark:text-amber-100">5. 上移 / 下移 / 平移用于修正错位</p>
-            <p class="mt-1 text-amber-800 dark:text-amber-200">整行上移下移会改变字幕顺序；「更多」里的全局平移和选区平移用于译文整体错位一行的情况。执行前建议先保存或确认当前筛选范围，避免影响未注意到的条目。</p>
-          </section>
-          <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
-            <p class="font-semibold text-gray-900 dark:text-white">6. 保存、导出、放弃的区别</p>
-            <ul class="mt-1 list-disc space-y-1 pl-5">
-              <li><span class="font-medium">保存修改</span>：只写入核对数据，不生成字幕文件。</li>
-              <li><span class="font-medium">导出结果</span>：先保存，再生成字幕文件并标记任务完成，然后返回任务页。</li>
-              <li><span class="font-medium">放弃成果</span>：把任务标记为失败并作废本次翻译结果，不可撤销。</li>
-            </ul>
-          </section>
-          <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
-            <p class="font-semibold text-gray-900 dark:text-white">7. AI 校对只给建议</p>
-            <p class="mt-1">「AI 校对」不会自动修改字幕，只返回术语建议和一致性问题。结果会缓存，重进页面或误点不会重复消耗 Token；术语加入后只影响后续新任务。</p>
-          </section>
-          <section class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
-            <p class="font-semibold text-gray-900 dark:text-white">8. 键盘快捷键</p>
-            <p class="mt-1"><span class="font-mono">J</span> / <span class="font-mono">K</span> 下一条 / 上一条；<span class="font-mono">Enter</span> 编辑当前条最终文本；<span class="font-mono">Ctrl/Cmd + S</span> 保存修改。</p>
-          </section>
-        </div>
-      </template>
-      <template #footer>
-        <div class="flex w-full justify-end">
-          <UButton label="开始操作" color="primary" @click="guideOpen = false" />
-        </div>
-      </template>
-    </UModal>
+    <ReviewGuideModal v-model:open="guideOpen" />
 
     <USlideover v-model:open="previewOpen" title="字幕预览" description="查看当前导出设置的 SRT/ASS 预览。" :ui="{ content: 'w-full sm:max-w-2xl' }">
       <template #body>
@@ -467,6 +353,11 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({ key: route => String(route.params.id || '') })
+import {
+  proofreadIssueLabel,
+  reviewReasonLabel as reasonLabel
+} from '~~/shared/reviewLabels'
 import {
   isReviewFinalDiffersFromTranslation,
   isReviewFinalSameAsSource,
@@ -554,7 +445,7 @@ const summary = reactive({ total: 0, needsReview: 0, edited: 0 })
 const entries = ref<any[]>([])
 const taskMeta = reactive({ outputMode: 'translated', bilingualLayout: 'translated_first' as 'translated_first' | 'original_first' })
 const lastClickedIndex = ref(-1)
-const entrySnapshots = ref<Record<string, { translatedText: string, finalText: string, reviewStatus: string, selected: boolean, edited: boolean }>>({})
+const entrySnapshots = ref<Record<string, { translatedText: string, finalText: string, reviewStatus: string, edited: boolean }>>({})
 
 function srtTimeToSeconds(value: string) {
   const match = String(value || '').match(/(\d+):(\d+):(\d+)[,.](\d+)/)
@@ -852,35 +743,6 @@ const qualityFilterItems = computed(() => {
 })
 
 const reviewStatuses = ['needs_review', 'fallback_original', 'missing']
-const reasonLabels: Record<string, string> = {
-  missing: '缺少译文',
-  same_as_source: '译文与原文相同',
-  same_as_source_allowed: '同文可接受',
-  latin_heavy: '译文仍偏原语言',
-  bilingual_duplicate: '双语内容重复',
-  suspected_contamination: '疑似串条/混入相邻字幕',
-  overlong_translation: '译文异常偏长',
-  suspected_shift: '疑似错位/串行',
-  low_asr_confidence: 'ASR 置信度偏低',
-  low_quality_translation: '双模型质量评分偏低'
-}
-
-const proofreadIssueLabels: Record<string, string> = {
-  name_inconsistency: '人名/译名不一致',
-  terminology: '术语不一致',
-  mistranslation: '疑似误译',
-  omission: '漏译',
-  addition: '增译',
-  fluency: '不自然',
-  formatting: '格式/标点',
-  style_mismatch: '风格不匹配',
-  other: '其他问题'
-}
-
-function proofreadIssueLabel(type: string) {
-  return proofreadIssueLabels[type] || type
-}
-
 const reasonFilterItems = computed(() => {
   const counts = new Map<string, number>()
   for (const entry of entries.value) {
@@ -1170,40 +1032,11 @@ const hasActiveFilters = computed(() => Boolean(
 
 const activeFilterCount = computed(() => (searchQuery.value.trim() ? 1 : 0) + advancedFilterCount.value)
 
-function statusLabel(status: string) {
-  return ({ translated: '已翻译', accepted_same: '同文可接受', needs_review: '需核对', fallback_original: '已回退', missing: '缺失', edited: '已编辑' } as any)[status] || status
-}
-
-function statusColor(status: string) {
-  return ({ translated: 'success', accepted_same: 'primary', needs_review: 'warning', fallback_original: 'error', missing: 'error', edited: 'info' } as any)[status] || 'neutral'
-}
-
-const qualityIssueLabels: Record<string, string> = {
-  omission: '漏译',
-  addition: '增译',
-  mistranslation: '误译',
-  fluency: '不自然',
-  terminology: '术语不一致',
-  formatting: '格式/标点',
-  name_inconsistency: '人名不一致',
-  style_mismatch: '风格不匹配',
-  other: '其他问题'
-}
-
-function qualityIssueLabel(issue: string) {
-  return qualityIssueLabels[issue] || issue
-}
-
-function reasonLabel(reason: string) {
-  return reasonLabels[reason] || reason
-}
-
 function makeSnapshot(entry: any) {
   return {
     translatedText: String(entry.translatedText || ''),
     finalText: String(entry.finalText || ''),
     reviewStatus: String(entry.reviewStatus || ''),
-    selected: !!entry.selected,
     edited: !!entry.edited
   }
 }
@@ -1220,7 +1053,6 @@ function isEntryDirty(entry: any) {
   return snapshot.translatedText !== String(entry.translatedText || '')
     || snapshot.finalText !== String(entry.finalText || '')
     || snapshot.reviewStatus !== String(entry.reviewStatus || '')
-    || snapshot.selected !== !!entry.selected
     || snapshot.edited !== !!entry.edited
 }
 
@@ -1243,6 +1075,11 @@ function handleBeforeUnload(event: BeforeUnloadEvent) {
 function markEdited(entry: any) {
   entry.edited = true
   entry.reviewStatus = 'edited'
+}
+
+function updateFinalText(entry: any, value: string) {
+  entry.finalText = value
+  markEdited(entry)
 }
 
 function useOriginal(entry: any) {
@@ -1508,7 +1345,10 @@ async function loadReview() {
     summary.edited = res.summary.edited
     taskMeta.outputMode = res.task?.outputMode || 'translated'
     taskMeta.bilingualLayout = res.task?.bilingualLayout || 'translated_first'
+    skipLayoutWatch = true
     bilingualLayout.value = taskMeta.bilingualLayout
+    await nextTick()
+    skipLayoutWatch = false
     exportMode.value = taskMeta.outputMode as any
     exportStyle.value = res.task?.subtitleStylePreset || 'bilingual_simple'
     exportFormat.value = (res.task?.subtitleFormat === 'ass' ? 'ass' : 'srt')
@@ -1592,13 +1432,13 @@ function schedulePreview() {
 }
 
 async function saveChanges(showToast = true) {
+  if (saving.value) return
   const changedEntries = dirtyEntries.value.map((entry) => ({
     subtitleId: entry.subtitleId,
     translatedText: entry.translatedText,
     finalText: entry.finalText,
     reviewStatus: entry.reviewStatus,
     sortOrder: entries.value.indexOf(entry),
-    selected: entry.selected,
     edited: entry.edited
   }))
 
@@ -1613,8 +1453,16 @@ async function saveChanges(showToast = true) {
       method: 'PATCH',
       body: { entries: changedEntries, bilingualLayout: bilingualLayout.value }
     })
+    for (const entry of changedEntries) {
+      entrySnapshots.value[String(entry.subtitleId)] = {
+        translatedText: entry.translatedText,
+        finalText: entry.finalText,
+        reviewStatus: entry.reviewStatus,
+        edited: entry.edited
+      }
+    }
     if (showToast) toast.add({ title: `已保存 ${changedEntries.length} 条修改`, description: '尚未生成字幕文件；需要时再点「导出结果」。', color: 'success' })
-    await Promise.all([loadReview(), loadPreview(), refreshProofreadCacheState()])
+    await Promise.all([loadPreview(), refreshProofreadCacheState()])
   } catch (error: any) {
     toast.add({ title: '保存失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
     throw error
@@ -1764,16 +1612,21 @@ watch(previewFormat, () => {
   schedulePreview()
 })
 
-watch(bilingualLayout, async (value) => {
+let skipLayoutWatch = false
+let layoutSaveTimer: ReturnType<typeof setTimeout> | null = null
+watch(bilingualLayout, (value) => {
   taskMeta.bilingualLayout = value
-  try {
-    await $fetch(`/api/tasks/${taskId}/review`, {
+  if (skipLayoutWatch) return
+  if (layoutSaveTimer) clearTimeout(layoutSaveTimer)
+  layoutSaveTimer = setTimeout(() => {
+    layoutSaveTimer = null
+    void $fetch(`/api/tasks/${taskId}/review`, {
       method: 'PATCH',
       body: { entries: [], bilingualLayout: value }
+    }).catch((error: any) => {
+      toast.add({ title: '布局保存失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
     })
-  } catch (error: any) {
-    toast.add({ title: '布局保存失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
-  }
+  }, 300)
   schedulePreview()
 })
 
