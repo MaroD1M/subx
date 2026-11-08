@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  plugins: [vue()],
   resolve: {
     alias: {
       '~~': fileURLToPath(new URL('.', import.meta.url)),
@@ -10,7 +12,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['server/**/*.test.ts', 'tests/unit/**/*.test.ts'],
+    include: ['server/**/*.test.ts', 'tests/unit/**/*.test.ts', 'app/**/*.test.ts'],
     exclude: ['node_modules/**', '.nuxt/**', '.output/**', 'tests/e2e/**'],
     coverage: {
       provider: 'v8',

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { maskChannelConfig, sanitizeChannelConfig, sendChannel, testNotificationProxy } from '../notifications'
+import { maskChannelConfig, sanitizeChannelConfig, sendChannel } from '../notifications'
+import { testNotificationProxy } from '../notificationTransport'
 
 const undiciFetchMock = vi.hoisted(() => vi.fn())
 

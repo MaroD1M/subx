@@ -366,7 +366,6 @@ import {
   isReviewOverlong,
   isReviewSameAsSource,
   isReviewTranslationEmpty,
-  matchesReviewContentFilter,
   matchesReviewSearch,
   type ReviewContentFilter
 } from '~~/shared/reviewFilters'
@@ -854,6 +853,90 @@ async function retranslateProofreadIssues() {
   }
 }
 
+interface ReviewEntryAnalysis {
+  empty: boolean
+  same: boolean
+  finalSame: boolean
+  finalDiffers: boolean
+  latinHeavy: boolean
+  overlong: boolean
+  needsAttention: boolean
+  dirty: boolean
+  selected: boolean
+  reasons: Set<string>
+}
+
+const reviewAnalytics = computed(() => {
+  const quality = qualityThreshold.value
+  const stats = {
+    all: 0,
+    needs_review: 0,
+    translated: 0,
+    accepted_same: 0,
+    fallback_original: 0,
+    missing: 0,
+    edited: 0,
+    empty: 0,
+    same: 0,
+    untranslated: 0,
+    finalSame: 0,
+    finalDiffers: 0,
+    latinHeavy: 0,
+    overlong: 0,
+    needsAttention: 0
+  }
+  const byId = new Map<string, ReviewEntryAnalysis>()
+  const dirtyEntries: any[] = []
+  const selectedEntries: any[] = []
+
+  for (const entry of entries.value) {
+    stats.all += 1
+    const status = String(entry.reviewStatus || '')
+    if (reviewStatuses.includes(status)) stats.needs_review += 1
+    if (status === 'translated') stats.translated += 1
+    if (status === 'accepted_same') stats.accepted_same += 1
+    if (status === 'fallback_original') stats.fallback_original += 1
+    if (status === 'missing') stats.missing += 1
+    if (entry.edited) stats.edited += 1
+
+    const empty = isReviewTranslationEmpty(entry)
+    const same = isReviewSameAsSource(entry)
+    const finalSame = isReviewFinalSameAsSource(entry)
+    const finalDiffers = isReviewFinalDiffersFromTranslation(entry)
+    const latinHeavy = isReviewLatinHeavy(entry)
+    const overlong = isReviewOverlong(entry)
+    const needsAttention = isReviewNeedsAttention(entry, quality)
+    const dirty = isEntryDirty(entry)
+    const selected = !!entry.selected
+
+    if (empty) stats.empty += 1
+    if (same) stats.same += 1
+    if (empty || same) stats.untranslated += 1
+    if (finalSame) stats.finalSame += 1
+    if (finalDiffers) stats.finalDiffers += 1
+    if (latinHeavy) stats.latinHeavy += 1
+    if (overlong) stats.overlong += 1
+    if (needsAttention) stats.needsAttention += 1
+    if (dirty) dirtyEntries.push(entry)
+    if (selected) selectedEntries.push(entry)
+
+    byId.set(String(entry.subtitleId), {
+      empty,
+      same,
+      finalSame,
+      finalDiffers,
+      latinHeavy,
+      overlong,
+      needsAttention,
+      dirty,
+      selected,
+      reasons: new Set(Array.isArray(entry.reviewReasons) ? entry.reviewReasons.map(String) : [])
+    })
+  }
+
+  return { stats, byId, dirtyEntries, selectedEntries }
+})
+
 const filteredEntries = computed(() => {
   let list = entries.value
 
@@ -874,15 +957,27 @@ const filteredEntries = computed(() => {
   } else if (statusFilter.value === 'edited') {
     list = list.filter(entry => entry.edited)
   } else if (statusFilter.value === 'dirty') {
-    list = list.filter(entry => isEntryDirty(entry))
+    list = list.filter(entry => reviewAnalytics.value.byId.get(String(entry.subtitleId))?.dirty)
   } else if (statusFilter.value === 'selected') {
-    list = list.filter(entry => entry.selected)
+    list = list.filter(entry => reviewAnalytics.value.byId.get(String(entry.subtitleId))?.selected)
   }
 
   if (contentFilter.value !== 'all') {
-    list = list.filter(entry => matchesReviewContentFilter(entry, contentFilter.value, {
-      qualityThreshold: qualityThreshold.value
-    }))
+    list = list.filter((entry) => {
+      const analysis = reviewAnalytics.value.byId.get(String(entry.subtitleId))
+      if (!analysis) return false
+      switch (contentFilter.value) {
+        case 'needs_attention': return analysis.needsAttention
+        case 'untranslated': return analysis.empty || analysis.same
+        case 'empty': return analysis.empty
+        case 'same_as_source': return analysis.same
+        case 'final_same_as_source': return analysis.finalSame
+        case 'final_differs': return analysis.finalDiffers
+        case 'latin_heavy': return analysis.latinHeavy
+        case 'overlong': return analysis.overlong
+        default: return true
+      }
+    })
   }
 
   if (proofreadIssueFilter.value !== 'all') {
@@ -894,7 +989,7 @@ const filteredEntries = computed(() => {
   }
 
   if (reasonFilter.value !== 'all') {
-    list = list.filter(entry => (entry.reviewReasons || []).includes(reasonFilter.value))
+    list = list.filter(entry => reviewAnalytics.value.byId.get(String(entry.subtitleId))?.reasons.has(reasonFilter.value))
   }
 
   if (confidenceFilter.value === 'low') {
@@ -920,54 +1015,11 @@ const pagedEntries = computed(() => {
   return filteredEntries.value.slice(start, start + pageSize.value)
 })
 
-const selectedEntries = computed(() => entries.value.filter(entry => entry.selected))
-const dirtyEntries = computed(() => entries.value.filter(entry => isEntryDirty(entry)))
+const selectedEntries = computed(() => reviewAnalytics.value.selectedEntries)
+const dirtyEntries = computed(() => reviewAnalytics.value.dirtyEntries)
 const dirtyCount = computed(() => dirtyEntries.value.length)
 
-const reviewStats = computed(() => {
-  const quality = qualityThreshold.value
-  const stats = {
-    all: 0,
-    needs_review: 0,
-    translated: 0,
-    accepted_same: 0,
-    fallback_original: 0,
-    missing: 0,
-    edited: 0,
-    empty: 0,
-    same: 0,
-    untranslated: 0,
-    finalSame: 0,
-    finalDiffers: 0,
-    latinHeavy: 0,
-    overlong: 0,
-    needsAttention: 0
-  }
-
-  for (const entry of entries.value) {
-    stats.all += 1
-    const status = String(entry.reviewStatus || '')
-    if (reviewStatuses.includes(status)) stats.needs_review += 1
-    if (status === 'translated') stats.translated += 1
-    if (status === 'accepted_same') stats.accepted_same += 1
-    if (status === 'fallback_original') stats.fallback_original += 1
-    if (status === 'missing') stats.missing += 1
-    if (entry.edited) stats.edited += 1
-
-    const empty = isReviewTranslationEmpty(entry)
-    const same = isReviewSameAsSource(entry)
-    if (empty) stats.empty += 1
-    if (same) stats.same += 1
-    if (empty || same) stats.untranslated += 1
-    if (isReviewFinalSameAsSource(entry)) stats.finalSame += 1
-    if (isReviewFinalDiffersFromTranslation(entry)) stats.finalDiffers += 1
-    if (isReviewLatinHeavy(entry)) stats.latinHeavy += 1
-    if (isReviewOverlong(entry)) stats.overlong += 1
-    if (isReviewNeedsAttention(entry, quality)) stats.needsAttention += 1
-  }
-
-  return stats
-})
+const reviewStats = computed(() => reviewAnalytics.value.stats)
 
 const statusCounts = computed(() => ({
   all: reviewStats.value.all,

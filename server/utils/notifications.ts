@@ -8,14 +8,13 @@
 
 import type { NotificationChannel, NotificationChannelType, NotificationEvent } from '../../types'
 import { useDb } from './db'
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { formatDateTime, toUtcIsoString } from '~~/shared/time'
 import { ConfigService } from './config'
 import { decryptSecret, encryptSecret, isEncryptedSecret } from './secret'
 import { STYLE_PRESETS } from '../../shared/stylePresets'
 import { asString, dispatchChannel, testNotificationProxy, validateHttpUrl, type NotificationPayload } from './notificationTransport'
 
-export { testNotificationProxy, type NotificationPayload } from './notificationTransport'
 
 export const NOTIFICATION_EVENTS: NotificationEvent[] = [
   'task_done',
@@ -491,8 +490,10 @@ export const NotificationService = {
   },
 
   async notifyBackfillDone(folderId: number, folderName: string, queued: number, scanned: number) {
+    const bucket = Math.floor(Date.now() / 5 / 60 / 1000)
+    const digest = createHash('sha256').update(`${folderId}:${queued}:${scanned}`).digest('hex').slice(0, 16)
     return this.enqueue('backfill_done', 'SubX 历史回填已入队', `目录：${folderName}\n扫描：${scanned} 个视频\n加入队列：${queued} 个`, {
-      dedupeKey: `backfill_done:${folderId}:${Date.now()}`
+      dedupeKey: `backfill_done:${folderId}:${bucket}:${digest}`
     })
   },
 

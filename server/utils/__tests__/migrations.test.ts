@@ -28,10 +28,13 @@ describe('database migrations', () => {
     expect(columnNames(db, 'task_review_entries')).toEqual(expect.arrayContaining(['sort_order', 'quality_score', 'quality_issues']))
     expect(columnNames(db, 'task_proofread_cache')).toEqual(expect.arrayContaining(['fingerprint', 'result_json']))
     expect(db.prepare("SELECT sort_order FROM task_review_entries WHERE subtitle_id = '12'").get()).toEqual({ sort_order: 12 })
-    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }])
+    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }])
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_task_logs_task_id'").get()).toBeTruthy()
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_task_responses_task_chunk'").get()).toBeTruthy()
 
     expect(() => runMigrations(db, 'sqlite')).not.toThrow()
     expect(MIGRATIONS.some(migration => migration.version === 3)).toBe(true)
+    expect(MIGRATIONS.some(migration => migration.version === 4)).toBe(true)
     db.close()
   })
 

@@ -5,6 +5,8 @@ import { NotificationService } from '../utils/notifications'
 import { IntegrationService } from '../utils/integrations'
 
 let automationListenersRegistered = false
+const RECOVERY_INTERVAL_MS = 5 * 60 * 1000
+const globalState = globalThis as any
 
 function registerAutomationListeners() {
   if (automationListenersRegistered) return
@@ -27,13 +29,40 @@ function registerAutomationListeners() {
   })
 }
 
-export default defineNitroPlugin(async () => {
+async function recoverRuntimeState() {
   try {
     await globalTaskQueue.recoverInterrupted()
-    await ConfigService.cleanupLogs()
-    registerAutomationListeners()
-    await WatchService.start()
   } catch (e) {
     console.error('[Reconcile] Failed to recover interrupted tasks:', e)
+  }
+  try {
+    NotificationService.recoverStuck()
+  } catch (e) {
+    console.error('[Reconcile] Failed to recover stuck notifications:', e)
+  }
+}
+
+export default defineNitroPlugin(async () => {
+  await recoverRuntimeState()
+
+  try {
+    await ConfigService.cleanupLogs()
+  } catch (e) {
+    console.error('[Reconcile] Failed to cleanup logs:', e)
+  }
+
+  registerAutomationListeners()
+
+  try {
+    await WatchService.start()
+  } catch (e) {
+    console.error('[Reconcile] Failed to start watch service:', e)
+  }
+
+  if (!globalState.__subxRecoveryTimer) {
+    globalState.__subxRecoveryTimer = setInterval(() => {
+      void recoverRuntimeState()
+    }, RECOVERY_INTERVAL_MS)
+    globalState.__subxRecoveryTimer.unref?.()
   }
 })

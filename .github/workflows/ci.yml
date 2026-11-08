@@ -50,6 +50,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: API integration tests
+        run: npm run test:api
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 40

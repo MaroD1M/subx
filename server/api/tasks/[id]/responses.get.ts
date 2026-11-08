@@ -1,5 +1,6 @@
 import { apiError } from '../../../utils/apiError'
 import { useDb } from '../../../utils/db'
+import { getAuthContext } from '../../../utils/apiTokens'
 
 function detectResponseIssue(value: string | null | undefined) {
     const normalized = String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
@@ -39,6 +40,8 @@ export default defineEventHandler(async (event) => {
         throw apiError(400, 'Task ID is required')
     }
 
+    const auth = getAuthContext(event)
+    const canViewRaw = auth?.type === 'session' || (Array.isArray(auth?.scopes) && (auth.scopes.includes('*') || auth.scopes.includes('system:admin')))
     const db = useDb()
     const rows = db.prepare(
         'SELECT id, task_id, chunk_index, model, raw_request, raw_response, response_meta, prompt_tokens, completion_tokens, total_tokens, created_at FROM task_responses WHERE task_id = ? ORDER BY chunk_index ASC'
@@ -62,11 +65,13 @@ export default defineEventHandler(async (event) => {
 
         return {
             ...row,
+            raw_request: canViewRaw ? row.raw_request : null,
+            raw_response: canViewRaw ? row.raw_response : null,
             response_meta: meta,
             response_issue: responseIssue,
             response_issue_label: issueLabel(responseIssue),
-            raw_request_preview: toPreview(row.raw_request),
-            raw_response_preview: toPreview(row.raw_response)
+            raw_request_preview: canViewRaw ? toPreview(row.raw_request) : '',
+            raw_response_preview: canViewRaw ? toPreview(row.raw_response) : ''
         }
     })
 

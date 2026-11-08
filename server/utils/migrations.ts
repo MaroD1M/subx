@@ -30,6 +30,18 @@ function ensureColumn(db: any, dialect: MigrationDialect, table: string, column:
   }
 }
 
+function hasTable(db: any, dialect: MigrationDialect, table: string): boolean {
+  if (dialect === 'sqlite') {
+    return Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(table))
+  }
+  return Boolean(db.prepare("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?").get(table))
+}
+
+function ensureIndex(db: any, dialect: MigrationDialect, table: string, index: string, columns: string) {
+  if (!hasTable(db, dialect, table)) return
+  db.exec(`CREATE INDEX IF NOT EXISTS ${index} ON ${table}(${columns})`)
+}
+
 function ensureLegacyColumns(db: any, dialect: MigrationDialect) {
   const columns: Array<[string, string, string]> = [
     ['tasks', 'style_preset', "TEXT NOT NULL DEFAULT 'default'"],
@@ -52,6 +64,8 @@ function ensureLegacyColumns(db: any, dialect: MigrationDialect) {
     ['tasks', 'step_progress', 'INTEGER NOT NULL DEFAULT 0'],
     ['tasks', 'step_message', 'TEXT'],
     ['tasks', 'track_policy_json', "TEXT NOT NULL DEFAULT '{}'"],
+    ['task_responses', 'chunk_index', 'INTEGER NOT NULL DEFAULT 0'],
+    ['task_responses', 'model', 'TEXT'],
     ['task_responses', 'raw_request', 'TEXT'],
     ['task_responses', 'response_meta', 'TEXT'],
     ['task_responses', 'prompt_tokens', 'INTEGER DEFAULT 0'],
@@ -122,7 +136,16 @@ export const MIGRATIONS: Migration[] = [
         db.exec('UPDATE task_review_entries SET sort_order = CAST(subtitle_id AS INTEGER) WHERE sort_order = 0')
       }
     }
-  }
+  },
+  {
+    version: 4,
+    name: 'task-query-indexes',
+    up(db, dialect) {
+      ensureIndex(db, dialect, 'task_logs', 'idx_task_logs_task_id', 'task_id, id')
+      ensureIndex(db, dialect, 'task_responses', 'idx_task_responses_task_chunk', 'task_id, chunk_index')
+      ensureIndex(db, dialect, 'integration_events', 'idx_integration_events_dedupe', 'source, event, path, status, created_at')
+    }
+  },
 ]
 
 export function runMigrations(db: any, dialect: MigrationDialect) {

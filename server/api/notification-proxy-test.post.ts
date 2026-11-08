@@ -1,6 +1,6 @@
 import { apiError } from '../utils/apiError'
 import { requireScope } from '../utils/apiTokens'
-import { testNotificationProxy } from '../utils/notifications'
+import { testNotificationProxy } from '../utils/notificationTransport'
 
 export default defineEventHandler(async (event) => {
   requireScope(event, 'automation:write')

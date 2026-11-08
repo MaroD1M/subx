@@ -13,7 +13,7 @@
 | `server/utils` | 业务服务、数据库、翻译、字幕、通知、缓存等 |
 | `shared` | 前后端共用的纯函数、枚举、标签和时间工具 |
 | `scripts` | 部署、数据库 schema、迁移和运维脚本 |
-| `tests` | 单元测试和 Playwright E2E/视觉回归 |
+| `tests` | Playwright E2E/视觉回归；`app/**/__tests__` 放 Vue 组件测试 |
 
 ## 前端页面拆分约定
 
@@ -73,6 +73,7 @@
 - `1`：基础 schema
 - `2`：会话 token 改为 SHA-256 哈希
 - `3`：补齐历史列、`translation_mode`、AI 校对缓存和 `sort_order` 回填
+- `4`：补充任务日志、任务响应和集成事件去重查询索引
 
 SQLite 基线位于 `server/utils/schema.ts`，PostgreSQL 基线位于 `scripts/postgres-schema.sql`。`schemaDrift.test.ts` 会对比两边表和字段，修改任意一侧后必须同步另一侧。
 
@@ -94,6 +95,7 @@ npm run typecheck
 npm run build
 npm run test:e2e
 PLAYWRIGHT_PRODUCTION=1 npm run test:e2e
+npm run test:api
 npm run preview:images
 npm run test:ocr
 npm run check:versions

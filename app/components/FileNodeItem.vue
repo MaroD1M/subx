@@ -64,6 +64,7 @@
           :selectable="selectable"
           :selected-keys="selectedKeys"
           :folder-totals="folderTotals"
+          :folder-selected-counts="folderSelectedCounts"
           :scanning-keys="scanningKeys"
           :depth="depth + 1"
           @select="$emit('select', $event)"
@@ -84,7 +85,9 @@ const props = defineProps({
   selectable: { type: Boolean, default: false },
   selectedKeys: { type: Object as () => Set<string>, default: () => new Set<string>() },
   folderTotals: { type: Object as () => Record<string, number>, default: () => ({}) },
+  folderSelectedCounts: { type: Object as () => Record<string, number>, default: () => ({}) },
   scanningKeys: { type: Array as () => string[], default: () => [] },
+  searchActive: { type: Boolean, default: false },
   depth: { type: Number, default: 0 }
 })
 const emit = defineEmits(['select', 'toggle-dir', 'toggle-select'])
@@ -92,17 +95,12 @@ const emit = defineEmits(['select', 'toggle-dir', 'toggle-select'])
 const nodeKey = computed(() => `${props.node.rootId || 'default'}:${props.node.path || ''}`)
 const isSelected = computed(() => !!props.selectedPath && props.selectedPath === nodeKey.value)
 const isChecked = computed(() => props.selectedKeys.has(nodeKey.value))
-const isOpen = computed(() => props.node.isDir && props.expandedKeys.includes(nodeKey.value))
+const isOpen = computed(() => props.node.isDir && (props.expandedKeys.includes(nodeKey.value) || (props.searchActive && Boolean(props.node.children?.length))))
 const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.ts', '.m2ts', '.mts', '.mov']
 
 function pathFromKey(key: string) {
   const separator = key.indexOf(':')
   return separator >= 0 ? key.slice(separator + 1) : key
-}
-
-function isVideoKey(key: string) {
-  const path = pathFromKey(key).toLowerCase()
-  return VIDEO_EXTENSIONS.some(extension => path.endsWith(extension))
 }
 
 function countLoadedVideos(node: any): number {
@@ -127,12 +125,7 @@ const folderTotal = computed<number | null>(() => {
 })
 const selectedVideoCount = computed(() => {
   if (!props.node.isDir) return 0
-  const prefix = `${nodeKey.value}/`
-  let count = 0
-  for (const key of props.selectedKeys) {
-    if (key.startsWith(prefix) && isVideoKey(key)) count += 1
-  }
-  return count
+  return props.folderSelectedCounts[nodeKey.value] || 0
 })
 const isFolderChecked = computed(() => props.node.isDir && folderTotal.value !== null && folderTotal.value > 0 && selectedVideoCount.value >= folderTotal.value)
 const isFolderIndeterminate = computed(() => props.node.isDir && selectedVideoCount.value > 0 && !isFolderChecked.value)

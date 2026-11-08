@@ -106,7 +106,7 @@
         <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-white/40 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
         <div role="tree" aria-label="文件目录树" class="h-full max-h-[70vh] overflow-y-auto space-y-1 pr-1 custom-scrollbar lg:max-h-none">
           <template v-for="node in displayNodes" :key="`${node.rootId || 'group'}:${node.path || node.name}`">
-            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :active-key="activeTreeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeys" :folder-totals="folderVideoTotals" :scanning-keys="folderScanningKeysArray" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
+            <FileNodeItem :node="node" :selected-path="selectedNodeKey" :active-key="activeTreeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeys" :folder-totals="folderVideoTotals" :folder-selected-counts="selectedFolderVideoCounts" :scanning-keys="folderScanningKeysArray" :search-active="Boolean(debouncedSearchQuery.trim())" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
           </template>
           <div v-if="!loadingFiles && (!displayNodes || !displayNodes.length)" class="h-full min-h-[180px] flex items-center justify-center text-center px-3">
             <div v-if="isRootUnavailable" class="space-y-3">
@@ -385,6 +385,8 @@ const toast = useToast()
 const { data: appConfig } = await useAppConfigData()
 const activeRootId = ref<string>('')
 const searchQuery = ref('')
+const debouncedSearchQuery = ref('')
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 const selectedFile = ref<FileNode | null>(null)
 const activeMobileTab = ref<'files' | 'settings'>('files')
 const rightTab = ref<'tracks' | 'settings'>('tracks')
@@ -430,6 +432,21 @@ const loadingFiles = ref(false)
 const selectedFileKeys = ref<Set<string>>(new Set())
 const selectedFileMeta = ref<Map<string, FileNode>>(new Map())
 const selectedFileCount = computed(() => selectedFileKeys.value.size)
+const selectedFolderVideoCounts = computed<Record<string, number>>(() => {
+  const counts: Record<string, number> = {}
+  for (const key of selectedFileKeys.value) {
+    if (!isVideoSelectionKey(key)) continue
+    const separator = key.indexOf(':')
+    const rootId = separator >= 0 ? key.slice(0, separator) : 'default'
+    const path = separator >= 0 ? key.slice(separator + 1) : key
+    const segments = path.split('/').filter(Boolean)
+    for (let index = 1; index < segments.length; index += 1) {
+      const dirKey = buildNodeKey(segments.slice(0, index).join('/'), rootId)
+      counts[dirKey] = (counts[dirKey] || 0) + 1
+    }
+  }
+  return counts
+})
 const folderVideoTotals = ref<Record<string, number>>({})
 const folderScanningKeys = ref<Set<string>>(new Set())
 const folderScanningKeysArray = computed(() => Array.from(folderScanningKeys.value))
@@ -487,7 +504,19 @@ function filterNodes(nodes: FileNode[], keyword: string): FileNode[] {
     .filter(Boolean) as FileNode[]
 }
 
-const displayNodes = computed<FileNode[]>(() => filterNodes(files.value || [], searchQuery.value))
+watch(searchQuery, (value) => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    searchDebounceTimer = null
+    debouncedSearchQuery.value = value
+  }, 200)
+})
+
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+})
+
+const displayNodes = computed<FileNode[]>(() => filterNodes(files.value || [], debouncedSearchQuery.value))
 
 const selectedNodeKey = computed(() => {
   if (!selectedNode.value) return ''
@@ -623,16 +652,25 @@ async function restoreExpandedDirectories(rootId = activeRootId.value) {
     .filter(Boolean)
     .sort((a, b) => a.split('/').length - b.split('/').length)
 
+  const byDepth = new Map<number, string[]>()
   for (const dirPath of expandedPaths) {
-    const currentNode = findNodeByPath(files.value, dirPath)
-    if (!currentNode?.isDir) continue
-    if (currentNode.loaded || currentNode.hasChildren === false) continue
-    await loadDirectoryChildren(currentNode)
+    const depth = dirPath.split('/').length
+    const list = byDepth.get(depth) || []
+    list.push(dirPath)
+    byDepth.set(depth, list)
+  }
+
+  for (const depth of Array.from(byDepth.keys()).sort((a, b) => a - b)) {
+    const batch = (byDepth.get(depth) || [])
+      .map(dirPath => findNodeByPath(files.value, dirPath))
+      .filter((node): node is FileNode => Boolean(node?.isDir && !node.loaded && node.hasChildren !== false))
+    await Promise.all(batch.map(node => loadDirectoryChildren(node)))
   }
 }
 
 async function handleRootChange() {
   searchQuery.value = ''
+  debouncedSearchQuery.value = ''
   clearFileSelection()
   selectedNode.value = null
   selectedFile.value = null
@@ -1094,7 +1132,8 @@ async function startBatchTasks() {
       }
     })
     const skipped = Number(res.skippedDuplicates || 0)
-    const description = `共创建 ${res.taskIds?.length || selected.length} 个任务${skipped ? `，跳过 ${skipped} 个同集重复版本` : ''}`
+    const reused = Number(res.reusedActive || 0)
+    const description = `共创建 ${res.taskIds?.length || selected.length} 个任务${skipped ? `，跳过 ${skipped} 个同集重复版本` : ''}${reused ? `，复用 ${reused} 个运行中任务` : ''}`
     toast.add({ title: '已加入队列', description, color: 'success' })
     clearFileSelection()
     navigateTo('/history')
@@ -1133,7 +1172,12 @@ async function startTask(silent = false) {
         ...Object.fromEntries(Object.entries(options.value).filter(([key]) => !['contentTitle', 'contentBackground', 'customInstructions'].includes(key)))
       }
     })
-    toast.add({ title: silent ? '已加入队列' : '任务已创建', description: silent ? '可前往「任务历史」查看进度' : '正在打开任务详情', color: 'success' })
+    const reused = Number((res as any).reusedActive || 0) > 0
+    toast.add({
+      title: reused ? '已复用运行中任务' : (silent ? '已加入队列' : '任务已创建'),
+      description: reused ? '相同文件和输出设置的任务正在运行，已直接打开原任务' : (silent ? '可前往「任务历史」查看进度' : '正在打开任务详情'),
+      color: 'success'
+    })
     if (silent) {
       selectedFile.value = null
       tracks.value = []

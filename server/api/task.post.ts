@@ -6,6 +6,8 @@ import { VideoService } from '../utils/video'
 import { parseBody, taskCreateSchema } from '../utils/validation'
 import { dedupeBatchEntries } from '../utils/fileScan'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import { useDb } from '../utils/db'
+import { findActiveTaskDuplicate, isActiveTaskStatus } from '../utils/taskDedupe'
 import type { TrackPolicy } from '~~/types'
 
 export default defineEventHandler(async (event) => {
@@ -14,6 +16,7 @@ export default defineEventHandler(async (event) => {
 
   const config = await ConfigService.getConfig()
   const taskIds: string[] = []
+  let reusedActive = 0
   const allStylePresets = [...STYLE_PRESETS, ...(Array.isArray(config.customStylePresets) ? config.customStylePresets : [])]
   const selectedStyleId = stylePreset || 'default'
   const resolvedStylePrompt = stylePrompt || allStylePresets.find(preset => preset.id === selectedStyleId)?.prompt || ''
@@ -35,6 +38,20 @@ export default defineEventHandler(async (event) => {
   }
 
   const processFile = async (path: string, type: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr', track: number, currentRootId?: string, policy?: TrackPolicy) => {
+    const requestedTarget = targetLanguage || config.targetLanguage
+    const requestedOutputMode = outputMode || 'translated'
+    const requestedFormat = subtitleFormat || config.subtitleFormat || 'srt'
+    const existingTaskId = findActiveTaskDuplicate(useDb(), {
+      filePath: path,
+      rootId: currentRootId,
+      targetLanguage: requestedTarget,
+      outputMode: requestedOutputMode,
+      subtitleFormat: requestedFormat
+    })
+    if (existingTaskId) {
+      return { taskId: existingTaskId, reused: true }
+    }
+
     const taskId = uuidv4()
     await TaskService.createTask({
       taskId,
@@ -43,15 +60,15 @@ export default defineEventHandler(async (event) => {
       sourceType: type,
       trackIndex: track,
       model: model || config.defaultModel,
-      targetLanguage: targetLanguage || config.targetLanguage,
-      outputMode: outputMode || 'translated',
+      targetLanguage: requestedTarget,
+      outputMode: requestedOutputMode,
       stylePreset: selectedStyleId,
       stylePrompt: resolvedStylePrompt,
       contentTitle: contentTitle || '',
       contentBackground: contentBackground || '',
       customInstructions: customInstructions || '',
       translationMode: config.translationMode || 'non_stream',
-      subtitleFormat: (subtitleFormat || config.subtitleFormat || 'srt') as any,
+      subtitleFormat: requestedFormat as any,
       subtitleStylePreset: subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
       bilingualLayout: (bilingualLayout || config.bilingualLayout || 'translated_first') as any,
       trackPolicy: policy
@@ -59,7 +76,7 @@ export default defineEventHandler(async (event) => {
 
     await enqueueTask(taskId)
 
-    return taskId
+    return { taskId, reused: false }
   }
 
   if (body.retryTaskId) {
@@ -68,6 +85,9 @@ export default defineEventHandler(async (event) => {
       oldTask = TaskService.getTask(String(body.retryTaskId))
     } catch {
       throw apiError(404, '要重试的任务不存在')
+    }
+    if (isActiveTaskStatus(oldTask)) {
+      throw apiError(409, '原任务仍在运行，无法重试；请先取消或等待完成')
     }
     const newTaskId = uuidv4()
     await TaskService.createTask({
@@ -111,14 +131,16 @@ export default defineEventHandler(async (event) => {
       const isExternal = ['srt', 'vtt', 'ass', 'ssa'].includes(ext)
 
       if (isExternal) {
-        const id = await processFile(entry.path, 'external', 0, entry.rootId)
-        taskIds.push(id)
+        const result = await processFile(entry.path, 'external', 0, entry.rootId)
+        taskIds.push(result.taskId)
+        if (result.reused) reusedActive += 1
         continue
       }
 
       // Video: let the task pipeline decide subtitle vs ASR.
-      const id = await processFile(entry.path, 'auto', 0, entry.rootId, trackPolicy)
-      taskIds.push(id)
+      const result = await processFile(entry.path, 'auto', 0, entry.rootId, trackPolicy)
+      taskIds.push(result.taskId)
+      if (result.reused) reusedActive += 1
     }
 
     if (taskIds.length === 0) {
@@ -128,7 +150,8 @@ export default defineEventHandler(async (event) => {
       taskIds,
       taskId: taskIds[0],
       skippedDuplicates: deduped.skipped.length,
-      duplicateGroups: deduped.duplicateGroups
+      duplicateGroups: deduped.duplicateGroups,
+      reusedActive
     }
   }
 
@@ -136,6 +159,6 @@ export default defineEventHandler(async (event) => {
     throw apiError(400, 'File path or files array is required')
   }
 
-  const taskId = await processFile(filePath, sourceType || 'embedded', trackIndex || 0, rootId, trackPolicy)
-  return { taskId, taskIds: [taskId] }
+  const result = await processFile(filePath, sourceType || 'embedded', trackIndex || 0, rootId, trackPolicy)
+  return { taskId: result.taskId, taskIds: [result.taskId], reusedActive: result.reused ? 1 : 0 }
 })
