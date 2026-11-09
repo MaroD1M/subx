@@ -450,6 +450,20 @@ describe('core API integration', () => {
     expect(invalid.status).toBe(401)
   })
 
+
+  it('records webhook path mapping failures', async () => {
+    const response = await apiFetch('/api/integrations/sonarr?token=hook-token-123456', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ eventType: 'Download', episodeFile: { relativePath: '../../outside/Unknown.mkv' } })
+    })
+    expect(response.status).toBe(400)
+
+    const events = await apiFetch('/api/integrations/events?limit=20', { headers: { cookie } })
+    expect(events.status).toBe(200)
+    const payload = await events.json() as any
+    expect(payload.events.some((item: any) => item.status === 'failed')).toBe(true)
+  })
   it('opens and closes the SSE progress stream', async () => {
     const controller = new AbortController()
     const response = await apiFetch('/api/sse/progress?taskId=missing-task', {

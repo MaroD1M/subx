@@ -155,6 +155,32 @@ describe('notification channels', () => {
       dbHolder.db = null
     }
   })
+
+  it('recovers deliveries stuck in processing', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE notification_deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
+        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
+        next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
+        dedupe_key TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+    dbHolder.db = db
+    try {
+      const staleId = Number(db.prepare("INSERT INTO notification_deliveries (channel_id, event, title, body, status, updated_at) VALUES (1, 'task_done', 't', 'b', 'processing', datetime('now', '-10 minutes'))").run().lastInsertRowid)
+      const freshId = Number(db.prepare("INSERT INTO notification_deliveries (channel_id, event, title, body, status, updated_at) VALUES (1, 'task_done', 't', 'b', 'processing', datetime('now'))").run().lastInsertRowid)
+
+      expect(NotificationService.recoverStuck(300)).toBe(1)
+      expect((db.prepare('SELECT status, last_error FROM notification_deliveries WHERE id = ?').get(staleId) as any).status).toBe('pending')
+      expect((db.prepare('SELECT status FROM notification_deliveries WHERE id = ?').get(freshId) as any).status).toBe('processing')
+    } finally {
+      db.close()
+      dbHolder.db = null
+    }
+  })
   it('signs webhook payloads with HMAC', async () => {
     const fetchMock = mockFetch()
     await sendChannel({
