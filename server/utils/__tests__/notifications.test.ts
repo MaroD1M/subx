@@ -181,6 +181,37 @@ describe('notification channels', () => {
       dbHolder.db = null
     }
   })
+
+  it('skips deliveries for disabled channels', async () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE notification_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, name TEXT NOT NULL,
+        config_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE notification_deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
+        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
+        next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
+        dedupe_key TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+    dbHolder.db = db
+    try {
+      const channelId = Number(db.prepare("INSERT INTO notification_channels (type, name, enabled) VALUES ('webhook', 'Disabled', 0)").run().lastInsertRowid)
+      const deliveryId = Number(db.prepare("INSERT INTO notification_deliveries (channel_id, event, title, body, status, next_run_at) VALUES (?, 'task_done', 't', 'b', 'pending', datetime('now', '-1 seconds'))").run(channelId).lastInsertRowid)
+
+      await NotificationService.processQueue()
+
+      expect((db.prepare('SELECT status, last_error FROM notification_deliveries WHERE id = ?').get(deliveryId) as any)).toMatchObject({ status: 'skipped', last_error: '渠道已停用' })
+    } finally {
+      db.close()
+      dbHolder.db = null
+    }
+  })
   it('signs webhook payloads with HMAC', async () => {
     const fetchMock = mockFetch()
     await sendChannel({

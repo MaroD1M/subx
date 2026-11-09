@@ -2,6 +2,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { PgDatabase, translateSql } from '../pgSync'
+import { runMigrations } from '../migrations'
 
 const databaseUrl = process.env.PG_TEST_DATABASE_URL
 const allowReset = process.env.PG_TEST_ALLOW_RESET === '1'
@@ -35,6 +36,29 @@ live('live PostgreSQL bridge', () => {
     expect(job?.status).toBe('queued')
   })
 
+
+  it('serializes concurrent migrations with an advisory lock', async () => {
+    const a = new PgDatabase(databaseUrl!)
+    const b = new PgDatabase(databaseUrl!)
+    try {
+      a.exec('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+      a.exec(readFileSync(join(process.cwd(), 'scripts', 'postgres-schema.sql'), 'utf-8'))
+      a.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (1)').run()
+      a.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (2)').run()
+
+      await Promise.all([
+        Promise.resolve().then(() => runMigrations(a, 'postgres')),
+        Promise.resolve().then(() => runMigrations(b, 'postgres'))
+      ])
+
+      const versions = a.prepare('SELECT version FROM schema_migrations ORDER BY version').all()
+        .map((row: any) => Number(row.version))
+      expect(versions).toEqual([1, 2, 3, 4])
+    } finally {
+      a.close()
+      b.close()
+    }
+  })
   it('keeps transaction queries on one connection', () => {
     db.exec('BEGIN')
     db.prepare(translateSql("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, datetime('now'))")).run('tx-test', 'value')
