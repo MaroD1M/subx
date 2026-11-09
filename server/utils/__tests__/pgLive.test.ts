@@ -53,7 +53,7 @@ live('live PostgreSQL bridge', () => {
 
       const versions = a.prepare('SELECT version FROM schema_migrations ORDER BY version').all()
         .map((row: any) => Number(row.version))
-      expect(versions).toEqual([1, 2, 3, 4])
+      expect(versions).toEqual([1, 2, 3, 4, 5])
     } finally {
       a.close()
       b.close()
