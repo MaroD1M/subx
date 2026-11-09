@@ -1,8 +1,12 @@
+import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { maskChannelConfig, sanitizeChannelConfig, sendChannel } from '../notifications'
+import { maskChannelConfig, NotificationService, sanitizeChannelConfig, sendChannel } from '../notifications'
 import { testNotificationProxy } from '../notificationTransport'
 
 const undiciFetchMock = vi.hoisted(() => vi.fn())
+const dbHolder = vi.hoisted(() => ({ db: null as any }))
+
+vi.mock('../db', () => ({ useDb: () => dbHolder.db }))
 
 vi.mock('undici', async (importOriginal) => {
   const actual = await importOriginal<typeof import('undici')>()
@@ -110,6 +114,47 @@ describe('notification channels', () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.telegram.org')
   })
 
+
+  it('reschedules failed deliveries and marks exhausted deliveries failed', async () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE notification_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, name TEXT NOT NULL,
+        config_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE notification_deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
+        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
+        next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
+        dedupe_key TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+    dbHolder.db = db
+    try {
+      const channelId = Number(db.prepare("INSERT INTO notification_channels (type, name, config_json) VALUES ('webhook', 'Retry', ?)").run(JSON.stringify({ url: 'http://127.0.0.1/hook', method: 'POST', events: ['task_done'] })).lastInsertRowid)
+      const retryId = Number(db.prepare("INSERT INTO notification_deliveries (channel_id, event, title, body, status, attempts, max_attempts, next_run_at) VALUES (?, 'task_done', 't', 'b', 'pending', 0, 3, datetime('now', '-1 seconds'))").run(channelId).lastInsertRowid)
+      const exhaustedId = Number(db.prepare("INSERT INTO notification_deliveries (channel_id, event, title, body, status, attempts, max_attempts, next_run_at) VALUES (?, 'task_done', 't', 'b', 'pending', 2, 3, datetime('now', '-1 seconds'))").run(channelId).lastInsertRowid)
+      mockFetch(async () => ({ ok: false, status: 500, text: async () => 'server error' }))
+
+      await NotificationService.processQueue()
+
+      const retry = db.prepare('SELECT status, attempts, last_error FROM notification_deliveries WHERE id = ?').get(retryId) as any
+      expect(retry.status).toBe('pending')
+      expect(retry.attempts).toBe(1)
+      expect(String(retry.last_error)).toContain('Webhook 发送失败')
+
+      const exhausted = db.prepare('SELECT status, attempts, last_error FROM notification_deliveries WHERE id = ?').get(exhaustedId) as any
+      expect(exhausted.status).toBe('failed')
+      expect(exhausted.attempts).toBe(3)
+      expect(String(exhausted.last_error)).toContain('Webhook 发送失败')
+    } finally {
+      db.close()
+      dbHolder.db = null
+    }
+  })
   it('signs webhook payloads with HMAC', async () => {
     const fetchMock = mockFetch()
     await sendChannel({
