@@ -52,7 +52,10 @@
               @click="clearLibraryFilters"
             />
           </div>
-          <span class="text-[11px] text-gray-500 dark:text-gray-400">显示 {{ filteredMediaRoots.length }} / {{ mediaRoots.length }}</span>
+          <div class="flex items-center gap-2">
+            <span v-if="mediaRoots.length > 1" class="hidden text-[11px] text-gray-500 dark:text-gray-400 sm:inline">可拖动卡片排序</span>
+            <span class="text-[11px] text-gray-500 dark:text-gray-400">显示 {{ filteredMediaRoots.length }} / {{ mediaRoots.length }}</span>
+          </div>
         </div>
       </div>
 
@@ -61,17 +64,30 @@
           v-for="root in filteredMediaRoots"
           :key="root.id"
           type="button"
+          draggable="true"
           class="group flex min-h-[164px] flex-col rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:bg-gray-950/60 dark:hover:border-primary-900/50"
-          :class="rootValidation(root).length || inspectionStates[root.id]?.ok === false
-            ? 'border-red-200 dark:border-red-900/40'
-            : 'border-gray-200/80 dark:border-gray-800'"
+          :class="[
+            rootValidation(root).length || inspectionStates[root.id]?.ok === false
+              ? 'border-red-200 dark:border-red-900/40'
+              : 'border-gray-200/80 dark:border-gray-800',
+            draggingRootId === root.id ? 'opacity-50' : '',
+            dragOverRootId === root.id && draggingRootId !== root.id ? 'border-primary-400 ring-2 ring-primary-200 dark:border-primary-600 dark:ring-primary-900/60' : ''
+          ]"
           @click="selectRoot(root.id)"
+          @dragstart="startRootDrag(root, $event)"
+          @dragover.prevent="dragOverRootId = root.id"
+          @dragleave="dragOverRootId = dragOverRootId === root.id ? '' : dragOverRootId"
+          @drop.prevent="dropRoot(root)"
+          @dragend="endRootDrag"
         >
           <div class="flex items-start justify-between gap-3">
             <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">
               <UIcon name="i-lucide-library-big" class="h-5 w-5" />
             </div>
-            <UIcon :name="statusIcon(root)" class="mt-1 h-4 w-4 shrink-0" :class="statusIconClass(root)" />
+            <div class="flex items-center gap-1">
+              <UIcon name="i-lucide-grip-vertical" class="h-4 w-4 cursor-grab text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
+              <UIcon :name="statusIcon(root)" class="mt-0.5 h-4 w-4 shrink-0" :class="statusIconClass(root)" />
+            </div>
           </div>
           <p class="mt-3 truncate text-sm font-semibold text-gray-900 dark:text-white">{{ root.name || '未命名媒体库' }}</p>
           <p class="mt-1 line-clamp-2 break-all font-mono text-[11px] leading-5 text-gray-500 dark:text-gray-400" :title="root.path">{{ root.path || '未配置路径' }}</p>
@@ -265,6 +281,8 @@ const batchInspecting = ref(false)
 const forceSaveInvalidRoots = ref(false)
 const removeDialogOpen = ref(false)
 const editorOpen = ref(false)
+const draggingRootId = ref('')
+const dragOverRootId = ref('')
 const removeTargetIndex = ref(-1)
 
 const { data, refresh } = await useAppConfigData()
@@ -451,6 +469,43 @@ function addMediaRoot() {
   mediaRoots.value.push({ id, name: `媒体库 ${mediaRoots.value.length + 1}`, path: '', enabled: true, order: mediaRoots.value.length, isDefault: mediaRoots.value.length === 0 })
   selectedRootId.value = id
   editorOpen.value = true
+}
+
+function startRootDrag(root: MediaRoot, event: DragEvent) {
+  draggingRootId.value = root.id
+  dragOverRootId.value = ''
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', root.id)
+  }
+}
+
+function endRootDrag() {
+  draggingRootId.value = ''
+  dragOverRootId.value = ''
+}
+
+function dropRoot(target: MediaRoot) {
+  const fromId = draggingRootId.value
+  if (!fromId || fromId === target.id) {
+    endRootDrag()
+    return
+  }
+  const fromIndex = mediaRoots.value.findIndex(root => root.id === fromId)
+  const toIndex = mediaRoots.value.findIndex(root => root.id === target.id)
+  if (fromIndex < 0 || toIndex < 0) {
+    endRootDrag()
+    return
+  }
+  const next = [...mediaRoots.value]
+  const [moved] = next.splice(fromIndex, 1)
+  if (!moved) {
+    endRootDrag()
+    return
+  }
+  next.splice(toIndex, 0, moved)
+  mediaRoots.value = next.map((root, index) => ({ ...root, order: index }))
+  endRootDrag()
 }
 
 function removeMediaRoot(index: number) {
