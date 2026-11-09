@@ -72,7 +72,7 @@
       </div>
     </details>
 
-    <div class="history-table surface-card hidden overflow-hidden rounded-2xl p-2 md:block" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
+    <div v-if="isDesktop" class="history-table surface-card overflow-hidden rounded-2xl p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
       <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group cursor-default transition-colors duration-150 hover:bg-primary-50/60 dark:hover:bg-primary-950/20' }">
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
@@ -151,7 +151,7 @@
       </UTable>
     </div>
 
-    <div class="space-y-3 md:hidden">
+    <div v-else class="space-y-3">
       <div v-if="pending" class="rounded-2xl border border-gray-200/80 bg-white p-4 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-950/60">
         正在加载任务...
       </div>
@@ -246,6 +246,7 @@
 
 <script setup>
 import { formatDateTime } from '~~/shared/time'
+import { reviewReasonLabel } from '~~/shared/reviewLabels'
 
 useHead({
   title: '翻译历史 - SubX'
@@ -258,6 +259,19 @@ const deletingTaskId = ref('')
 const toast = useToast()
 const { confirm } = useConfirm()
 const timeZone = useTimeZone()
+
+const isDesktop = ref(true)
+let desktopMediaQuery = null
+
+function handleDesktopChange(event) {
+  isDesktop.value = event.matches
+}
+
+onMounted(() => {
+  desktopMediaQuery = window.matchMedia('(min-width: 768px)')
+  isDesktop.value = desktopMediaQuery.matches
+  desktopMediaQuery.addEventListener('change', handleDesktopChange)
+})
 
 const page = ref(1)
 const pageSize = ref(50)
@@ -346,18 +360,6 @@ const riskTagLabels = {
   long_lines: '长句较多'
 }
 
-const reviewReasonLabels = {
-  missing: '缺少译文',
-  same_as_source: '译文与原文相同',
-  same_as_source_allowed: '同文可接受',
-  latin_heavy: '译文仍偏原语言',
-  bilingual_duplicate: '双语内容重复',
-  suspected_contamination: '疑似串条/混入相邻字幕',
-  overlong_translation: '译文异常偏长',
-  low_asr_confidence: 'ASR 置信度偏低',
-  low_quality_translation: '双模型质量评分偏低'
-}
-
 const issueLabels = {
   empty: '空响应',
   refusal: '疑似拒答',
@@ -368,10 +370,6 @@ const issueLabels = {
 
 function riskTagLabel(tag) {
   return riskTagLabels[tag] || tag
-}
-
-function reviewReasonLabel(reason) {
-  return reviewReasonLabels[reason] || reason
 }
 
 function issueLabel(issue) {
@@ -510,7 +508,7 @@ const columns = [
 ]
 
 onBeforeUnmount(() => {
-  if (historyRefreshTimer) clearTimeout(historyRefreshTimer)
+  desktopMediaQuery?.removeEventListener('change', handleDesktopChange)
 })
 
 function statusColor(status) {

@@ -62,4 +62,20 @@ describe('ReviewEntryCard', () => {
     await useOriginal!.trigger('click')
     expect(wrapper.emitted('use-original')?.[0]).toEqual([entry])
   })
+
+  it('skips off-screen rendering with content-visibility while keeping focused cards visible', () => {
+    const wrapper = mount(ReviewEntryCard, {
+      props: { entry, focused: false, proofreadIssues: [], qualityThreshold: 0.7, retranslating: false },
+      global: { stubs }
+    })
+    expect(wrapper.classes()).toContain('review-entry-card')
+    expect(wrapper.attributes('style')).toContain('content-visibility: auto')
+    expect(wrapper.attributes('style')).toContain('contain-intrinsic-size: auto 200px')
+
+    const focused = mount(ReviewEntryCard, {
+      props: { entry, focused: true, proofreadIssues: [], qualityThreshold: 0.7, retranslating: false },
+      global: { stubs }
+    })
+    expect(focused.attributes('style')).toContain('content-visibility: visible')
+  })
 })

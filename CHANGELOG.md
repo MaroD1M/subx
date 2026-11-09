@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.8.6 - 2026-11-09
 
 ### Added
 
@@ -8,7 +8,11 @@
 - 重试接口拒绝重试仍在运行的原任务。
 - API 增加 16 MiB 请求体上限，防止超大 JSON/表单请求耗尽内存。
 - 文件树恢复展开目录时按层级并发加载，减少深层目录串行请求等待。
-- 文件树搜索增加 200ms 防抖，搜索时自动展开已加载的命中目录；新增整库递归搜索，未加载的深层目录也会返回视频和外挂字幕结果。
+- 文件树搜索增加 200ms 防抖，搜索时自动展开已加载的命中目录；新增整库递归搜索，未加载的深层目录也会返回视频和外挂字幕结果，并拆出 FileSearchResults 组件。
+- 历史页根据断点只渲染桌面表格或移动卡片，避免两套列表同时留在 DOM；修复卸载时引用未定义定时器的问题。
+- 修复核对页布局保存定时器未在卸载时清理、AI 校对缓存并发重复请求，以及确认框组件卸载后 Promise 悬挂的问题。
+- 任务取消增加持久化状态轮询，支持跨 worker 取消；SSE 连接时增加数据库初始快照，断线重连可恢复当前任务状态。
+- CI E2E 安装 Noto CJK 字体，降低中文视觉快照跨机器差异。
 - 文件树目录已选数量改为一次计算并下传，避免每个目录重复扫描全部已选文件。
 - 核对页把统计、待保存、已选和内容标记合并为单次遍历分析，筛选直接复用分析结果，减少长字幕输入时的重复计算。
 - 任务创建、审核重译、模型列表、通知测试和集成 Webhook 增加按 IP 的轻量限速。
@@ -17,6 +21,7 @@
 - 任务响应原始 prompt/response 仅会话或管理员 Token 可读，普通 `tasks:read` Token 只返回统计元数据。
 - 历史回填通知使用稳定时间桶和内容摘要去重，避免重复提醒。
 - `/api/health?deep=1` 增加 ASR/OCR 依赖检查，便于本地 readiness 排障。
+- AI 请求日志默认仅记录任务、模型、耗时、token、prompt/response 长度和解析结果摘要，不再写入完整 prompt 与响应正文；需要旧行为时显式设置 `SUBX_AI_LOG_FULL_PAYLOAD=1`。
 
 ### Tests
 
@@ -24,15 +29,38 @@
 - 新增进程内限速窗口测试。
 - 补充核对筛选、同文/超长/拉丁文本和搜索逻辑测试。
 - 新增 FileNodeItem 组件测试，覆盖目录半选/全选、搜索自动展开和预计算选中数量。
+- 新增 FileBrowser 主体组件测试，覆盖根目录加载、目录展开、文件选择、整库搜索和批量入队。
+- Settings 拆出 AI 连接、默认翻译行为和高级设置三个分区组件，并补充组件测试。
+- E2E 拆分为视觉与交互两个 spec；每个 worker 使用独立数据库、媒体目录和端口，生产模式默认 2 worker。
+- 文件树节点使用 content-visibility 延迟渲染视口外内容，降低大目录初次渲染成本。
+- 新增 SQLite 备份/恢复脚本 `npm run backup` / `npm run restore`，备份数据库、`.secret` 和任务日志，恢复前校验完整性并保留旧库。
+- 日志清理跳过运行中任务的临时字幕、音频、AI 日志和任务日志；ASR 音频清理尊重租约。
+- FileBrowser 大目录每次先渲染 200 个节点，提供“显示更多”分批展开。
+- SQLite 增加 busy_timeout、synchronous=NORMAL、temp_store=MEMORY 和 32MB cache_size，改善本地大量读写稳定性。
+- `task_responses` 超过日志保留期后清空原始 prompt/response，保留 token、摘要和诊断元数据。
+- 核对页桌面默认 50 条、移动端 20 条，并对卡片使用 content-visibility 和条目分析缓存。
+- FileBrowser 整库搜索支持 AbortController 取消，切换关键词/媒体库/卸载时中止旧扫描。
 - 新增通知失败重试测试，覆盖失败后回到 pending、达到最大次数后标记 failed、processing 卡住恢复和禁用渠道跳过。
 - 新增 ReviewEntryCard 组件测试，覆盖状态/质量标签、最终文本编辑和使用原文事件。
 - 新增 SettingsStoragePanel 组件测试，覆盖存储统计渲染和清理确认弹窗。
 - 新增 AutomationTokensPanel 组件测试，覆盖 Token 列表、有效/撤销状态和撤销确认。
 - 新增强制事件过滤和通知去重测试，以及任务错误分类测试。
 - 新增 ReviewGuideModal 组件测试和输出锁陈旧锁回收测试。
+- 新增审核记录事务回滚、自动监控错误通知去重、FileSearchResults 组件测试。
+- 新增跨 worker 持久化取消检测、SSE 数据库初始快照和确认框卸载保护。
+- 任务取消检查扩展到 ASR/OCR 和翻译重试边界；FileBrowser 搜索防抖期间显示加载态；AI 校对缓存与生成避免并发重复请求。
 - PostgreSQL live 测试增加双连接并发迁移，验证 advisory lock 与幂等执行。
 - 引入 Vue Test Utils + happy-dom，新增任务日志面板组件测试，`npm test` 现在同时运行后端与组件测试。
-- 新增 `npm run test:api`，用 Nuxt Test Utils 启动真实服务，覆盖健康检查、OpenAPI、认证登录/登出、配置校验与密钥保留、API Token scope/审计/撤销、任务创建、下载、重试、取消、幂等复用、OCR 原始字幕下载、核对导出、文件创建/重命名/删除、监控目录、存储接口、通知渠道、通知实际发送、Webhook Token 校验、真实 Webhook 回调入队与去重、路径映射失败记录、任务失败与单条历史删除、整库文件搜索、SSE 建连与取消事件、请求体上限、接口限速和路径穿越拦截。
+- 新增 `npm run test:api`，用 Nuxt Test Utils 启动真实服务，覆盖健康检查、OpenAPI、认证登录/登出、配置校验与密钥保留、API Token scope 矩阵/审计/撤销、任务创建、下载、重试、取消、幂等复用、OCR/ASR 原始字幕下载、核对导出、文件创建/重命名/删除、监控目录、存储接口、通知渠道、通知实际发送、Webhook Token 校验、真实 Webhook 回调入队与去重、路径映射失败记录、任务失败与单条历史删除、整库文件搜索、SSE 建连与取消事件、请求体上限、接口限速和路径穿越拦截。
+
+### Upgrade Notes
+
+- 从 v2.8.4 升级无需调整卷或数据库；建议升级前执行 `npm run backup`。
+- 媒体库改为卡片网格并支持拖拽排序；停用媒体库会保留监控配置。
+- 文件浏览器支持整库递归搜索；搜索会自动取消旧请求。
+- AI 日志默认只写摘要；需要完整 prompt/response 时设置 `SUBX_AI_LOG_FULL_PAYLOAD=1`。
+- 超期 `task_responses` 会清空原始 prompt/response，保留 token、摘要和诊断元数据。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.8.6。
 
 ## v2.8.4 - 2026-11-08
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="px-1">
+  <div class="content-auto-node px-1">
     <div
       class="relative flex items-center gap-2 rounded-lg cursor-pointer transition-colors duration-200"
       :class="[
@@ -55,7 +55,7 @@
     <div v-if="isOpen && node.isDir" role="group" class="ml-3 mt-1 space-y-1 border-l border-gray-100 dark:border-gray-800">
       <div v-if="node.hasChildren && !node.loaded" class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">加载中...</div>
       <div v-else-if="node.loaded && !node.children?.length" class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">空目录</div>
-      <template v-for="child in node.children" :key="`${child.rootId || 'default'}:${child.path}`">
+      <template v-for="child in visibleChildren" :key="`${child.rootId || 'default'}:${child.path}`">
         <FileNodeItem
           :node="child"
           :selected-path="selectedPath"
@@ -72,6 +72,14 @@
           @toggle-select="$emit('toggle-select', $event)"
         />
       </template>
+      <button
+        v-if="(node.children?.length || 0) > visibleChildLimit"
+        type="button"
+        class="ml-3 mt-1 w-full rounded-lg border border-dashed border-gray-200 px-3 py-2 text-left text-xs text-gray-500 transition-colors hover:border-primary-200 hover:bg-primary-50 dark:border-gray-800 dark:text-gray-400 dark:hover:border-primary-900/50 dark:hover:bg-primary-950/20"
+        @click.stop="visibleChildLimit += 200"
+      >
+        显示更多（{{ visibleChildren.length }} / {{ node.children.length }}）
+      </button>
     </div>
   </div>
 </template>
@@ -93,6 +101,9 @@ const props = defineProps({
 const emit = defineEmits(['select', 'toggle-dir', 'toggle-select'])
 
 const nodeKey = computed(() => `${props.node.rootId || 'default'}:${props.node.path || ''}`)
+const visibleChildLimit = ref(200)
+const visibleChildren = computed(() => (props.node.children || []).slice(0, visibleChildLimit.value))
+watch(() => props.node.path, () => { visibleChildLimit.value = 200 })
 const isSelected = computed(() => !!props.selectedPath && props.selectedPath === nodeKey.value)
 const isChecked = computed(() => props.selectedKeys.has(nodeKey.value))
 const isOpen = computed(() => props.node.isDir && (props.expandedKeys.includes(nodeKey.value) || (props.searchActive && Boolean(props.node.children?.length))))

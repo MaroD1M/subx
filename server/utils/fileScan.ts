@@ -190,10 +190,14 @@ export async function scanMediaFolder(rootId: string, folderPath = '') {
 }
 
 
-export async function searchMediaFiles(rootId: string, query: string, limit = 200) {
+export async function searchMediaFiles(rootId: string, query: string, limit = 200, signal?: AbortSignal) {
   const keyword = String(query || '').trim().toLowerCase()
   if (keyword.length < 2) {
-    return { rootId, query: keyword, files: [] as ScannedFile[], total: 0, truncated: false }
+    return { rootId, query: keyword, files: [] as ScannedFile[], total: 0, truncated: false, aborted: false }
+  }
+  let aborted = signal?.aborted === true
+  if (aborted) {
+    return { rootId, query: keyword, files: [] as ScannedFile[], total: 0, truncated: false, aborted: true }
   }
   const root = await getMediaRoot(rootId)
   const rootAbsolute = normalize(resolve(root.path))
@@ -204,6 +208,10 @@ export async function searchMediaFiles(rootId: string, query: string, limit = 20
   let truncated = false
 
   const walk = async (absoluteDir: string, depth: number) => {
+    if (signal?.aborted) {
+      aborted = true
+      return
+    }
     if (truncated || depth > MAX_SCAN_DEPTH) return
     let entries
     try {
@@ -211,8 +219,16 @@ export async function searchMediaFiles(rootId: string, query: string, limit = 20
     } catch {
       return
     }
+    if (signal?.aborted) {
+      aborted = true
+      return
+    }
 
     for (const entry of entries) {
+      if (signal?.aborted) {
+        aborted = true
+        return
+      }
       if (truncated) return
       if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue
       const absolutePath = join(absoluteDir, entry.name)
@@ -222,9 +238,14 @@ export async function searchMediaFiles(rootId: string, query: string, limit = 20
       } catch {
         continue
       }
+      if (signal?.aborted) {
+        aborted = true
+        return
+      }
       if (info.isSymbolicLink()) continue
       if (info.isDirectory()) {
         await walk(absolutePath, depth + 1)
+        if (aborted) return
         continue
       }
       if (!isVideoFile(entry.name) && !isSubtitleFile(entry.name)) continue
@@ -253,5 +274,5 @@ export async function searchMediaFiles(rootId: string, query: string, limit = 20
 
   await walk(startAbsolute, 0)
   files.sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'))
-  return { rootId: root.id, rootName: root.name, query: keyword, files, total: files.length, truncated }
+  return { rootId: root.id, rootName: root.name, query: keyword, files, total: files.length, truncated, aborted }
 }

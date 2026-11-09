@@ -246,6 +246,43 @@ describe('notification channels', () => {
       dbHolder.db = null
     }
   })
+
+  it('creates deduplicated watch error notifications', async () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT (datetime('now')));
+      CREATE TABLE notification_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, name TEXT NOT NULL,
+        config_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE notification_deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
+        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
+        next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
+        dedupe_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+    dbHolder.db = db
+    const processQueue = vi.spyOn(NotificationService, 'processQueue').mockResolvedValue(undefined as any)
+    try {
+      db.prepare("INSERT INTO config (key, value) VALUES ('notificationEnabled', 'true')").run()
+      db.prepare("INSERT INTO notification_channels (type, name, config_json) VALUES ('webhook', 'Watch', ?)").run(JSON.stringify({ url: 'http://127.0.0.1/hook', method: 'POST', events: ['watch_error'] }))
+
+      expect(await NotificationService.notifyWatchError(7, 'Movies', '/media/Movies', 'permission denied')).toBe(1)
+      expect(await NotificationService.notifyWatchError(7, 'Movies', '/media/Movies', 'permission denied')).toBe(0)
+      const row = db.prepare('SELECT event, status, body FROM notification_deliveries').get() as any
+      expect(row.event).toBe('watch_error')
+      expect(row.status).toBe('pending')
+      expect(row.body).toContain('permission denied')
+    } finally {
+      processQueue.mockRestore()
+      db.close()
+      dbHolder.db = null
+    }
+  })
   it('signs webhook payloads with HMAC', async () => {
     const fetchMock = mockFetch()
     await sendChannel({

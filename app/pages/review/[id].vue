@@ -396,10 +396,11 @@ interface ProofreadState {
   result: any | null
   meta: any | null
   loading: boolean
+  cacheLoading: boolean
 }
 const proofreadStates = reactive<Record<ProofreadKind, ProofreadState>>({
-  glossary: { result: null, meta: null, loading: false },
-  consistency: { result: null, meta: null, loading: false }
+  glossary: { result: null, meta: null, loading: false, cacheLoading: false },
+  consistency: { result: null, meta: null, loading: false, cacheLoading: false }
 })
 const proofreadKind = ref<ProofreadKind>('consistency')
 const proofreadRevision = ref(0)
@@ -433,9 +434,10 @@ const reasonFilter = ref('all')
 const confidenceFilter = ref('all')
 const qualityFilter = ref('all')
 const guideOpen = ref(false)
-const pageSize = ref(100)
+const pageSize = ref(50)
 const currentPage = ref(1)
 const pageSizeItems = [
+  { label: '20 条/页', value: 20 },
   { label: '50 条/页', value: 50 },
   { label: '100 条/页', value: 100 },
   { label: '200 条/页', value: 200 }
@@ -487,7 +489,8 @@ function applyProofreadPayload(kind: ProofreadKind, payload: any) {
 
 async function loadCachedProofread(kind: ProofreadKind, silent = false) {
   const state = proofreadStates[kind]
-  if (state.loading) return
+  if (state.cacheLoading || state.loading) return
+  state.cacheLoading = true
   try {
     const res: any = await $fetch(`/api/tasks/${taskId}/proofread`, { query: { kind } })
     applyProofreadPayload(kind, res)
@@ -495,6 +498,8 @@ async function loadCachedProofread(kind: ProofreadKind, silent = false) {
     if (!silent) {
       toast.add({ title: '读取 AI 校对缓存失败', description: e?.data?.message || e?.message || '请稍后重试', color: 'error' })
     }
+  } finally {
+    state.cacheLoading = false
   }
 }
 
@@ -505,6 +510,7 @@ async function refreshProofreadCacheState() {
 
 async function generateProofread(kind: ProofreadKind, refresh: boolean) {
   const state = proofreadStates[kind]
+  if (state.loading) return
   const confirmed = await confirm({
     title: refresh ? '重新执行 AI 校对？' : '开始 AI 校对？',
     description: refresh
@@ -743,13 +749,7 @@ const qualityFilterItems = computed(() => {
 
 const reviewStatuses = ['needs_review', 'fallback_original', 'missing']
 const reasonFilterItems = computed(() => {
-  const counts = new Map<string, number>()
-  for (const entry of entries.value) {
-    for (const reason of entry.reviewReasons || []) {
-      const key = String(reason)
-      counts.set(key, (counts.get(key) || 0) + 1)
-    }
-  }
+  const counts = reviewAnalytics.value.reasonCounts
   return [
     { label: '全部原因', value: 'all' },
     ...Array.from(counts.keys()).sort().map(reason => ({
@@ -866,6 +866,72 @@ interface ReviewEntryAnalysis {
   reasons: Set<string>
 }
 
+interface ReviewEntryContentAnalysis {
+  originalText: unknown
+  translatedText: unknown
+  finalText: unknown
+  reviewStatus: unknown
+  qualityScore: unknown
+  asrConfidence: unknown
+  reasonsKey: string
+  qualityThreshold: number
+  empty: boolean
+  same: boolean
+  finalSame: boolean
+  finalDiffers: boolean
+  latinHeavy: boolean
+  overlong: boolean
+  needsAttention: boolean
+  reasons: Set<string>
+}
+
+const reviewContentAnalysisCache = new WeakMap<object, ReviewEntryContentAnalysis>()
+
+function reviewReasonsKey(entry: any) {
+  const reasons = Array.isArray(entry?.reviewReasons) ? entry.reviewReasons : []
+  return reasons.map(String).join('\u0000')
+}
+
+function analyzeReviewEntry(entry: any, quality: number): ReviewEntryContentAnalysis {
+  const reasonsKey = reviewReasonsKey(entry)
+  const cached = reviewContentAnalysisCache.get(entry)
+  if (
+    cached
+    && cached.originalText === entry.originalText
+    && cached.translatedText === entry.translatedText
+    && cached.finalText === entry.finalText
+    && cached.reviewStatus === entry.reviewStatus
+    && cached.qualityScore === entry.qualityScore
+    && cached.asrConfidence === entry.asrConfidence
+    && cached.reasonsKey === reasonsKey
+    && cached.qualityThreshold === quality
+  ) {
+    return cached
+  }
+
+  const reasons = new Set<string>((Array.isArray(entry?.reviewReasons) ? entry.reviewReasons : []).map((reason: any) => String(reason)))
+  const next: ReviewEntryContentAnalysis = {
+    originalText: entry.originalText,
+    translatedText: entry.translatedText,
+    finalText: entry.finalText,
+    reviewStatus: entry.reviewStatus,
+    qualityScore: entry.qualityScore,
+    asrConfidence: entry.asrConfidence,
+    reasonsKey,
+    qualityThreshold: quality,
+    empty: isReviewTranslationEmpty(entry),
+    same: isReviewSameAsSource(entry),
+    finalSame: isReviewFinalSameAsSource(entry),
+    finalDiffers: isReviewFinalDiffersFromTranslation(entry),
+    latinHeavy: isReviewLatinHeavy(entry),
+    overlong: isReviewOverlong(entry),
+    needsAttention: isReviewNeedsAttention(entry, quality),
+    reasons
+  }
+  reviewContentAnalysisCache.set(entry, next)
+  return next
+}
+
 const reviewAnalytics = computed(() => {
   const quality = qualityThreshold.value
   const stats = {
@@ -886,6 +952,7 @@ const reviewAnalytics = computed(() => {
     needsAttention: 0
   }
   const byId = new Map<string, ReviewEntryAnalysis>()
+  const reasonCounts = new Map<string, number>()
   const dirtyEntries: any[] = []
   const selectedEntries: any[] = []
 
@@ -899,42 +966,37 @@ const reviewAnalytics = computed(() => {
     if (status === 'missing') stats.missing += 1
     if (entry.edited) stats.edited += 1
 
-    const empty = isReviewTranslationEmpty(entry)
-    const same = isReviewSameAsSource(entry)
-    const finalSame = isReviewFinalSameAsSource(entry)
-    const finalDiffers = isReviewFinalDiffersFromTranslation(entry)
-    const latinHeavy = isReviewLatinHeavy(entry)
-    const overlong = isReviewOverlong(entry)
-    const needsAttention = isReviewNeedsAttention(entry, quality)
+    const content = analyzeReviewEntry(entry, quality)
     const dirty = isEntryDirty(entry)
     const selected = !!entry.selected
 
-    if (empty) stats.empty += 1
-    if (same) stats.same += 1
-    if (empty || same) stats.untranslated += 1
-    if (finalSame) stats.finalSame += 1
-    if (finalDiffers) stats.finalDiffers += 1
-    if (latinHeavy) stats.latinHeavy += 1
-    if (overlong) stats.overlong += 1
-    if (needsAttention) stats.needsAttention += 1
+    if (content.empty) stats.empty += 1
+    if (content.same) stats.same += 1
+    if (content.empty || content.same) stats.untranslated += 1
+    if (content.finalSame) stats.finalSame += 1
+    if (content.finalDiffers) stats.finalDiffers += 1
+    if (content.latinHeavy) stats.latinHeavy += 1
+    if (content.overlong) stats.overlong += 1
+    if (content.needsAttention) stats.needsAttention += 1
+    for (const reason of content.reasons) reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1)
     if (dirty) dirtyEntries.push(entry)
     if (selected) selectedEntries.push(entry)
 
     byId.set(String(entry.subtitleId), {
-      empty,
-      same,
-      finalSame,
-      finalDiffers,
-      latinHeavy,
-      overlong,
-      needsAttention,
+      empty: content.empty,
+      same: content.same,
+      finalSame: content.finalSame,
+      finalDiffers: content.finalDiffers,
+      latinHeavy: content.latinHeavy,
+      overlong: content.overlong,
+      needsAttention: content.needsAttention,
       dirty,
       selected,
-      reasons: new Set(Array.isArray(entry.reviewReasons) ? entry.reviewReasons.map(String) : [])
+      reasons: content.reasons
     })
   }
 
-  return { stats, byId, dirtyEntries, selectedEntries }
+  return { stats, byId, reasonCounts, dirtyEntries, selectedEntries }
 })
 
 const filteredEntries = computed(() => {
@@ -1736,6 +1798,9 @@ function handleShortcut(event: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  if (window.matchMedia('(max-width: 767px)').matches) {
+    pageSize.value = 20
+  }
   window.addEventListener('beforeunload', handleBeforeUnload)
   window.addEventListener('keydown', handleShortcut)
   try {
@@ -1749,6 +1814,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   if (previewDebounceTimer) clearTimeout(previewDebounceTimer)
+  if (layoutSaveTimer) clearTimeout(layoutSaveTimer)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   window.removeEventListener('keydown', handleShortcut)
 })

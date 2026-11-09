@@ -15,6 +15,19 @@ import { SQLITE_SCHEMA_SQL } from './schema'
 
 let _db: any = null
 
+/**
+ * Apply SQLite pragmas tuned for a local, single-node deployment.
+ * WAL remains the journal mode; the remaining settings trade a small amount of
+ * durability/disk usage for faster reads and fewer temp-file stalls.
+ */
+export function applySqlitePragmas(db: Database.Database) {
+  db.pragma('journal_mode = WAL')
+  db.pragma('busy_timeout = 5000')
+  db.pragma('synchronous = NORMAL')
+  db.pragma('temp_store = MEMORY')
+  db.pragma('cache_size = -32000')
+}
+
 export function useDb() {
   if (_db) return _db
 
@@ -40,7 +53,7 @@ export function useDb() {
   }
 
   _db = new Database(dbPath)
-  _db.pragma('journal_mode = WAL')
+  applySqlitePragmas(_db)
 
   // Initialize tables
   _db.exec(SQLITE_SCHEMA_SQL)

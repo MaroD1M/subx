@@ -176,6 +176,7 @@
 
 <script setup lang="ts">
 import { formatDateTime } from '~~/shared/time'
+import { proofreadIssueLabel as issueLabel } from '~~/shared/reviewLabels'
 
 type ProofreadKind = 'glossary' | 'consistency'
 
@@ -215,18 +216,6 @@ const kindItems: Array<{ label: string, value: ProofreadKind }> = [
   { label: '术语提取建议', value: 'glossary' }
 ]
 
-const issueLabels: Record<string, string> = {
-  name_inconsistency: '人名/译名不一致',
-  terminology: '术语不一致',
-  mistranslation: '疑似误译',
-  omission: '漏译',
-  addition: '增译',
-  fluency: '不自然',
-  formatting: '格式/标点',
-  style_mismatch: '风格不匹配',
-  other: '其他问题'
-}
-
 const rawTerms = computed(() => Array.isArray(props.state.result?.terms) ? props.state.result.terms : [])
 const issues = computed(() => Array.isArray(props.state.result?.issues) ? props.state.result.issues : [])
 const meta = computed(() => props.state.meta)
@@ -246,10 +235,6 @@ const terms = computed(() => {
   return rawTerms.value.filter((term: any) => !otherTermKeys.value.has(termKey(term)))
 })
 const allTermsApplied = computed(() => terms.value.length > 0 && terms.value.every((term: any) => hasTerm(term)))
-
-function issueLabel(type: string) {
-  return issueLabels[type] || type
-}
 
 function formatTime(value: string) {
   return formatDateTime(value, timeZone)

@@ -1,3 +1,5 @@
+import { getCurrentScope, onScopeDispose } from 'vue'
+
 export interface ConfirmOptions {
   title: string
   description?: string
@@ -18,7 +20,17 @@ export function useConfirm() {
     }
     state.value = options
     return new Promise<boolean>((resolve) => {
-      resolver = resolve
+      let settled = false
+      const finish = (value: boolean) => {
+        if (settled) return
+        settled = true
+        if (resolver === finish) resolver = null
+        resolve(value)
+      }
+      resolver = finish
+      if (getCurrentScope()) {
+        onScopeDispose(() => finish(false))
+      }
     })
   }
 

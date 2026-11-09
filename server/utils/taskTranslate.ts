@@ -3,7 +3,7 @@ import { useDb } from './db'
 import { SubtitleService } from './subtitle'
 import { TranslationService, TRANSLATION_CONTEXT_WINDOW, TRANSLATION_PROMPT_VERSION, type TranslationContext } from './translation'
 import { analyzeChunkRisk, expandRetryEntries, type ChunkDiagnostics } from './taskSupport'
-import { TaskCancelledError, assertTaskNotCancelled } from './taskState'
+import { TaskCancelledError, ensureTaskNotCancelled } from './taskState'
 import { writeTaskLog } from './taskLog'
 import { createProvider, normalizeProviderType } from './providers/registry'
 import type { BoundTranslationProvider } from './providers/types'
@@ -91,7 +91,7 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
     }
 
     const promises = chunks.map((chunk, index) => limit(async () => {
-        assertTaskNotCancelled(taskId)
+        await ensureTaskNotCancelled(taskId)
         const chunkStart = chunkOffsets[index] ?? 0
         const chunkEnd = chunkStart + chunk.length
         const previousContext = allEntries
@@ -305,7 +305,7 @@ export async function translateChunkWithRetry(
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         if (signal?.aborted) throw new TaskCancelledError()
-        assertTaskNotCancelled(taskId)
+        await ensureTaskNotCancelled(taskId)
         if (unresolvedEntries.length === 0) break
 
         if (attempt > 0) {
@@ -319,7 +319,7 @@ export async function translateChunkWithRetry(
             const results = await TranslationService.translateChunk(
                 provider, unresolvedEntries, targetLanguage, glossary, previousContext, model, taskId, chunkIndex, stylePrompt, callbacks, streamUsage, attempt, useStreaming, signal, translationContext, nextContext
             )
-            assertTaskNotCancelled(taskId)
+            await ensureTaskNotCancelled(taskId)
 
             const expectedCount = unresolvedEntries.length
             const returnedIds = new Set<string>()

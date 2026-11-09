@@ -1,6 +1,6 @@
 {
   "name": "subx",
-  "version": "2.8.4",
+  "version": "2.8.6",
   "type": "module",
   "private": true,
   "scripts": {
@@ -21,7 +21,9 @@
     "test:ocr": "python3 -m unittest discover -s ocr-service/tests -v",
     "preview:images": "playwright test --config playwright.preview.config.ts",
     "check:versions": "node scripts/check-versions.mjs",
-    "test:api": "vitest run --config vitest.api.config.ts"
+    "test:api": "vitest run --config vitest.api.config.ts",
+    "backup": "node scripts/backup-sqlite.mjs",
+    "restore": "node scripts/restore-sqlite.mjs"
   },
   "dependencies": {
     "@nuxt/ui": "^4.12.0",

@@ -155,6 +155,13 @@ describe('Task cancellation guards', () => {
     expect(emitted).toHaveLength(0)
   })
 
+  it('detects persisted cancellation from another worker', async () => {
+    dbState.set('task-remote-cancel', { status: 'cancelled', progress: 10, error: '用户取消任务' })
+    const { ensureTaskNotCancelled, TaskCancelledError } = await import('../taskState')
+
+    await expect(ensureTaskNotCancelled('task-remote-cancel')).rejects.toBeInstanceOf(TaskCancelledError)
+  })
+
   it('emits cancelled as a terminal event', async () => {
     dbState.set('task-terminal', { status: 'queued', progress: 10, error: null })
 

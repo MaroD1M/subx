@@ -106,32 +106,13 @@
         <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-white/40 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
         <div role="tree" aria-label="文件目录树" class="h-full max-h-[70vh] overflow-y-auto space-y-1 pr-1 custom-scrollbar lg:max-h-none">
           <template v-if="serverSearchActive">
-            <div v-if="serverSearchLoading" class="flex min-h-[160px] items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-              <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin text-primary-500" />
-              正在搜索整个媒体库...
-            </div>
-            <div v-else-if="serverSearchError" class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
-              {{ serverSearchError }}
-            </div>
-            <template v-else>
-              <button
-                v-for="item in serverSearchResults"
-                :key="`${item.rootId || activeRootId}:${item.path}`"
-                type="button"
-                class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-primary-50 dark:hover:bg-primary-950/30"
-                @click="onSelect(item)"
-              >
-                <UIcon :name="searchResultIcon(item.name)" class="h-4 w-4 shrink-0" :class="isSubtitleName(item.name) ? 'text-primary-500' : 'text-gray-400'" />
-                <div class="min-w-0 flex-1">
-                  <p class="truncate text-sm text-gray-700 dark:text-gray-200">{{ item.name }}</p>
-                  <p class="truncate text-[11px] text-gray-500 dark:text-gray-400">{{ item.path }}</p>
-                </div>
-              </button>
-              <div v-if="!serverSearchResults.length" class="flex min-h-[160px] items-center justify-center text-center text-xs text-gray-500 dark:text-gray-400">
-                整个媒体库中没有匹配的文件
-              </div>
-              <p v-if="serverSearchTruncated" class="px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">结果过多，仅显示前 {{ serverSearchResults.length }} 个匹配文件。</p>
-            </template>
+            <FileSearchResults
+              :results="serverSearchResults"
+              :loading="serverSearchLoading"
+              :error="serverSearchError"
+              :truncated="serverSearchTruncated"
+              @select="onSelect"
+            />
           </template>
           <template v-else>
           <template v-for="node in displayNodes" :key="`${node.rootId || 'group'}:${node.path || node.name}`">
@@ -410,6 +391,7 @@
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { LANGUAGE_OPTIONS } from '~~/shared/languages'
 import type { FileNode } from '~~/types'
+import FileSearchResults from './FileSearchResults.vue'
 
 const toast = useToast()
 const { data: appConfig } = await useAppConfigData()
@@ -423,6 +405,17 @@ const serverSearchError = ref('')
 const serverSearchTruncated = ref(false)
 let serverSearchTimer: ReturnType<typeof setTimeout> | null = null
 let serverSearchRequestId = 0
+let serverSearchController: AbortController | null = null
+
+function isAbortError(error: any) {
+  return error?.name === 'AbortError' || error?.cause?.name === 'AbortError'
+}
+
+function abortServerSearch() {
+  const controller = serverSearchController
+  serverSearchController = null
+  if (controller && !controller.signal.aborted) controller.abort()
+}
 const serverSearchActive = computed(() => searchQuery.value.trim().length >= 2)
 const selectedFile = ref<FileNode | null>(null)
 const activeMobileTab = ref<'files' | 'settings'>('files')
@@ -549,15 +542,18 @@ watch(searchQuery, (value) => {
   }, 200)
 
   if (serverSearchTimer) clearTimeout(serverSearchTimer)
+  abortServerSearch()
+  serverSearchRequestId += 1
   const keyword = value.trim()
   if (keyword.length < 2) {
-    serverSearchRequestId += 1
     serverSearchResults.value = []
     serverSearchError.value = ''
     serverSearchTruncated.value = false
     serverSearchLoading.value = false
     return
   }
+  serverSearchLoading.value = true
+  serverSearchError.value = ''
   serverSearchTimer = setTimeout(() => {
     serverSearchTimer = null
     void runServerSearch(keyword)
@@ -565,36 +561,34 @@ watch(searchQuery, (value) => {
 })
 
 async function runServerSearch(keyword: string) {
+  abortServerSearch()
+  const controller = new AbortController()
+  serverSearchController = controller
   const requestId = ++serverSearchRequestId
   serverSearchLoading.value = true
   serverSearchError.value = ''
   try {
     const result = await $fetch<any>('/api/files/search', {
-      query: { rootId: activeRootId.value, q: keyword, limit: 200 }
+      query: { rootId: activeRootId.value, q: keyword, limit: 200 },
+      signal: controller.signal
     })
-    if (requestId !== serverSearchRequestId) return
+    if (controller.signal.aborted || requestId !== serverSearchRequestId) return
     serverSearchResults.value = Array.isArray(result.files) ? result.files : []
     serverSearchTruncated.value = !!result.truncated
   } catch (e: any) {
-    if (requestId !== serverSearchRequestId) return
+    if (controller.signal.aborted || isAbortError(e) || requestId !== serverSearchRequestId) return
     serverSearchResults.value = []
     serverSearchError.value = e?.data?.message || e?.message || '搜索失败'
   } finally {
+    if (serverSearchController === controller) serverSearchController = null
     if (requestId === serverSearchRequestId) serverSearchLoading.value = false
   }
-}
-
-function isSubtitleName(name: string) {
-  return /\.(srt|ass|ssa|vtt)$/i.test(String(name || ''))
-}
-
-function searchResultIcon(name: string) {
-  return isSubtitleName(name) ? 'i-lucide-file-text' : 'i-lucide-file-video'
 }
 
 onBeforeUnmount(() => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   if (serverSearchTimer) clearTimeout(serverSearchTimer)
+  abortServerSearch()
 })
 
 const displayNodes = computed<FileNode[]>(() => filterNodes(files.value || [], debouncedSearchQuery.value))
@@ -752,6 +746,7 @@ async function restoreExpandedDirectories(rootId = activeRootId.value) {
 async function handleRootChange() {
   searchQuery.value = ''
   debouncedSearchQuery.value = ''
+  abortServerSearch()
   serverSearchRequestId += 1
   serverSearchResults.value = []
   serverSearchError.value = ''

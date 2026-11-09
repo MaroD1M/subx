@@ -5,66 +5,19 @@
 
       <div class="min-w-0 space-y-4">
         <div v-show="activeTab === 'ai'" class="space-y-4">
-          <ClientOnly>
-            <div v-if="isInsecure" class="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/20 dark:bg-amber-500/5">
-              <UIcon name="i-lucide-shield-alert" class="h-5 w-5 shrink-0 text-amber-500" />
-              <div class="space-y-1">
-                <p class="text-xs font-bold text-amber-700 dark:text-amber-400">连接不安全</p>
-                <p class="text-xs leading-5 text-amber-700/80 dark:text-amber-300/80">当前连接未启用 HTTPS，建议在生产环境开启 HTTPS。</p>
-              </div>
-            </div>
-          </ClientOnly>
-
-          <SettingsSection title="AI 连接" description="填写密钥、接口地址与默认模型。">
-            <template #actions>
-              <UButton label="接口说明" variant="link" color="primary" size="xs" class="p-0 font-bold" @click="isGuideOpen = true" />
-            </template>
-
-            <div class="space-y-4">
-              <UFormField label="接口密钥">
-                <UInput v-model="config.apiKey" type="password" placeholder="sk-..." icon="i-lucide-key" class="w-full" @blur="tryFetchModels" />
-              </UFormField>
-
-              <UFormField label="Provider 类型">
-                <USelect v-model="config.providerType" :items="providerTypeItems" class="w-full" />
-                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">OpenAI 兼容覆盖 Ollama/LM Studio/vLLM；Anthropic 和 Gemini 使用官方原生协议。</p>
-              </UFormField>
-
-              <UFormField label="接口基础地址">
-                <UInput v-model="config.apiBaseUrl" placeholder="https://api.openai.com/v1" icon="i-lucide-globe" class="w-full" @blur="tryFetchModels" />
-              </UFormField>
-
-              <UFormField label="默认模型">
-                <div class="space-y-2">
-                  <div class="flex gap-2">
-                    <USelect v-if="modelItems.length && !useManualModelInput" v-model="config.defaultModel" :items="modelItems" class="min-w-0 flex-1" />
-                    <UInput v-else v-model="config.defaultModel" placeholder="例如 gpt-4o-mini" class="flex-1" />
-                    <UButton icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="sm" :loading="fetchingModels" title="获取模型列表" aria-label="获取模型列表" @click="tryFetchModels" />
-                  </div>
-                  <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-                    <div class="space-y-0.5">
-                      <p class="text-xs font-medium text-gray-700 dark:text-gray-300">手动填写模型名称</p>
-                      <p class="text-xs text-gray-500 dark:text-gray-400">开启后可直接输入模型标识，不依赖模型列表。</p>
-                    </div>
-                    <USwitch v-model="useManualModelInput" />
-                  </div>
-                  <div v-if="fetchingModels" class="flex items-center gap-2 text-xs text-gray-500"><UIcon name="i-lucide-loader-2" class="h-3 w-3 animate-spin" />获取中...</div>
-                  <div v-else-if="modelError" class="text-xs text-amber-600 dark:text-amber-400">{{ modelError }}</div>
-                  <div v-else-if="modelItems.length" class="text-xs text-green-600 dark:text-green-400">已加载 {{ modelItems.length }} 个可用模型</div>
-                </div>
-              </UFormField>
-            </div>
-          </SettingsSection>
-
-          <div class="rounded-2xl border border-primary-100 bg-primary-50/60 p-4 dark:border-primary-900/40 dark:bg-primary-500/5">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div class="space-y-1">
-                <p class="text-sm font-semibold text-primary-800 dark:text-primary-200">使用 NAS 本地模型</p>
-                <p class="text-xs leading-5 text-primary-900 dark:text-primary-200">Ollama、LM Studio、llama.cpp、vLLM 都可以通过 OpenAI 兼容地址接入，适合隐私优先和零 API 费用场景。</p>
-              </div>
-              <UButton label="查看本地模型接入" size="xs" color="primary" variant="soft" @click="isGuideOpen = true" />
-            </div>
-          </div>
+          <SettingsAiSection
+            :config="config"
+            :provider-type-items="providerTypeItems"
+            :model-items="modelItems"
+            :use-manual-model-input="useManualModelInput"
+            :fetching-models="fetchingModels"
+            :model-error="modelError"
+            :is-insecure="isInsecure"
+            @update:config="applyConfigPatch"
+            @update:use-manual-model-input="useManualModelInput = $event"
+            @fetch-models="tryFetchModels"
+            @open-guide="isGuideOpen = true"
+          />
         </div>
 
         <div v-show="activeTab === 'asr'" class="space-y-4">
@@ -322,70 +275,15 @@
         </div>
 
         <div v-show="activeTab === 'defaults'" class="space-y-4">
-          <SettingsSection title="默认翻译行为" description="这些设置会作为新任务的默认值。">
-            <div class="space-y-4">
-              <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <UFormField label="目标语言">
-                  <USelect v-model="config.targetLanguage" :items="LANGUAGE_OPTIONS" class="w-full" />
-                </UFormField>
-                <UFormField label="输出模式">
-                  <USelect v-model="config.outputMode" :items="outputModeItems" class="w-full" />
-                </UFormField>
-              </div>
-
-              <UFormField label="翻译模式">
-                <USelect v-model="config.translationMode" :items="translationModeItems" class="w-full" />
-              </UFormField>
-
-              <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-                <div class="space-y-0.5">
-                  <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Emby 兼容输出</p>
-                  <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">媒体目录只放一个主字幕，语言变体同步到 SubX/ 子目录。</p>
-                </div>
-                <USwitch v-model="config.embyCompatibleOutput" aria-label="启用 Emby 兼容输出" />
-              </div>
-
-              <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300">双模型质量校验</p>
-                    <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">翻译完成后用第二个模型逐条评分，低分条目自动进入核对。</p>
-                  </div>
-                  <USwitch v-model="config.qualityCheckEnabled" aria-label="启用双模型质量校验" />
-                </div>
-                <div v-if="config.qualityCheckEnabled" class="grid gap-3 md:grid-cols-3">
-                  <UFormField label="校验模型">
-                    <UInput v-model="config.qualityCheckModel" placeholder="例如 gpt-4o-mini" class="w-full" />
-                  </UFormField>
-                  <UFormField label="低分阈值">
-                    <UInput v-model.number="qualityThresholdPercent" type="number" min="0" max="100" class="w-full">
-                      <template #trailing><span class="text-xs text-gray-400">%</span></template>
-                    </UInput>
-                  </UFormField>
-                  <UFormField label="最多校验条数">
-                    <UInput v-model.number="config.qualityCheckMaxEntries" type="number" min="1" max="1000" class="w-full" />
-                  </UFormField>
-                </div>
-                <p v-if="config.qualityCheckEnabled && config.qualityCheckModel && config.qualityCheckModel === config.defaultModel" class="text-xs text-amber-700 dark:text-amber-300">校验模型与主翻译模型相同，不构成双模型校验。</p>
-              </div>
-
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <UFormField label="分块大小">
-                  <UInputNumber v-model="config.chunkSize" :min="100" :max="50000" :step="100" class="w-full" />
-                </UFormField>
-                <UFormField label="并发任务数">
-                  <UInputNumber v-model="config.concurrency" :min="1" :max="10" class="w-full" />
-                </UFormField>
-                <UFormField label="最大重试次数">
-                  <UInputNumber v-model="config.maxRetries" :min="0" :max="5" class="w-full" />
-                </UFormField>
-                <UFormField label="日志保留天数">
-                  <UInputNumber v-model="config.logRetentionDays" :min="1" :max="30" class="w-full" />
-                </UFormField>
-              </div>
-              <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">分块大小按估算 Token 计算，范围 100-50000。模型上下文较大时可适当提高。</p>
-            </div>
-          </SettingsSection>
+          <SettingsDefaultSection
+            :config="config"
+            :language-options="LANGUAGE_OPTIONS"
+            :output-mode-items="outputModeItems"
+            :translation-mode-items="translationModeItems"
+            :quality-threshold-percent="qualityThresholdPercent"
+            @update:config="applyConfigPatch"
+            @update:quality-threshold-percent="applyQualityThresholdPercent"
+          />
         </div>
 
         <div v-show="activeTab === 'styles'" class="space-y-4">
@@ -442,18 +340,7 @@
         </div>
 
         <div v-show="activeTab === 'advanced'" class="space-y-4">
-          <SettingsSection title="高级设置" description="仅在需要兼容性排查时使用。">
-            <div class="rounded-xl border border-gray-100 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/40" :class="config.translationMode !== 'stream' ? 'opacity-60' : ''">
-              <div class="flex items-center justify-between gap-3">
-                <div class="space-y-0.5">
-                  <p class="text-sm font-medium text-gray-700 dark:text-gray-300">流式用量统计</p>
-                  <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">仅在流式模式下生效，兼容性较弱，默认建议关闭。</p>
-                </div>
-                <USwitch v-model="config.streamUsage" :disabled="config.translationMode !== 'stream'" @click.stop />
-              </div>
-            </div>
-            <p class="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">日志保留天数会同时影响任务日志、AI 日志、临时文件和翻译缓存清理。</p>
-          </SettingsSection>
+          <SettingsAdvancedSection :config="config" @update:config="applyConfigPatch" />
         </div>
 
         <div v-if="activeTab === 'storage'" class="space-y-4">
@@ -494,6 +381,9 @@
 <script setup lang="ts">
 import { LANGUAGE_OPTIONS } from '~~/shared/languages'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import SettingsAiSection from './SettingsAiSection.vue'
+import SettingsDefaultSection from './SettingsDefaultSection.vue'
+import SettingsAdvancedSection from './SettingsAdvancedSection.vue'
 
 const emit = defineEmits(['close', 'saved'])
 const route = useRoute()
@@ -743,6 +633,14 @@ const qualityThresholdPercent = computed({
   get: () => Math.round(Number(config.value?.qualityScoreThreshold ?? 0.7) * 100),
   set: (value: number) => { config.value.qualityScoreThreshold = Math.min(1, Math.max(0, Number(value || 0) / 100)) }
 })
+
+function applyConfigPatch(patch: Record<string, any>) {
+  Object.assign(config.value, patch)
+}
+
+function applyQualityThresholdPercent(value: any) {
+  qualityThresholdPercent.value = value
+}
 const isInsecure = computed(() => {
   if (!import.meta.client) return false
   return window.location.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(window.location.hostname)

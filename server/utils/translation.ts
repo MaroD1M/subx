@@ -2,7 +2,12 @@ import type { SubtitleEntry } from '../../types'
 import type { BoundTranslationProvider } from './providers/types'
 import { useDb } from './db'
 import { SubtitleService } from './subtitle'
-import { formatLogTimestamp } from '~~/shared/time'
+import {
+    buildAiLogErrorSection,
+    buildAiLogInitialLog,
+    buildAiLogSummary,
+    isAiLogFullPayloadEnabled
+} from './aiLog'
 import { appendFileSync, existsSync, rmSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
@@ -362,8 +367,10 @@ export const TranslationService = {
         const logDir = join(process.cwd(), 'temp', 'ai-logs')
         if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true })
 
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const startedAt = new Date()
+        const timestamp = startedAt.toISOString().replace(/[:.]/g, '-')
         const logFile = join(logDir, `task_${taskId || 'unknown'}_chunk_${chunkIndex ?? 0}_attempt_${attempt}_${timestamp}.log`)
+        const fullPayloadLogging = isAiLogFullPayloadEnabled()
 
         let fullContent = ''
         let lastParsedIndex = 0
@@ -379,29 +386,18 @@ export const TranslationService = {
                 timeout: STREAM_REQUEST_TIMEOUT_MS
             }
 
-            const initialLog = `=== TASK INFO ===
-Task ID: ${taskId}
-Chunk Index: ${chunkIndex}
-Attempt: ${attempt}
-Provider: ${provider.type}
-Model: ${model}
-Target: ${targetLanguage}
-Translation Mode: ${effectiveStreaming ? 'STREAM' : 'NON_STREAM'}
-Stream Usage Toggle: ${streamUsage ? 'ON' : 'OFF'}
-Timestamp: ${formatLogTimestamp(new Date())}
-
-=== REQUEST OPTIONS ===
-${JSON.stringify(requestOptions, null, 2)}
-
-=== SYSTEM MESSAGE ===
-${systemMessage}
-
-=== USER PROMPT ===
-${prompt}
-
-=== AI STREAMING RESPONSE ===
-`
-            appendFileSync(logFile, initialLog)
+            appendFileSync(logFile, buildAiLogInitialLog({
+                taskId,
+                chunkIndex,
+                attempt,
+                provider: provider.type,
+                model,
+                targetLanguage,
+                streaming: effectiveStreaming,
+                streamUsage,
+                timestamp: startedAt,
+                requestOptions
+            }, { systemMessage, prompt }, fullPayloadLogging))
 
             let lastLogTime = Date.now()
             let buffer = ''
@@ -418,7 +414,9 @@ ${prompt}
                 fullContent = String(result.content || '')
                 buffer = fullContent
                 usage = result.usage || usage
-                appendFileSync(logFile, fullContent)
+                if (fullPayloadLogging) {
+                    appendFileSync(logFile, fullContent)
+                }
             } else if (provider.stream) {
                 for await (const part of provider.stream({
                     system: systemMessage,
@@ -432,7 +430,7 @@ ${prompt}
                     fullContent += content
                     buffer += content
 
-                    if (content) {
+                    if (content && fullPayloadLogging) {
                         appendFileSync(logFile, content)
                     }
 
@@ -466,11 +464,17 @@ ${prompt}
                 throw new Error(`Provider ${provider.type} 不支持流式响应`)
             }
 
-            // 写入结束日志
-            appendFileSync(logFile, `\n\n=== SUMMARY ===
-Tokens: ${usage.totalTokens} (P: ${usage.promptTokens}, C: ${usage.completionTokens})
-End Time: ${formatLogTimestamp(new Date())}
-`)
+            // 写入结束日志（默认仅摘要，不包含完整 prompt/response 正文）
+            const endedAt = new Date()
+            appendFileSync(logFile, buildAiLogSummary({
+                usage,
+                durationMs: endedAt.getTime() - startedAt.getTime(),
+                systemMessageLength: systemMessage.length,
+                promptLength: prompt.length,
+                responseLength: fullContent.length,
+                responseSummary: summarizeResponseMeta(fullContent, chunk.map(entry => String(entry.id))),
+                endedAt
+            }))
 
             console.log(`[${effectiveStreaming ? 'Stream' : 'NonStream'}] Task ${taskId} chunk ${chunkIndex} complete, total ${fullContent.length} bytes, tokens: ${usage.totalTokens} (prompt: ${usage.promptTokens}, completion: ${usage.completionTokens})`)
 
@@ -496,9 +500,8 @@ End Time: ${formatLogTimestamp(new Date())}
                 }
             }
         } catch (e: any) {
-            const errorLog = `\n\n=== ERROR ===\n${e.message}\n${e.stack || ''}`
             try {
-                appendFileSync(logFile, errorLog)
+                appendFileSync(logFile, buildAiLogErrorSection(e))
             } catch { /* ignore */ }
 
             console.error('\n' + '!'.repeat(20) + ' 流式 API 请求失败 ' + '!'.repeat(20))

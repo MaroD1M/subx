@@ -3,6 +3,8 @@ import { existsSync } from 'fs'
 import { useDb } from './db'
 import type { AppConfig, MediaRoot } from '../../types'
 import { decryptSecret, encryptSecret, isEncryptedSecret } from './secret'
+import { getActiveTaskIds } from './activeTasks'
+import { isAudioInUse } from './asr/audioCache'
 
 let lastLogCleanupAt = 0
 let configCache: AppConfig | null = null
@@ -19,6 +21,21 @@ function safeJsonParse<T>(value: unknown, fallback: T): T {
     } catch {
         return fallback
     }
+}
+
+/**
+ * Redact raw LLM payloads from task_responses older than the retention window
+ * without deleting the row. Metadata, token counts and identifiers are kept.
+ */
+export function redactExpiredTaskResponses(db: any, retentionDays: number): number {
+    const days = Math.max(1, Number(retentionDays) || 7)
+    const result = db.prepare(`
+        UPDATE task_responses
+        SET raw_request = NULL, raw_response = NULL
+        WHERE created_at < datetime('now', ?)
+          AND (raw_request IS NOT NULL OR raw_response IS NOT NULL)
+    `).run(`-${days} days`)
+    return Number(result?.changes ?? 0)
 }
 
 export const ConfigService = {
@@ -266,11 +283,14 @@ export const ConfigService = {
             }
         }
 
-        cleanupDir(join(process.cwd(), 'temp', 'ai-logs'))
-        cleanupDir(join(process.cwd(), 'temp'), name => /\.(partial|srt|mp3)$/.test(name) || name.startsWith('download_orig_') || name.startsWith('clip_'))
+        const activeTaskIds = getActiveTaskIds()
+        const belongsToActiveTask = (name: string) => activeTaskIds.some(id => name.includes(id))
+        cleanupDir(join(process.cwd(), 'temp', 'ai-logs'), name => !belongsToActiveTask(name))
+        cleanupDir(join(process.cwd(), 'temp'), name => (/\.(partial|srt|mp3)$/.test(name) || name.startsWith('download_orig_') || name.startsWith('clip_')) && !belongsToActiveTask(name))
         const audioCacheDays = Math.max(7, Number(process.env.ASR_AUDIO_CACHE_DAYS || 14))
-        cleanupDir(join(process.cwd(), 'temp', 'asr-audio'), undefined, audioCacheDays * 24 * 60 * 60 * 1000)
-        cleanupDir(join(process.cwd(), 'db', 'logs'), name => name.startsWith('task_') && name.endsWith('.log'))
+        const asrAudioDir = join(process.cwd(), 'temp', 'asr-audio')
+        cleanupDir(asrAudioDir, name => !isAudioInUse(join(asrAudioDir, name)), audioCacheDays * 24 * 60 * 60 * 1000)
+        cleanupDir(join(process.cwd(), 'db', 'logs'), name => name.startsWith('task_') && name.endsWith('.log') && !belongsToActiveTask(name))
 
         try {
             const db = useDb()
@@ -278,6 +298,7 @@ export const ConfigService = {
             db.prepare("DELETE FROM task_logs WHERE created_at < datetime('now', ?)").run(modifier)
             db.prepare("DELETE FROM task_logs WHERE task_id NOT IN (SELECT task_id FROM tasks)").run()
             db.prepare("DELETE FROM task_responses WHERE task_id NOT IN (SELECT task_id FROM tasks)").run()
+            redactExpiredTaskResponses(db, days)
             db.prepare("DELETE FROM task_review_entries WHERE task_id NOT IN (SELECT task_id FROM tasks)").run()
             try { db.prepare("DELETE FROM task_proofread_cache WHERE task_id NOT IN (SELECT task_id FROM tasks)").run() } catch { /* old schema */ }
             try { db.prepare("DELETE FROM translation_quality_entries WHERE task_id NOT IN (SELECT task_id FROM tasks)").run() } catch { /* old schema */ }

@@ -1,10 +1,10 @@
 # SubX 部署文档
 
-> 适用版本：v2.8.4
+> 适用版本：v2.8.6
 
 本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理、拆分部署、升级备份和常见问题。使用说明请参阅 [usage.md](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
-## 1. v2.8.4 架构
+## 1. v2.8.6 架构
 
 从 v2.5.0 开始，主应用镜像 `ghcr.io/marod1m/subx` 同时包含：
 
@@ -25,7 +25,7 @@ OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下�
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.8.4
+    image: ghcr.io/marod1m/subx:v2.8.6
     container_name: subx
     restart: unless-stopped
     ports:
@@ -78,7 +78,7 @@ http://<主机IP>:3000
 4. 需要无字幕识别时开启「启用语音识别」；需要图像字幕时进入「设置 → 图像字幕 OCR」开启 OCR，并按需选择语言和引擎。
 5. 回首页开始翻译。
 
-> 镜像体积参考：amd64 下载约 **586 MiB**，解压后文件约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.4 预计接近）。模型体积参考：`tiny` 约 75MB、`small` 约 500MB、`medium` 约 1.5GB、`large-v3` 约 3GB。建议为 `./data/models` 预留 10–20GB。
+> 镜像体积参考：amd64 下载约 **586 MiB**，解压后文件约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.6 预计接近）。模型体积参考：`tiny` 约 75MB、`small` 约 500MB、`medium` 约 1.5GB、`large-v3` 约 3GB。建议为 `./data/models` 预留 10–20GB。
 
 > [!TIP]
 > 不想读全文？先只改三处：媒体路径、`PUID/PGID`、`SUBX_SECRET_KEY`。然后 `docker compose up -d`，进设置页下载模型。其他默认值先别动，真的够用。
@@ -110,7 +110,7 @@ http://<主机IP>:3000
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.8.4
+    image: ghcr.io/marod1m/subx:v2.8.6
     container_name: subx
     restart: unless-stopped
     ports:
@@ -286,11 +286,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.8.4
+# 默认拉取 v2.8.6
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.8.4
+./scripts/pull-image.sh --tag v2.8.6
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
@@ -406,7 +406,7 @@ docker compose --profile asr up -d asr
 http://subx-asr:8000
 ```
 
-独立镜像：`ghcr.io/marod1m/subx-asr:v2.8.4`。模型目录为 `./data/models/asr`。
+独立镜像：`ghcr.io/marod1m/subx-asr:v2.8.6`。模型目录为 `./data/models/asr`。
 
 ### 8.2 独立 OCR 容器
 
@@ -504,7 +504,7 @@ OCR 内部健康检查：
 
 ## 12. 升级与备份
 
-升级到 v2.8.4：
+升级到 v2.8.6：
 
 ```bash
 docker compose pull
@@ -513,20 +513,22 @@ docker compose up -d --force-recreate
 
 升级说明：
 
-- v2.8.4 重点是安全加固、任务流水线稳定性和前端数据一致性；从 v2.8.3 升级不需要调整卷、数据库或设置。
-- 修复输出路径穿越、API Token scope 提权、已保存 AI Key 可被指定地址外送、通知出站云元数据访问等安全问题。
-- 修复 ASR 音频租约泄漏、空字幕被标记成功、翻译全回退仍显示完成、队列孤儿、终态并发覆盖和审核记录非事务写入。
-- OCR 任务可正确下载原始识别字幕；审核导出统一路径校验和状态机；并发任务写同一输出文件会失败而不是互相覆盖。
-- 修复设置页 API Key 保存、文件轨道请求串台、核对页保存覆盖输入、历史页重复请求、任务页 SSE 断线状态和自动化页错误提示。
-- PostgreSQL 同步桥支持事务连接亲和性；迁移增加事务与 advisory lock；CI 增加 Docker 镜像健康检查和发布前质量门禁。
-- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.8.4。
+- v2.8.6 重点是媒体库/文件浏览体验、本地数据安全和大列表性能；从 v2.8.4 升级不需要调整卷或数据库。
+- 媒体库管理改为卡片网格并支持拖拽排序；文件浏览器支持整库递归搜索和取消旧请求。
+- 新增 `npm run backup` / `npm run restore`，备份数据库、`.secret` 和任务日志；恢复前校验完整性并保留旧库。
+- SQLite 增加 busy_timeout、synchronous=NORMAL、temp_store=MEMORY 和 32MB cache_size；超期任务响应会清空原始 payload。
+- AI 日志默认只写摘要；需要完整 prompt/response 时设置 `SUBX_AI_LOG_FULL_PAYLOAD=1`。
+- 核对页、历史页、FileBrowser 和 Search 增加分页、取消、content-visibility、分批渲染优化。
+- 任务取消检查扩展到 ASR/OCR 和翻译重试边界；SSE 连接时增加数据库初始快照。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.8.6。
 
 备份：
 
-- 备份 `DB_PATH` 所在目录，例如 `./data/db`。
+- 推荐在宿主机执行 `npm run backup`，默认写入 `backups/subx-*`，包含数据库、`.secret` 和任务日志。
+- 恢复前停止容器，再执行 `npm run restore -- ./backups/subx-*`；脚本会校验完整性并保留旧数据库。
+- 也可以手动备份 `DB_PATH` 所在目录，例如 `./data/db`；建议停止容器后备份，或同时备份 `-wal`/`-shm` 文件。
 - 备份模型缓存 `./data/models`，避免重新下载。
 - 如需保留排查日志，同时备份 `./data/temp`。
-- 数据库使用 SQLite WAL，建议在容器停止后备份，或同时备份 `-wal`/`-shm` 文件。
 
 ## 13. PostgreSQL 运行时
 
@@ -633,7 +635,7 @@ docker exec -it subx curl -fsS http://127.0.0.1:8000/health
 
 ### 镜像太大 / 拉取很慢
 
-- v2.8.4 单镜像包含 Python、FFmpeg、Tesseract 语言包和 OCR 依赖：amd64 下载约 586 MiB、解压后约 1.57 GiB；arm64 下载约 520 MiB（不含模型，体积参考基于 v2.6.x 实测）。
+- v2.8.6 单镜像包含 Python、FFmpeg、Tesseract 语言包和 OCR 依赖：amd64 下载约 586 MiB、解压后约 1.57 GiB；arm64 下载约 520 MiB（不含模型，体积参考基于 v2.6.x 实测）。
 - 使用 `./scripts/pull-image.sh` 查看 Docker 原生进度；Ctrl+C 暂停后重新执行可续传。
 - 配置 Docker Daemon 代理（见第 5 节）。
 - 只需要主应用时，可继续使用旧版精简镜像和独立 sidecar，但不再推荐。

@@ -1,11 +1,13 @@
 // @vitest-environment happy-dom
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { mount } from '@vue/test-utils'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import FileNodeItem from '../FileNodeItem.vue'
 
 beforeAll(() => {
   vi.stubGlobal('computed', computed)
+  vi.stubGlobal('ref', ref)
+  vi.stubGlobal('watch', watch)
 })
 
 const node = {

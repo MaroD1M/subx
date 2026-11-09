@@ -5,6 +5,7 @@ import { TaskCancelledError } from '../taskState'
 import { translateChunkWithRetry } from '../taskTranslate'
 
 vi.mock('../taskLog', () => ({ writeTaskLog: vi.fn() }))
+vi.mock('../db', () => ({ useDb: () => ({ prepare: () => ({ get: () => ({ status: 'translating' }) }) }) }))
 
 const chunk: SubtitleEntry[] = [
   { id: '1', startTime: '00:00:00,000', endTime: '00:00:01,000', text: 'Hello' },

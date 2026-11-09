@@ -229,3 +229,9 @@ body {
         scroll-behavior: auto !important;
     }
 }
+
+
+.content-auto-node {
+    content-visibility: auto;
+    contain-intrinsic-size: 44px;
+}

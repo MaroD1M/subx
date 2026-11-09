@@ -1,7 +1,8 @@
 <template>
   <div
-    class="space-y-2.5 p-3"
+    class="review-entry-card space-y-2.5 p-3"
     :class="focused ? 'rounded-2xl bg-warning-50/40 ring-2 ring-warning-400/70 dark:bg-warning-900/10' : ''"
+    :style="cardStyle"
   >
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0 space-y-2">
@@ -86,6 +87,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import {
   isReviewFinalDiffersFromTranslation,
   isReviewFinalSameAsSource,
@@ -99,13 +101,20 @@ import {
   reviewStatusLabel
 } from '~~/shared/reviewLabels'
 
-defineProps<{
+const props = defineProps<{
   entry: any
   focused: boolean
   proofreadIssues: any[]
   qualityThreshold: number
   retranslating: boolean
 }>()
+
+const cardStyle = computed(() => props.focused
+  ? { contentVisibility: 'visible' as const }
+  : {
+      contentVisibility: 'auto' as const,
+      containIntrinsicSize: 'auto 200px'
+    })
 
 const emit = defineEmits<{
   'toggle-select': [entry: any, event: MouseEvent]

@@ -6,7 +6,7 @@ import { SubtitleService } from './subtitle'
 import { TranslationService, type TranslationContext } from './translation'
 import { writeTaskLog } from './taskLog'
 import { persistReviewEntries } from './taskSupport'
-import { assertTaskNotCancelled } from './taskState'
+import { assertTaskNotCancelled, ensureTaskNotCancelled } from './taskState'
 
 export interface FinalizeTaskOptions {
   taskId: string
@@ -35,7 +35,7 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
     stylePrompt, translationContext, fallbackCount = 0, signal, updateStatus
   } = options
 
-  assertTaskNotCancelled(taskId)
+  await ensureTaskNotCancelled(taskId)
   await updateStatus(taskId, 'exporting', 90, { stepProgress: 0, stepMessage: '正在合成并保存最终字幕文件...', log: '正在合成并保存最终字幕文件...' })
 
   let translatedEntries = [...options.translatedEntries]
@@ -97,7 +97,7 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
     persistReviewEntries(taskId, translatedEntries, [])
   }
 
-  assertTaskNotCancelled(taskId)
+  await ensureTaskNotCancelled(taskId)
   const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
   if (embyVariantPath) {
     await SubtitleService.writeSubtitle(translatedEntries, embyVariantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)

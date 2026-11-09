@@ -171,10 +171,10 @@ export const TaskService = {
         if (data.log) {
             const level = status === 'error' ? 'error' : (data.level || 'info')
             const category = data.category || resolveTaskLogCategory(status, level, data.log)
-            writeTaskLog(taskId, status, level, data.log, category)
-            taskEvents.emit('progress', { ...payload, level, category })
+            const logId = writeTaskLog(taskId, status, level, data.log, category)
+            taskEvents.emit('progress', { ...payload, level, category, logId })
             if (status === 'done' || status === 'error' || status === 'cancelled') {
-                taskEvents.emit(status, { ...payload, level, category, final: true })
+                taskEvents.emit(status, { ...payload, level, category, logId, final: true })
             }
             return
         }

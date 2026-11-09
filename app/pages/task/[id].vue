@@ -415,6 +415,7 @@
 <script setup lang="ts">
 definePageMeta({ key: route => String(route.params.id || '') })
 import { formatClock as formatClockInZone } from '~~/shared/time'
+import { reviewReasonLabel } from '~~/shared/reviewLabels'
 
 const route = useRoute()
 const timeZone = useTimeZone()
@@ -539,23 +540,12 @@ const cancelling = ref(false)
 const toast = useToast()
 const eventSource = ref<EventSource | null>(null)
 const reconnectTimer = ref<ReturnType<typeof setTimeout> | null>(null)
-const logs = ref<Array<{ type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }>>([])
+type TaskLogView = { id?: number, type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }
+const logs = ref<TaskLogView[]>([])
 const currentTextTimestamp = ref('')
 const logKeys = ref(new Set<string>())
 const connectionState = ref<'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'history-only' | 'idle'>('connecting')
 const reconnectStatusText = ref('')
-const reviewReasonLabels: Record<string, string> = {
-  missing: '缺少译文',
-  same_as_source: '译文与原文相同',
-  same_as_source_allowed: '同文可接受',
-  latin_heavy: '译文仍偏原语言',
-  bilingual_duplicate: '双语内容重复',
-  suspected_contamination: '疑似串条/混入相邻字幕',
-  overlong_translation: '译文异常偏长',
-  low_asr_confidence: 'ASR 置信度偏低',
-  low_quality_translation: '双模型质量评分偏低'
-}
-
 const riskTagLabels: Record<string, string> = {
   non_dialogue: '非对白内容',
   lyrics: '歌词/吟唱',
@@ -572,10 +562,6 @@ function formatClock(date: Date | string = new Date()) {
 }
 
 const reviewDiagnosticsIssues = computed(() => Array.isArray(task.value.reviewDiagnostics?.issues) ? task.value.reviewDiagnostics.issues : [])
-
-function reviewReasonLabel(reason: string) {
-  return reviewReasonLabels[reason] || reason
-}
 
 function riskTagLabel(tag: string) {
   return riskTagLabels[tag] || tag
@@ -633,8 +619,12 @@ async function cancelTask() {
   }
 }
 
-function appendLog(entry: { type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }) {
-  const key = [entry.type, entry.timestamp, entry.category || '', entry.message].join('|')
+function logEntryKey(entry: TaskLogView) {
+  return entry.id ? `id:${entry.id}` : [entry.type, entry.timestamp, entry.category || '', entry.message].join('|')
+}
+
+function appendLog(entry: TaskLogView) {
+  const key = logEntryKey(entry)
   if (logKeys.value.has(key)) return
   logKeys.value.add(key)
   logs.value.push(entry)
@@ -642,12 +632,12 @@ function appendLog(entry: { type: 'info' | 'error', message: string, timestamp: 
   if (logs.value.length > maxLogs) {
     const removed = logs.value.splice(0, logs.value.length - maxLogs)
     for (const old of removed) {
-      logKeys.value.delete([old.type, old.timestamp, old.category || '', old.message].join('|'))
+      logKeys.value.delete(logEntryKey(old))
     }
   }
 }
 
-function resetLogs(entries: Array<{ type: 'info' | 'error', message: string, timestamp: string, category?: 'system' | 'translation' | 'export' | 'error' | 'process' }>) {
+function resetLogs(entries: TaskLogView[]) {
   logs.value = []
   logKeys.value = new Set()
   for (const entry of entries) appendLog(entry)
@@ -937,6 +927,7 @@ onMounted(async () => {
 
     if (historyLogs.length > 0) {
       resetLogs(historyLogs.map((log: any) => ({
+        id: Number(log.id) || undefined,
         type: log.level === 'error' ? 'error' : 'info',
         category: log.category || undefined,
         message: log.message,
@@ -1060,6 +1051,7 @@ onMounted(async () => {
 
       if (data.log) {
         appendLog({
+          id: Number(data.logId) || undefined,
           type: data.step === 'error' || data.step === 'cancelled' || data.log.includes('!!!') ? 'error' : 'info',
           category: data.category || undefined,
           message: data.log,

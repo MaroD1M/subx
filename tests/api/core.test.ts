@@ -61,6 +61,16 @@ async function apiFetch(path: string, init: RequestInit = {}) {
   return fetch(apiUrl(path), init)
 }
 
+async function createSessionToken(name: string, scopes: string[]) {
+  const response = await apiFetch('/api/api-tokens', {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ name, scopes })
+  })
+  expect(response.status).toBe(200)
+  return await response.json() as any
+}
+
 beforeAll(async () => {
   const response = await fetch(apiUrl('/api/auth/setup'), {
     method: 'POST',
@@ -161,6 +171,43 @@ describe('core API integration', () => {
     expect(content).toContain('OCR line two')
   })
 
+  it('downloads ASR original subtitles in segment order and returns 404 for empty runs', async () => {
+    const taskId = 'asr-download-task'
+    const emptyRunTaskId = 'asr-empty-run-task'
+    const emptySegmentsTaskId = 'asr-empty-segments-task'
+    const db = new Database(dbPath)
+    db.pragma('busy_timeout = 5000')
+    const insertTask = db.prepare(`
+      INSERT INTO tasks (task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, status)
+      VALUES (?, ?, ?, 'asr', 0, 'test-model', 'zh-CN', 'original', 'done')
+    `)
+    insertTask.run(taskId, 'Asr.Video.mkv', 'default')
+    insertTask.run(emptyRunTaskId, 'Asr.EmptyRun.mkv', 'default')
+    insertTask.run(emptySegmentsTaskId, 'Asr.EmptySegments.mkv', 'default')
+
+    const run = db.prepare("INSERT INTO transcription_runs (task_id, engine, model, language) VALUES (?, 'whisper', 'test', 'zh')").run(taskId)
+    const runId = Number(run.lastInsertRowid)
+    db.prepare('INSERT INTO asr_segments (run_id, start_ms, end_ms, text) VALUES (?, ?, ?, ?)').run(runId, 2000, 3000, 'ASR second line')
+    db.prepare('INSERT INTO asr_segments (run_id, start_ms, end_ms, text) VALUES (?, ?, ?, ?)').run(runId, 0, 1000, 'ASR first line')
+
+    db.prepare("INSERT INTO transcription_runs (task_id, engine, model, language) VALUES (?, 'whisper', 'test', 'zh')").run(emptySegmentsTaskId)
+    db.close()
+
+    const download = await apiFetch(`/api/tasks/${taskId}/download-original`, { headers: { cookie } })
+    expect(download.status).toBe(200)
+    expect(String(download.headers.get('content-type') || '')).toContain('text/plain')
+    const content = await download.text()
+    expect(content).toContain('1\n00:00:00,000 --> 00:00:01,000\nASR first line')
+    expect(content).toContain('2\n00:00:02,000 --> 00:00:03,000\nASR second line')
+    expect(content.indexOf('ASR first line')).toBeLessThan(content.indexOf('ASR second line'))
+
+    const emptyRun = await apiFetch(`/api/tasks/${emptyRunTaskId}/download-original`, { headers: { cookie } })
+    expect(emptyRun.status).toBe(404)
+
+    const emptySegments = await apiFetch(`/api/tasks/${emptySegmentsTaskId}/download-original`, { headers: { cookie } })
+    expect(emptySegments.status).toBe(404)
+  })
+
   it('loads and updates review entries for a completed task', async () => {
     expect(completedTaskId).toBeTruthy()
     const review = await apiFetch(`/api/tasks/${completedTaskId}/review`, { headers: { cookie } })
@@ -192,11 +239,28 @@ describe('core API integration', () => {
     const result = await apiFetch('/api/files/search?rootId=default&q=Nested', { headers: { cookie } })
     expect(result.status).toBe(200)
     const body = await result.json() as any
+    expect(body.aborted).toBe(false)
     expect(body.files.some((item: any) => item.path === 'DeepSearch/Nested.Movie.mkv')).toBe(true)
     expect(body.files.some((item: any) => item.path === 'DeepSearch/Nested.Movie.zh.srt')).toBe(true)
 
     const tooShort = await apiFetch('/api/files/search?rootId=default&q=x', { headers: { cookie } })
     expect(tooShort.status).toBe(400)
+  })
+
+  it('keeps search working after a client aborts a search request', async () => {
+    const controller = new AbortController()
+    const pending = apiFetch('/api/files/search?rootId=default&q=Nested', {
+      headers: { cookie },
+      signal: controller.signal
+    })
+    controller.abort()
+    await expect(pending).rejects.toBeTruthy()
+
+    const retry = await apiFetch('/api/files/search?rootId=default&q=Nested', { headers: { cookie } })
+    expect(retry.status).toBe(200)
+    const body = await retry.json() as any
+    expect(body.aborted).toBe(false)
+    expect(body.files.some((item: any) => item.path === 'DeepSearch/Nested.Movie.mkv')).toBe(true)
   })
 
   it('lists media files and blocks path traversal', async () => {
@@ -508,16 +572,35 @@ describe('core API integration', () => {
     const payload = await events.json() as any
     expect(payload.events.some((item: any) => item.status === 'failed')).toBe(true)
   })
-  it('opens and closes the SSE progress stream', async () => {
+  it('sends a persisted SSE snapshot and closes the stream', async () => {
+    const db = new Database(dbPath)
+    db.pragma('busy_timeout = 5000')
+    db.prepare(`
+      INSERT INTO tasks (task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, status, progress)
+      VALUES ('sse-snapshot-task', 'Demo.zh.srt', 'default', 'external', 0, 'test-model', 'zh-CN', 'original', 'translating', 42)
+    `).run()
+    db.close()
+
     const controller = new AbortController()
-    const response = await apiFetch('/api/sse/progress?taskId=missing-task', {
+    const response = await apiFetch('/api/sse/progress?taskId=sse-snapshot-task', {
       headers: { cookie },
       signal: controller.signal
     })
     expect(response.status).toBe(200)
     expect(String(response.headers.get('content-type') || '')).toContain('text/event-stream')
+
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    const text = await Promise.race([
+      reader.read().then(result => decoder.decode(result.value || new Uint8Array(), { stream: true })),
+      new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 5000))
+    ])
     controller.abort()
+    expect(text).toContain('event: progress')
+    expect(text).toContain('sse-snapshot-task')
+    expect(text).toContain('"snapshot":true')
   })
+
 
   it('supports session status, login and logout', async () => {
     const session = await apiFetch('/api/auth/session', { headers: { cookie } })
@@ -659,5 +742,110 @@ describe('core API integration', () => {
     expect(revoked.status).toBe(200)
     const afterRevoke = await apiFetch('/api/tasks', { headers: { authorization: `Bearer ${readToken}` } })
     expect(afterRevoke.status).toBe(401)
+  })
+
+  it('enforces the API token scope matrix across automation, config and token management', async () => {
+    const automationRead = await createSessionToken('matrix-automation-read', ['automation:read'])
+    const tasksRead = await createSessionToken('matrix-tasks-read', ['tasks:read'])
+    const tokensManage = await createSessionToken('matrix-tokens-manage', ['tokens:manage'])
+    const bearer = (token: string) => ({ authorization: `Bearer ${token}` })
+
+    expect(automationRead.item.scopes).toEqual(['automation:read'])
+    expect(tasksRead.item.scopes).toEqual(['tasks:read'])
+    expect(tokensManage.item.scopes).toEqual(['tokens:manage'])
+
+    const watchFolders = await apiFetch('/api/watch-folders', { headers: bearer(automationRead.token) })
+    expect(watchFolders.status).toBe(200)
+    expect(Array.isArray((await watchFolders.json() as any).folders)).toBe(true)
+
+    const watchEvents = await apiFetch('/api/watch-events?limit=5', { headers: bearer(automationRead.token) })
+    expect(watchEvents.status).toBe(200)
+    expect(Array.isArray((await watchEvents.json() as any).events)).toBe(true)
+
+    const channels = await apiFetch('/api/notification-channels', { headers: bearer(automationRead.token) })
+    expect(channels.status).toBe(200)
+    expect(Array.isArray((await channels.json() as any).channels)).toBe(true)
+
+    const integrationEvents = await apiFetch('/api/integrations/events?limit=5', { headers: bearer(automationRead.token) })
+    expect(integrationEvents.status).toBe(200)
+    expect(Array.isArray((await integrationEvents.json() as any).events)).toBe(true)
+
+    const createWatchFolder = await apiFetch('/api/watch-folders', {
+      method: 'POST',
+      headers: { ...bearer(automationRead.token), 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: 'default', path: 'WatchApi', enabled: false, recursive: false, mode: 'new' })
+    })
+    expect(createWatchFolder.status).toBe(403)
+
+    const createChannel = await apiFetch('/api/notification-channels', {
+      method: 'POST',
+      headers: { ...bearer(automationRead.token), 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'webhook', name: 'Matrix Denied', enabled: false, config: { url: `${webhookBaseUrl}/hook`, method: 'POST' } })
+    })
+    expect(createChannel.status).toBe(403)
+
+    const configRead = await apiFetch('/api/config', { headers: bearer(automationRead.token) })
+    expect(configRead.status).toBe(403)
+
+    const configWrite = await apiFetch('/api/config', {
+      method: 'PUT',
+      headers: { ...bearer(tasksRead.token), 'content-type': 'application/json' },
+      body: JSON.stringify({ targetLanguage: 'zh-CN' })
+    })
+    expect(configWrite.status).toBe(403)
+
+    const tasks = await apiFetch('/api/tasks', { headers: bearer(tasksRead.token) })
+    expect(tasks.status).toBe(200)
+    expect(Array.isArray((await tasks.json() as any).tasks)).toBe(true)
+
+    const createTask = await apiFetch('/api/task', {
+      method: 'POST',
+      headers: { ...bearer(tasksRead.token), 'content-type': 'application/json' },
+      body: JSON.stringify({ filePath: 'Demo.zh.srt', targetLanguage: 'zh-CN' })
+    })
+    expect(createTask.status).toBe(403)
+
+    const tasksWithAutomationRead = await apiFetch('/api/tasks', { headers: bearer(automationRead.token) })
+    expect(tasksWithAutomationRead.status).toBe(403)
+
+    const automationWithTasksRead = await apiFetch('/api/watch-folders', { headers: bearer(tasksRead.token) })
+    expect(automationWithTasksRead.status).toBe(403)
+
+    const tokensWithAutomationRead = await apiFetch('/api/api-tokens', { headers: bearer(automationRead.token) })
+    expect(tokensWithAutomationRead.status).toBe(403)
+
+    const tokensWithTasksRead = await apiFetch('/api/api-tokens', { headers: bearer(tasksRead.token) })
+    expect(tokensWithTasksRead.status).toBe(403)
+
+    const tokenList = await apiFetch('/api/api-tokens', { headers: bearer(tokensManage.token) })
+    expect(tokenList.status).toBe(200)
+    const tokenListBody = await tokenList.json() as any
+    expect(tokenListBody.tokens.some((item: any) => item.id === automationRead.item.id)).toBe(true)
+
+    const childResponse = await apiFetch('/api/api-tokens', {
+      method: 'POST',
+      headers: { ...bearer(tokensManage.token), 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'matrix-tokens-child', scopes: ['tokens:manage'] })
+    })
+    expect(childResponse.status).toBe(200)
+    const child = await childResponse.json() as any
+    expect(child.token).toMatch(/^subx_[a-f0-9]{48}$/)
+    expect(child.item.scopes).toEqual(['tokens:manage'])
+
+    const childList = await apiFetch('/api/api-tokens', { headers: bearer(child.token) })
+    expect(childList.status).toBe(200)
+
+    const audit = await apiFetch('/api/api-token-audit?limit=5', { headers: bearer(tokensManage.token) })
+    expect(audit.status).toBe(200)
+    expect(Array.isArray((await audit.json() as any).logs)).toBe(true)
+
+    const revokeChild = await apiFetch(`/api/api-tokens/${child.item.id}`, { method: 'DELETE', headers: bearer(tokensManage.token) })
+    expect(revokeChild.status).toBe(200)
+
+    const childAfterRevoke = await apiFetch('/api/api-tokens', { headers: bearer(child.token) })
+    expect(childAfterRevoke.status).toBe(401)
+
+    const automationWithTokensManage = await apiFetch('/api/watch-folders', { headers: bearer(tokensManage.token) })
+    expect(automationWithTokensManage.status).toBe(403)
   })
 })

@@ -109,7 +109,7 @@ test('generate documentation preview images', async ({ page, browser }) => {
   await capture(page, 'preview-review-ai.png')
 
   await page.goto('/media-libraries')
-  await expect(page.getByText('路径说明')).toBeVisible()
+  await expect(page.getByLabel('搜索媒体库')).toBeVisible()
   await expect(page.getByText('电影库').first()).toBeVisible()
   await capture(page, 'preview-media-libraries.png')
 

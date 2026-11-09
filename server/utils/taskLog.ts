@@ -31,15 +31,17 @@ import { formatLogTimestamp } from '~~/shared/time'
 import { useDb } from './db'
 import { isTaskCancelled } from './taskState'
 
-export function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'error' | 'warn', message: string, category?: TaskLogCategory) {
+export function writeTaskLog(taskId: string, step: string | null, level: 'info' | 'error' | 'warn', message: string, category?: TaskLogCategory): number | null {
   if (isTaskCancelled(taskId) && step !== 'cancelled' && step !== 'error') {
-    return
+    return null
   }
   const resolvedCategory = category || resolveTaskLogCategory(step, level, message)
+  let logId: number | null = null
   try {
     const db = useDb()
-    db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
+    const info = db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
       .run(taskId, step, resolvedCategory, level, message)
+    logId = Number(info?.lastInsertRowid) || null
   } catch (error) {
     console.error('[TaskLog] Failed to write task log to database', error)
   }
@@ -51,4 +53,5 @@ export function writeTaskLog(taskId: string, step: string | null, level: 'info' 
     const ts = formatLogTimestamp(new Date())
     appendFileSync(logFile, `[${ts}] [${level.toUpperCase()}] [${step || '-'}] ${message}\n`)
   } catch { /* best effort */ }
+  return logId
 }

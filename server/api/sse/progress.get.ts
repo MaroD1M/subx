@@ -1,4 +1,5 @@
 import { apiError } from '../../utils/apiError'
+import { useDb } from '../../utils/db'
 import { taskEvents } from '../../utils/task'
 
 export default defineEventHandler((event) => {
@@ -9,6 +10,7 @@ export default defineEventHandler((event) => {
     }
 
     const { res } = event.node
+    const db = useDb()
 
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -16,28 +18,66 @@ export default defineEventHandler((event) => {
         'Connection': 'keep-alive'
     })
 
-    const onProgress = (data: any) => {
-        if (data.taskId === taskId) {
-            res.write(`event: progress\ndata: ${JSON.stringify(data)}\n\n`)
-        }
+    let closed = false
+    let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+
+    function cleanup() {
+        if (closed) return
+        closed = true
+        taskEvents.off('progress', onProgress)
+        taskEvents.off('done', onDone)
+        taskEvents.off('error', onError)
+        taskEvents.off('cancelled', onCancelled)
+        if (keepAliveTimer) clearInterval(keepAliveTimer)
+        try { res.end() } catch { /* ignore closed stream */ }
     }
 
-    const onDone = (data: any) => {
-        if (data.taskId === taskId) {
-            res.write(`event: done\ndata: ${JSON.stringify(data)}\n\n`)
-        }
+    function write(eventName: string, data: any) {
+        if (closed) return
+        res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`)
     }
 
-    const onError = (data: any) => {
-        if (data.taskId === taskId) {
-            res.write(`event: task-error\ndata: ${JSON.stringify(data)}\n\n`)
-        }
+    function writeInitialSnapshot() {
+        try {
+            const row = db.prepare(`
+                SELECT status, progress, step_progress, step_message, done_chunks, total_chunks, error
+                FROM tasks WHERE task_id = ?
+            `).get(taskId) as any
+            if (!row) return
+            write('progress', {
+                taskId,
+                step: row.status,
+                progress: Number(row.progress || 0),
+                stepProgress: Number(row.step_progress || 0),
+                stepMessage: row.step_message || '',
+                completedChunks: Number(row.done_chunks || 0),
+                totalChunks: Number(row.total_chunks || 0),
+                error: row.error || null,
+                snapshot: true
+            })
+        } catch { /* keep the stream alive */ }
     }
 
-    const onCancelled = (data: any) => {
-        if (data.taskId === taskId) {
-            res.write(`event: cancelled\ndata: ${JSON.stringify(data)}\n\n`)
-        }
+    function onProgress(data: any) {
+        if (data.taskId === taskId) write('progress', data)
+    }
+
+    function onDone(data: any) {
+        if (data.taskId !== taskId) return
+        write('done', data)
+        cleanup()
+    }
+
+    function onError(data: any) {
+        if (data.taskId !== taskId) return
+        write('task-error', data)
+        cleanup()
+    }
+
+    function onCancelled(data: any) {
+        if (data.taskId !== taskId) return
+        write('cancelled', data)
+        cleanup()
     }
 
     taskEvents.on('progress', onProgress)
@@ -45,17 +85,11 @@ export default defineEventHandler((event) => {
     taskEvents.on('error', onError)
     taskEvents.on('cancelled', onCancelled)
 
-    // Keep alive
-    const kId = setInterval(() => {
-        res.write(`: keepalive\n\n`)
+    writeInitialSnapshot()
+    keepAliveTimer = setInterval(() => {
+        if (!closed) res.write(`: keepalive\n\n`)
     }, 15000)
 
-    event.node.req.on('close', () => {
-        taskEvents.off('progress', onProgress)
-        taskEvents.off('done', onDone)
-        taskEvents.off('error', onError)
-        taskEvents.off('cancelled', onCancelled)
-        clearInterval(kId)
-        res.end()
-    })
+    res.on('close', cleanup)
+    event.node.req.on('aborted', cleanup)
 })

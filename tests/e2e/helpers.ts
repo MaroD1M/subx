@@ -1,11 +1,33 @@
 import { createHash } from 'crypto'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import Database from 'better-sqlite3'
-import type { APIRequestContext } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+import { expect } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 
 const PASSKEY = 'playwright-test-passkey'
-const DB_PATH = join(process.cwd(), '.test-artifacts', 'subx.db')
-const MEDIA_ROOT = join(process.cwd(), '.test-artifacts', 'media')
+
+function artifactsRoot() {
+  return resolve(
+    process.env.SUBX_E2E_ARTIFACTS_DIR
+    || process.env.E2E_ARTIFACTS_DIR
+    || join(process.cwd(), '.test-artifacts')
+  )
+}
+
+function databasePath() {
+  return resolve(process.env.DB_PATH || join(artifactsRoot(), 'subx.db'))
+}
+
+function mediaRoot() {
+  return resolve(process.env.VIDEO_DIR || join(artifactsRoot(), 'media'))
+}
+
+export async function expectNoSeriousA11y(page: Page) {
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
+  const serious = results.violations.filter(violation => ['critical', 'serious'].includes(violation.impact || ''))
+  expect(serious, serious.map(item => `${item.id}: ${item.help}`).join('\n')).toEqual([])
+}
 
 export async function setupAuth(request: APIRequestContext) {
   for (let attempt = 0; attempt < 120; attempt++) {
@@ -29,7 +51,7 @@ export async function setupAuth(request: APIRequestContext) {
   }
   const config = await request.put('/api/config', {
     data: {
-      mediaRoots: [{ id: 'default', name: '影视库', path: MEDIA_ROOT, enabled: true, isDefault: true, order: 0 }],
+      mediaRoots: [{ id: 'default', name: '影视库', path: mediaRoot(), enabled: true, isDefault: true, order: 0 }],
       defaultModel: 'deepseek-chat',
       targetLanguage: 'zh-CN'
     }
@@ -40,7 +62,7 @@ export async function setupAuth(request: APIRequestContext) {
 }
 
 export function seedTasks() {
-  const db = new Database(DB_PATH)
+  const db = new Database(databasePath())
   try { db.prepare('DELETE FROM task_proofread_cache').run() } catch { /* older schema */ }
   const now = '2026-10-30 07:00:00'
   const insertTask = db.prepare(`
@@ -52,9 +74,9 @@ export function seedTasks() {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
   const tasks = [
-    ['preview-done', 'Shows/Demo Show/Demo.Show.S01E01.mkv', 'default', 'embedded', 2, 'deepseek-chat', 'zh-CN', 'bilingual', 'custom-cinema', '请使用自然、克制的影视口语，角色名保持统一。', 'Demo Show S01E01', '主角在北境遇到守夜人，剧情围绕一场突如其来的冲突展开。', '角色名保持与术语表一致；不要使用网络流行语。', 'non_stream', 'both', 'bilingual_cinema', 'translated_first', 0, 'done', 100, 8, 8, join(MEDIA_ROOT, 'Shows/Demo Show/Demo.Show.S01E01.zh-CN.srt'), null, now, now],
+    ['preview-done', 'Shows/Demo Show/Demo.Show.S01E01.mkv', 'default', 'embedded', 2, 'deepseek-chat', 'zh-CN', 'bilingual', 'custom-cinema', '请使用自然、克制的影视口语，角色名保持统一。', 'Demo Show S01E01', '主角在北境遇到守夜人，剧情围绕一场突如其来的冲突展开。', '角色名保持与术语表一致；不要使用网络流行语。', 'non_stream', 'both', 'bilingual_cinema', 'translated_first', 0, 'done', 100, 8, 8, join(mediaRoot(), 'Shows/Demo Show/Demo.Show.S01E01.zh-CN.srt'), null, now, now],
     ['preview-error', 'Movies/Example.Movie.2024.mkv', 'default', 'embedded', 1, 'gpt-4o-mini', 'zh-CN', 'translated', 'default', '', 'Example Movie 2024', '', '', 'non_stream', 'srt', 'mono_clean', 'translated_first', 0, 'error', 42, 6, 2, null, '鉴权失败：请检查 API Key 或供应商鉴权配置', now, now],
-    ['preview-review', 'Shows/Demo Show/Demo.Show.S01E02.mkv', 'default', 'embedded', 1, 'deepseek-chat', 'zh-CN', 'bilingual', 'british-spy', '请体现英式冷幽默和克制语气。', 'Demo Show S01E02', '本集节奏偏慢，包含大量人物对话和隐喻。', '', 'non_stream', 'srt', 'bilingual_simple', 'translated_first', 0, 'done', 100, 10, 10, join(MEDIA_ROOT, 'Shows/Demo Show/Demo.Show.S01E02.zh-CN.srt'), null, now, now]
+    ['preview-review', 'Shows/Demo Show/Demo.Show.S01E02.mkv', 'default', 'embedded', 1, 'deepseek-chat', 'zh-CN', 'bilingual', 'british-spy', '请体现英式冷幽默和克制语气。', 'Demo Show S01E02', '本集节奏偏慢，包含大量人物对话和隐喻。', '', 'non_stream', 'srt', 'bilingual_simple', 'translated_first', 0, 'done', 100, 10, 10, join(mediaRoot(), 'Shows/Demo Show/Demo.Show.S01E02.zh-CN.srt'), null, now, now]
   ]
   for (const task of tasks) insertTask.run(...task)
 
@@ -161,7 +183,7 @@ export function seedTasks() {
 
 
 export function seedProofreadCache() {
-  const db = new Database(DB_PATH)
+  const db = new Database(databasePath())
   const rows = db.prepare(`
     SELECT subtitle_id, original_text, translated_text, final_text
     FROM task_review_entries

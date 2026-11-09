@@ -10,7 +10,7 @@ import { SubtitleService } from './subtitle'
 import { fileNameMatchesLanguage, resolveTrackPolicy, selectTrackForPolicy } from './trackPolicy'
 import { VideoService } from './video'
 import { writeTaskLog } from './taskLog'
-import { assertTaskNotCancelled } from './taskState'
+import { assertTaskNotCancelled, ensureTaskNotCancelled } from './taskState'
 
 export interface PrepareTaskSourceOptions {
   taskId: string
@@ -153,6 +153,7 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
       throw new Error('OCR 未启用，请先在设置中开启图像字幕 OCR 并配置 OCR 服务地址')
     }
     await updateStatus(taskId, 'ocr', 12, { stepProgress: 0, stepMessage: '正在识别图像字幕（PGS/VobSub/DVD）...', log: '正在识别图像字幕（PGS/VobSub/DVD）...' })
+    await ensureTaskNotCancelled(taskId)
     const ocrResult = await OcrService.transcribe(inputPath, {
       baseUrl: config.ocrBaseUrl || process.env.OCR_INTERNAL_URL || 'http://127.0.0.1:8001',
       language: config.ocrLanguage || 'en',
@@ -174,6 +175,7 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
         void updateStatus(taskId, 'ocr', mapped, { stepProgress, stepMessage: message, currentText: message }).catch(error => console.error('[Task] Failed to update OCR progress', error))
       }
     }, signal)
+    await ensureTaskNotCancelled(taskId)
     const persisted = AsrService.persistResult(taskId, ocrResult)
     allEntries = AsrService.toSubtitleEntries(ocrResult)
     if (allEntries.length === 0) {
@@ -224,6 +226,7 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
       log: '正在使用本地语音识别生成字幕...'
     })
 
+    await ensureTaskNotCancelled(taskId)
     const asrResult = await AsrService.transcribe(audioPath, {
       baseUrl: config.asrBaseUrl || process.env.ASR_INTERNAL_URL || 'http://127.0.0.1:8000',
       apiKey: config.asrApiKey,
@@ -254,6 +257,7 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
         }).catch(error => console.error('[Task] Failed to update ASR progress', error))
       }
     }, signal)
+    await ensureTaskNotCancelled(taskId)
     const persisted = AsrService.persistResult(taskId, asrResult)
     allEntries = AsrService.toSubtitleEntries(asrResult)
     if (allEntries.length === 0) {
