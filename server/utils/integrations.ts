@@ -17,6 +17,7 @@ import { getMediaRoots } from './mediaRoots'
 import { isPathInside, resolveInsideRoot } from './pathSafety'
 import { TaskService, globalTaskQueue } from './task'
 import { STYLE_PRESETS } from '../../shared/stylePresets'
+import { normalizeSubtitleStyle } from '../../shared/subtitleStyles'
 
 export type IntegrationSource = 'sonarr' | 'radarr' | 'jellyfin' | 'plex' | 'emby' | 'bazarr'
 
@@ -130,6 +131,7 @@ export const IntegrationService = {
       translationMode: config.translationMode || 'non_stream',
       subtitleFormat: (config.subtitleFormat || 'srt') as any,
       subtitleStylePreset: config.subtitleStylePreset || 'bilingual_simple',
+      subtitleStyle: normalizeSubtitleStyle(config.subtitleStyle || config.subtitleStylePreset, String(config.outputMode || 'translated')),
       bilingualLayout: (config.bilingualLayout || 'translated_first') as any,
       origin: 'automation'
     })

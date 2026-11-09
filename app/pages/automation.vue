@@ -374,9 +374,13 @@
             <div class="mt-3 grid gap-3 sm:grid-cols-2">
               <UFormField label="目标语言"><UInput v-model="folderForm.outputPolicy.targetLanguage" placeholder="zh-CN（留空使用全局）" class="w-full" /></UFormField>
               <UFormField label="模型（留空使用全局）"><UInput v-model="folderForm.outputPolicy.model" placeholder="gpt-4o-mini" class="w-full" /></UFormField>
-              <UFormField label="输出模式"><USelect v-model="folderForm.outputPolicy.outputMode" :items="outputModeOptions" class="w-full" /></UFormField>
+              <UFormField label="输出模式"><USelect :model-value="folderForm.outputPolicy.outputMode" :items="outputModeOptions" class="w-full" @update:model-value="setPolicyOutputMode" /></UFormField>
               <UFormField label="字幕来源"><USelect v-model="folderForm.outputPolicy.sourceType" :items="sourceTypeOptions" class="w-full" /></UFormField>
               <UFormField label="字幕格式"><USelect v-model="folderForm.outputPolicy.subtitleFormat" :items="subtitleFormatOptions" class="w-full" /></UFormField>
+              <UFormField label="字幕样式">
+                <USelect :model-value="folderForm.outputPolicy.subtitleStylePreset" :items="automationSubtitleStyleOptions" class="w-full" @update:model-value="setPolicySubtitleStylePreset" />
+              </UFormField>
+              <UFormField label="双语布局"><USelect v-model="folderForm.outputPolicy.bilingualLayout" :items="bilingualLayoutOptions" class="w-full" :disabled="folderForm.outputPolicy.outputMode !== 'bilingual'" /></UFormField>
               <UFormField label="翻译风格">
                 <USelect v-model="folderForm.outputPolicy.stylePreset" :items="styleOptions" class="w-full" />
               </UFormField>
@@ -555,6 +559,7 @@
 <script setup lang="ts">
 import type { NotificationChannel, NotificationChannelType, NotificationEvent, WatchEvent, WatchFolder, WatchOutputPolicy, WatchRules } from '~~/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import { createSubtitleStyle, getSubtitleStylePresetOptions, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '~~/shared/subtitleStyles'
 import { AUTOMATION_TEMPLATES } from '~~/shared/automationTemplates'
 import { formatDateTime } from '~~/shared/time'
 
@@ -652,6 +657,8 @@ function applyAutomationTemplate(template: any) {
   folderForm.recursive = template.recursive !== false
   folderForm.rules = { ...defaultRules(), ...template.rules }
   folderForm.outputPolicy = { ...defaultPolicy(), ...folderForm.outputPolicy, ...(template.outputPolicy || {}) }
+  folderForm.outputPolicy.subtitleStyle = normalizeSubtitleStyle(folderForm.outputPolicy.subtitleStyle || folderForm.outputPolicy.subtitleStylePreset, folderForm.outputPolicy.outputMode)
+  folderForm.outputPolicy.subtitleStylePreset = folderForm.outputPolicy.subtitleStyle.presetId
   extensionsText.value = folderForm.rules.extensions.join(',')
   toast.add({ title: '已应用模板', description: template.name, color: 'success' })
 }
@@ -690,6 +697,10 @@ const subtitleFormatOptions = [
   { label: 'ASS', value: 'ass' },
   { label: 'SRT + ASS', value: 'both' }
 ]
+const bilingualLayoutOptions = [
+  { label: '译文在上', value: 'translated_first' },
+  { label: '原文在上', value: 'original_first' }
+]
 const styleOptions = STYLE_PRESETS.map(preset => ({ label: preset.name, value: preset.id }))
 const webhookMethodOptions = ['POST', 'PUT', 'PATCH'].map(value => ({ label: value, value }))
 const channelTypeOptions = [
@@ -723,7 +734,8 @@ const defaultPolicy = (): WatchOutputPolicy => ({
   outputMode: 'translated',
   stylePreset: 'default',
   subtitleFormat: 'srt',
-  subtitleStylePreset: 'bilingual_simple',
+  subtitleStylePreset: 'mono_clean',
+  subtitleStyle: createSubtitleStyle('mono_clean', 'translated'),
   bilingualLayout: 'translated_first',
   sourceType: 'auto',
   model: '',
@@ -734,6 +746,19 @@ const folderModalOpen = ref(false)
 const savingFolder = ref(false)
 const extensionsText = ref(defaultRules().extensions.join(','))
 const folderForm = reactive<any>({ id: null, rootId: '', path: '', enabled: true, recursive: true, mode: 'new', rules: defaultRules(), outputPolicy: defaultPolicy() })
+const automationSubtitleStyleOptions = computed(() => getSubtitleStylePresetOptions(folderForm.outputPolicy.outputMode))
+
+function setPolicyOutputMode(value: string) {
+  folderForm.outputPolicy.outputMode = value
+  const next = normalizeSubtitleStylePreset(folderForm.outputPolicy.subtitleStyle?.presetId || folderForm.outputPolicy.subtitleStylePreset, value)
+  folderForm.outputPolicy.subtitleStyle = createSubtitleStyle(next, value)
+  folderForm.outputPolicy.subtitleStylePreset = next
+}
+
+function setPolicySubtitleStylePreset(value: string) {
+  folderForm.outputPolicy.subtitleStyle = createSubtitleStyle(value, folderForm.outputPolicy.outputMode)
+  folderForm.outputPolicy.subtitleStylePreset = folderForm.outputPolicy.subtitleStyle.presetId
+}
 watch(rootOptions, (items) => {
   if (!folderForm.rootId && items.length) folderForm.rootId = items[0]!.value
 }, { immediate: true })
@@ -748,6 +773,8 @@ function openFolderModal(folder?: WatchFolder) {
     folderForm.mode = folder.mode
     folderForm.rules = { ...defaultRules(), ...folder.rules }
     folderForm.outputPolicy = { ...defaultPolicy(), ...folder.outputPolicy, notifyChannelIds: [...(folder.outputPolicy.notifyChannelIds || [])] }
+    folderForm.outputPolicy.subtitleStyle = normalizeSubtitleStyle(folderForm.outputPolicy.subtitleStyle || folderForm.outputPolicy.subtitleStylePreset, folderForm.outputPolicy.outputMode)
+    folderForm.outputPolicy.subtitleStylePreset = folderForm.outputPolicy.subtitleStyle.presetId
   } else {
     folderForm.id = null
     folderForm.rootId = rootOptions.value[0]?.value || ''

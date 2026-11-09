@@ -42,6 +42,10 @@
               <UFormField label="导出格式">
                 <USelect v-model="exportFormat" :items="exportFormatItems" size="sm" class="w-full" />
               </UFormField>
+              <UFormField label="双语布局">
+                <USelect v-model="bilingualLayout" :items="bilingualLayoutItems" size="sm" class="w-full" :disabled="exportMode !== 'bilingual'" />
+              </UFormField>
+              <UButton label="高级样式" icon="i-lucide-palette" size="xs" color="primary" variant="soft" class="w-full justify-center" @click="exportSettingsOpen = false; styleDrawerOpen = true" />
               <p class="app-caption">导出前会自动保存当前修改。文件内容以每条字幕的「最终导出」列为准；「当前译文」只用于恢复和重译参考。</p>
             </div>
           </template>
@@ -325,6 +329,18 @@
       </template>
     </USlideover>
 
+    <USlideover v-model:open="styleDrawerOpen" title="字幕高级样式" description="分别调整原文与译文的字体、字号、颜色和描边；SRT 仅保留文本与换行。" :ui="{ content: 'w-full sm:max-w-3xl' }">
+      <template #body>
+        <SubtitleStyleEditor
+          :model-value="exportSubtitleStyle"
+          :output-mode="exportMode"
+          :subtitle-format="exportFormat"
+          :bilingual-layout="bilingualLayout"
+          @update:model-value="updateExportStyle"
+        />
+      </template>
+    </USlideover>
+
     <USlideover v-model:open="proofreadDrawerOpen" title="AI 校对与术语学习" description="只给建议，不会自动修改字幕；结果会缓存。" :ui="{ content: 'w-full sm:max-w-xl' }">
       <template #body>
         <ReviewProofreadPanel
@@ -358,6 +374,9 @@ import {
   proofreadIssueLabel,
   reviewReasonLabel as reasonLabel
 } from '~~/shared/reviewLabels'
+import { createSubtitleStyle, getSubtitleStylePresetOptions, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '~~/shared/subtitleStyles'
+import type { SubtitleOutputStyle } from '~~/types'
+import SubtitleStyleEditor from '~/components/SubtitleStyleEditor.vue'
 import {
   isReviewFinalDiffersFromTranslation,
   isReviewFinalSameAsSource,
@@ -419,8 +438,10 @@ const previewOpen = ref(false)
 const previewFormat = ref<'srt' | 'ass'>('srt')
 const bilingualLayout = ref<'translated_first' | 'original_first'>('translated_first')
 const exportMode = ref<'translated' | 'bilingual' | 'original'>('translated')
-const exportStyle = ref<string>('bilingual_simple')
+const exportStyle = ref<string>('mono_clean')
 const exportFormat = ref<'srt' | 'ass'>('srt')
+const taskSubtitleStyle = ref<SubtitleOutputStyle | undefined>()
+const styleDrawerOpen = ref(false)
 const searchQuery = ref('')
 const debouncedSearchQuery = ref('')
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -714,13 +735,18 @@ const exportModeItems = [
   { label: '仅原文', value: 'original' }
 ]
 
-const exportStyleItems = [
-  { label: '简洁双语', value: 'bilingual_simple' },
-  { label: '影院风格', value: 'bilingual_cinema' },
-  { label: '学习模式', value: 'bilingual_study' },
-  { label: '紧凑模式', value: 'bilingual_compact' },
-  { label: '单色模式', value: 'bilingual_mono' }
-]
+const exportStyleItems = computed(() => getSubtitleStylePresetOptions(exportMode.value))
+const exportSubtitleStyle = computed<SubtitleOutputStyle>(() => {
+  if (taskSubtitleStyle.value && taskSubtitleStyle.value.presetId === exportStyle.value) return taskSubtitleStyle.value
+  return createSubtitleStyle(exportStyle.value, exportMode.value)
+})
+
+function updateExportStyle(value: SubtitleOutputStyle) {
+  const normalized = normalizeSubtitleStyle(value, exportMode.value)
+  taskSubtitleStyle.value = normalized
+  exportStyle.value = normalized.presetId
+  schedulePreview()
+}
 
 const exportFormatItems = [
   { label: 'SRT', value: 'srt' },
@@ -1464,7 +1490,8 @@ async function loadReview() {
     await nextTick()
     skipLayoutWatch = false
     exportMode.value = taskMeta.outputMode as any
-    exportStyle.value = res.task?.subtitleStylePreset || 'bilingual_simple'
+    taskSubtitleStyle.value = res.task?.subtitleStyle || undefined
+    exportStyle.value = normalizeSubtitleStylePreset(res.task?.subtitleStylePreset || res.task?.subtitleStyle?.presetId || 'bilingual_simple', exportMode.value)
     exportFormat.value = (res.task?.subtitleFormat === 'ass' ? 'ass' : 'srt')
     entries.value = res.entries || []
     lastClickedIndex.value = -1
@@ -1526,7 +1553,7 @@ async function loadPreview() {
   const requestId = ++previewRequestId
   previewLoading.value = true
   try {
-    const res: any = await $fetch(`/api/tasks/${taskId}/review-preview`, { query: { format: previewFormat.value, bilingualLayout: bilingualLayout.value, outputMode: exportMode.value, subtitleStylePreset: exportStyle.value } })
+    const res: any = await $fetch(`/api/tasks/${taskId}/review-preview`, { query: { format: previewFormat.value, bilingualLayout: bilingualLayout.value, outputMode: exportMode.value, subtitleStylePreset: exportStyle.value, subtitleStyle: JSON.stringify(exportSubtitleStyle.value) } })
     if (requestId === previewRequestId) previewContent.value = res.content || ''
   } catch (error: any) {
     if (requestId === previewRequestId) {
@@ -1670,7 +1697,7 @@ async function exportReviewed() {
     await saveChanges(false)
     await $fetch(`/api/tasks/${taskId}/review-export`, {
       method: 'POST',
-      body: { outputMode: exportMode.value, subtitleStylePreset: exportStyle.value, subtitleFormat: exportFormat.value, bilingualLayout: bilingualLayout.value }
+      body: { outputMode: exportMode.value, subtitleStylePreset: exportStyle.value, subtitleStyle: exportSubtitleStyle.value, subtitleFormat: exportFormat.value, bilingualLayout: bilingualLayout.value }
     })
     toast.add({ title: '已保存并导出最终字幕', description: '字幕文件已生成，任务将标记为完成。', color: 'success' })
     await navigateTo(`/task/${taskId}`)
@@ -1744,7 +1771,16 @@ watch(bilingualLayout, (value) => {
   schedulePreview()
 })
 
-watch([exportMode, exportStyle], () => {
+watch(exportMode, (mode) => {
+  const next = normalizeSubtitleStylePreset(exportStyle.value, mode)
+  if (next !== exportStyle.value) {
+    exportStyle.value = next
+    taskSubtitleStyle.value = undefined
+  }
+  schedulePreview()
+})
+
+watch(exportStyle, () => {
   schedulePreview()
 })
 

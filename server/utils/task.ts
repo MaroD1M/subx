@@ -29,6 +29,7 @@ import type { TranslationTask, TaskStatus } from '~~/types'
 import { deriveOutputBaseName, isSafeOutputSuffix } from './outputNaming'
 import { isPathInside } from './pathSafety'
 import { acquireOutputLocks } from './outputLock'
+import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 
 export const taskEvents = new EventEmitter()
 taskEvents.setMaxListeners(0)
@@ -52,10 +53,11 @@ export function removeTaskArtifacts(taskId: string) {
 export const TaskService = {
     async createTask(task: Partial<TranslationTask>): Promise<TranslationTask> {
         const db = useDb()
+        const subtitleStyle = task.subtitleStyle ? normalizeSubtitleStyle(task.subtitleStyle, task.outputMode) : undefined
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, bilingual_layout, force_retranslate, status, progress, track_policy_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, subtitle_style_json, bilingual_layout, force_retranslate, status, progress, track_policy_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
             task.taskId,
@@ -80,7 +82,8 @@ export const TaskService = {
             task.customInstructions || null,
             task.translationMode || 'non_stream',
             task.subtitleFormat || 'srt',
-            task.subtitleStylePreset || 'bilingual_simple',
+            subtitleStyle?.presetId || task.subtitleStylePreset || 'bilingual_simple',
+            subtitleStyle ? JSON.stringify(subtitleStyle) : null,
             task.bilingualLayout || 'translated_first',
             task.forceRetranslate ? 1 : 0,
             'queued',
@@ -96,6 +99,10 @@ export const TaskService = {
         const db = useDb()
         const task = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId) as any
         if (!task) throw apiError(404, '任务不存在')
+        const subtitleStyle = (() => {
+            if (!task.subtitle_style_json) return undefined
+            try { return normalizeSubtitleStyle(JSON.parse(task.subtitle_style_json), task.output_mode) } catch { return undefined }
+        })()
         return {
             ...task,
             taskId: task.task_id,
@@ -119,7 +126,8 @@ export const TaskService = {
             customInstructions: task.custom_instructions || '',
             translationMode: task.translation_mode || 'non_stream',
             subtitleFormat: task.subtitle_format || 'srt',
-            subtitleStylePreset: task.subtitle_style_preset || 'bilingual_simple',
+            subtitleStylePreset: subtitleStyle?.presetId || task.subtitle_style_preset || 'bilingual_simple',
+            subtitleStyle,
             bilingualLayout: task.bilingual_layout || 'translated_first',
             trackPolicy: (() => {
                 try { return JSON.parse(task.track_policy_json || '{}') } catch { return {} }
@@ -255,6 +263,7 @@ export const TaskService = {
             const chunkSize = Math.min(50000, Math.max(500, config.chunkSize || 5000))
             const subtitleFormat = task.subtitleFormat || config.subtitleFormat || 'srt'
             const subtitleStylePreset = task.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple'
+            const subtitleStyle = task.subtitleStyle ? normalizeSubtitleStyle(task.subtitleStyle, task.outputMode) : undefined
             const bilingualLayout = task.bilingualLayout || config.bilingualLayout || 'translated_first'
             console.log(`[Task] Using chunk size: ${chunkSize}`)
 
@@ -285,9 +294,9 @@ export const TaskService = {
                 await this.updateStatus(taskId, 'exporting', 90, { stepProgress: 0, stepMessage: '正在导出原字幕文件...', log: '正在导出原字幕文件...' })
                 assertTaskNotCancelled(taskId)
                 const originalEntries = allEntries.map(entry => ({ ...entry, translatedText: entry.text }))
-                const savedPath = await SubtitleService.writeSubtitle(originalEntries, outputPath, 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
+                const savedPath = await SubtitleService.writeSubtitle(originalEntries, outputPath, 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
                 if (embyVariantPath) {
-                    await SubtitleService.writeSubtitle(originalEntries, embyVariantPath, 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
+                    await SubtitleService.writeSubtitle(originalEntries, embyVariantPath, 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
                 }
                 persistReviewEntries(taskId, originalEntries, [])
                 await this.updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}` })
@@ -322,6 +331,7 @@ export const TaskService = {
                 srtPath,
                 subtitleFormat,
                 subtitleStylePreset,
+                subtitleStyle,
                 bilingualLayout,
                 totalChunks,
                 stylePrompt: translated.stylePrompt,

@@ -5,7 +5,8 @@ import * as chardet from 'chardet'
 import iconv from 'iconv-lite'
 import { createHash } from 'crypto'
 import { join } from 'path'
-import type { SubtitleEntry } from '../../types'
+import type { SubtitleEntry, SubtitleOutputStyle, SubtitleTypographyStyle } from '../../types'
+import { hexToAssColor, normalizeSubtitleStyle } from '../../shared/subtitleStyles'
 import { useDb } from './db'
 import { resolveMediaPath } from './mediaRoots'
 import { SubtitleFormatting, formattingPlaceholderPattern, type FormattingTarget, type FormattingToken } from './subtitleFormatting'
@@ -648,6 +649,133 @@ export const SubtitleService = {
     }
   },
 
+  buildStyledAssStyle(name: string, typography: SubtitleTypographyStyle, marginV: number, background: SubtitleOutputStyle['background']): any {
+    const alpha = Math.round((1 - Math.min(100, Math.max(0, Number(background?.opacity ?? 45))) / 100) * 255).toString(16).padStart(2, '0').toUpperCase()
+    return {
+      Name: name,
+      Fontname: typography.fontFamily || 'Arial',
+      Fontsize: String(typography.fontSize),
+      PrimaryColour: hexToAssColor(typography.primaryColor),
+      SecondaryColour: '&H000000FF',
+      OutlineColour: hexToAssColor(typography.outlineColor),
+      BackColour: `&H${alpha}${hexToAssColor(background?.color, '#000000').slice(4)}`,
+      Bold: typography.bold ? '-1' : '0',
+      Italic: typography.italic ? '-1' : '0',
+      Underline: '0',
+      StrikeOut: '0',
+      ScaleX: '100',
+      ScaleY: '100',
+      Spacing: '0',
+      Angle: '0',
+      BorderStyle: background?.enabled ? '3' : '1',
+      Outline: background?.enabled ? String(Math.max(1, Number(background.padding) || 1)) : String(typography.outlineWidth),
+      Shadow: String(typography.shadow),
+      Alignment: typography.alignment === 'top' ? '8' : '2',
+      MarginL: '30',
+      MarginR: '30',
+      MarginV: String(Math.max(0, Math.round(marginV))),
+      Encoding: '1'
+    }
+  },
+
+  buildStyledAssStyles(subtitleStyle: SubtitleOutputStyle, outputMode: OutputMode, bilingualLayout: BilingualLayout) {
+    const style = normalizeSubtitleStyle(subtitleStyle, outputMode)
+    if (outputMode !== 'bilingual') {
+      const typography = outputMode === 'original' ? style.original : style.translated
+      const name = outputMode === 'original' ? 'SubX-Original' : 'SubX-Translated'
+      return [this.buildStyledAssStyle(name, typography, typography.marginV, style.background)]
+    }
+
+    const translatedFirst = bilingualLayout !== 'original_first'
+    const original = { ...style.original }
+    const translated = { ...style.translated }
+    let originalMargin = original.marginV
+    let translatedMargin = translated.marginV
+    if (original.alignment === translated.alignment) {
+      const alignment = translated.alignment
+      if (alignment === 'bottom') {
+        if (translatedFirst) translatedMargin = original.marginV + original.fontSize + style.lineGap
+        else originalMargin = translated.marginV + translated.fontSize + style.lineGap
+      } else if (translatedFirst) {
+        originalMargin = translated.marginV + translated.fontSize + style.lineGap
+      } else {
+        translatedMargin = original.marginV + original.fontSize + style.lineGap
+      }
+    }
+
+    return [
+      this.buildStyledAssStyle('SubX-Translated', translated, translatedMargin, style.background),
+      this.buildStyledAssStyle('SubX-Original', original, originalMargin, style.background)
+    ]
+  },
+
+  buildStyledAssContent(entries: SubtitleEntry[], outputMode: OutputMode, bilingualLayout: BilingualLayout, subtitleStyle: SubtitleOutputStyle): string {
+    const style = normalizeSubtitleStyle(subtitleStyle, outputMode)
+    const styles = this.buildStyledAssStyles(style, outputMode, bilingualLayout)
+    const dialogue: any[] = []
+
+    const makeDialogue = (entry: SubtitleEntry, styleName: string, text: string, startMs: number, endMs: number) => ({
+      Layer: 0,
+      Start: this.msToAssSeconds(startMs),
+      End: this.msToAssSeconds(endMs),
+      Style: styleName,
+      Name: '',
+      MarginL: 0,
+      MarginR: 0,
+      MarginV: 0,
+      Effect: null,
+      Text: this.buildAssTextPayload(text, '', entry.formattingTokens)
+    })
+
+    for (const entry of entries) {
+      const startMs = this.srtTimeToMs(String(entry.startTime))
+      const endMs = this.srtTimeToMs(String(entry.endTime))
+      const translatedSource = this.stabilizeFormattingPlaceholders(
+        entry.translatedText ?? entry.text ?? '',
+        String(entry.text || ''),
+        entry.formattingTokens
+      )
+      if (outputMode === 'bilingual') {
+        const translated = translatedSource
+        const original = String(entry.text || '')
+        if (bilingualLayout === 'original_first') {
+          dialogue.push(makeDialogue(entry, 'SubX-Original', original, startMs, endMs))
+          dialogue.push(makeDialogue(entry, 'SubX-Translated', translated, startMs, endMs))
+        } else {
+          dialogue.push(makeDialogue(entry, 'SubX-Translated', translated, startMs, endMs))
+          dialogue.push(makeDialogue(entry, 'SubX-Original', original, startMs, endMs))
+        }
+      } else if (outputMode === 'original') {
+        dialogue.push(makeDialogue(entry, 'SubX-Original', String(entry.text || ''), startMs, endMs))
+      } else {
+        dialogue.push(makeDialogue(entry, 'SubX-Translated', translatedSource, startMs, endMs))
+      }
+    }
+
+    const assDoc = {
+      info: {
+        Title: 'SubX Export',
+        ScriptType: 'V4.00+',
+        PlayResX: '1920',
+        PlayResY: '1080',
+        WrapStyle: '2',
+        ScaledBorderAndShadow: 'yes',
+        Collisions: 'Normal'
+      },
+      styles: {
+        format: ['Name', 'Fontname', 'Fontsize', 'PrimaryColour', 'SecondaryColour', 'OutlineColour', 'BackColour', 'Bold', 'Italic', 'Underline', 'StrikeOut', 'ScaleX', 'ScaleY', 'Spacing', 'Angle', 'BorderStyle', 'Outline', 'Shadow', 'Alignment', 'MarginL', 'MarginR', 'MarginV', 'Encoding'],
+        style: styles
+      },
+      events: {
+        format: ['Layer', 'Start', 'End', 'Style', 'Name', 'MarginL', 'MarginR', 'MarginV', 'Effect', 'Text'],
+        comment: [],
+        dialogue
+      }
+    }
+
+    return stringifyAss(assDoc as any)
+  },
+
   buildAssContent(entries: SubtitleEntry[], subtitleStylePreset: string, outputMode: OutputMode, bilingualLayout: BilingualLayout): string {
     const normalizedEntries = this.normalizeEntries(entries, outputMode, bilingualLayout)
     const assDoc = {
@@ -730,7 +858,8 @@ export const SubtitleService = {
     subtitleFormat: SubtitleFormat = 'srt',
     subtitleStylePreset = 'bilingual_simple',
     bilingualLayout: BilingualLayout = 'translated_first',
-    sourceSubtitlePath?: string
+    sourceSubtitlePath?: string,
+    subtitleStyle?: SubtitleOutputStyle
   ) {
     const outputDir = join(outputPath, '..')
     if (!existsSync(outputDir)) {
@@ -757,9 +886,12 @@ export const SubtitleService = {
 
     const sourceExt = sourceSubtitlePath?.split('.').pop()?.toLowerCase()
     const hasOriginalAss = !!sourceSubtitlePath && (sourceExt === 'ass' || sourceExt === 'ssa') && existsSync(sourceSubtitlePath)
-    const assContent = hasOriginalAss
-      ? this.rewriteExistingAss(readSubtitleFile(sourceSubtitlePath), entries, outputMode, bilingualLayout, subtitleStylePreset)
-      : this.buildAssContent(entries, subtitleStylePreset, outputMode, bilingualLayout)
+    const useStructuredStyle = !!subtitleStyle && subtitleStyle.presetId !== 'inherit'
+    const assContent = useStructuredStyle
+      ? this.buildStyledAssContent(entries, outputMode, bilingualLayout, subtitleStyle!)
+      : hasOriginalAss
+        ? this.rewriteExistingAss(readSubtitleFile(sourceSubtitlePath!), entries, outputMode, bilingualLayout, subtitleStylePreset)
+        : this.buildAssContent(entries, subtitleStylePreset, outputMode, bilingualLayout)
 
     const assPath = `${basePath}.ass`
 

@@ -28,6 +28,7 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       translation_mode TEXT NOT NULL DEFAULT 'non_stream',
       subtitle_format TEXT NOT NULL DEFAULT 'srt',
       subtitle_style_preset TEXT NOT NULL DEFAULT 'bilingual_simple',
+      subtitle_style_json TEXT,
       bilingual_layout TEXT NOT NULL DEFAULT 'translated_first',
       force_retranslate INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'queued',

@@ -59,6 +59,7 @@ function ensureLegacyColumns(db: any, dialect: MigrationDialect) {
     ['tasks', 'root_id', 'TEXT'],
     ['tasks', 'bilingual_layout', "TEXT NOT NULL DEFAULT 'translated_first'"],
     ['tasks', 'subtitle_style_preset', "TEXT NOT NULL DEFAULT 'bilingual_simple'"],
+    ['tasks', 'subtitle_style_json', 'TEXT'],
     ['tasks', 'subtitle_format', "TEXT NOT NULL DEFAULT 'srt'"],
     ['tasks', 'translation_mode', "TEXT NOT NULL DEFAULT 'non_stream'"],
     ['tasks', 'force_retranslate', 'INTEGER NOT NULL DEFAULT 0'],
@@ -202,6 +203,13 @@ export const MIGRATIONS: Migration[] = [
     name: 'repair-asr-checkpoint-column',
     up(db, dialect) {
       ensureAsrCheckpoints(db, dialect)
+    }
+  },
+  {
+    version: 7,
+    name: 'subtitle-style-json',
+    up(db, dialect) {
+      ensureColumn(db, dialect, 'tasks', 'subtitle_style_json', 'TEXT')
     }
   },
 ]

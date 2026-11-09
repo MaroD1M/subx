@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { basename, extname } from 'path'
 import type { WatchOutputPolicy, WatchRules } from '../../types'
+import { createSubtitleStyle, normalizeSubtitleStyle } from '../../shared/subtitleStyles'
 
 export const DEFAULT_VIDEO_EXTENSIONS = [
   '.mkv', '.mp4', '.avi', '.webm', '.ts', '.m2ts', '.mts', '.mov',
@@ -30,7 +31,8 @@ export const DEFAULT_WATCH_OUTPUT_POLICY: WatchOutputPolicy = {
   outputMode: 'translated',
   stylePreset: 'default',
   subtitleFormat: 'srt',
-  subtitleStylePreset: 'bilingual_simple',
+  subtitleStylePreset: 'mono_clean',
+  subtitleStyle: createSubtitleStyle('mono_clean', 'translated'),
   bilingualLayout: 'translated_first',
   sourceType: 'auto',
   model: '',
@@ -105,12 +107,14 @@ export function sanitizeOutputPolicy(input: unknown): WatchOutputPolicy {
     ? String(raw.sourceType) as WatchOutputPolicy['sourceType']
     : DEFAULT_WATCH_OUTPUT_POLICY.sourceType
 
+  const subtitleStyle = normalizeSubtitleStyle(raw.subtitleStyle || raw.subtitleStylePreset, outputMode)
   return {
     targetLanguage: String(raw.targetLanguage || '').trim(),
     outputMode,
     stylePreset: String(raw.stylePreset || 'default').trim() || 'default',
     subtitleFormat,
-    subtitleStylePreset: String(raw.subtitleStylePreset || 'bilingual_simple').trim() || 'bilingual_simple',
+    subtitleStylePreset: subtitleStyle.presetId,
+    subtitleStyle,
     bilingualLayout,
     sourceType,
     model: String(raw.model || '').trim(),

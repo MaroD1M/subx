@@ -1,6 +1,7 @@
 import { apiError } from '../../../utils/apiError'
 import { useDb } from '../../../utils/db'
 import { SubtitleService } from '../../../utils/subtitle'
+import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -13,8 +14,11 @@ export default defineEventHandler(async (event) => {
   const requestedBilingualLayout = String(query.bilingualLayout || '')
   const requestedOutputMode = String(query.outputMode || '')
   const requestedStylePreset = String(query.subtitleStylePreset || '')
+  const requestedStyle = (() => {
+    try { return query.subtitleStyle ? JSON.parse(String(query.subtitleStyle)) : undefined } catch { return undefined }
+  })()
   const db = useDb()
-  const task = db.prepare('SELECT output_mode, subtitle_style_preset, bilingual_layout FROM tasks WHERE task_id = ?').get(id) as any
+  const task = db.prepare('SELECT output_mode, subtitle_style_preset, subtitle_style_json, bilingual_layout FROM tasks WHERE task_id = ?').get(id) as any
   const rows = db.prepare(`
     SELECT subtitle_id, start_time, end_time, original_text, translated_text, final_text
     FROM task_review_entries
@@ -38,12 +42,18 @@ export default defineEventHandler(async (event) => {
   const bilingualLayout = (requestedBilingualLayout === 'translated_first' || requestedBilingualLayout === 'original_first') ? requestedBilingualLayout : (task?.bilingual_layout || 'translated_first')
 
   if (format === 'ass') {
-    const content = SubtitleService.buildAssContent(
-      entries as any,
-      requestedStylePreset || task?.subtitle_style_preset || 'bilingual_simple',
-      outputMode,
-      bilingualLayout
-    )
+    const storedStyle = (() => {
+      try { return task?.subtitle_style_json ? JSON.parse(task.subtitle_style_json) : undefined } catch { return undefined }
+    })()
+    const subtitleStyle = normalizeSubtitleStyle(requestedStyle || requestedStylePreset || storedStyle || task?.subtitle_style_preset || 'bilingual_simple', outputMode)
+    const content = subtitleStyle.presetId !== 'inherit'
+      ? SubtitleService.buildStyledAssContent(entries as any, outputMode, bilingualLayout, subtitleStyle)
+      : SubtitleService.buildAssContent(
+          entries as any,
+          requestedStylePreset || task?.subtitle_style_preset || 'bilingual_simple',
+          outputMode,
+          bilingualLayout
+        )
     return { content, count: rows.length, format }
   }
 

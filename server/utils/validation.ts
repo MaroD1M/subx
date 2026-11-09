@@ -7,6 +7,32 @@ const singleSubtitleFormatSchema = z.enum(['srt', 'ass'])
 export const languageTagSchema = z.string().min(1).max(35).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, '目标语言格式不合法')
 const bilingualLayoutSchema = z.enum(['translated_first', 'original_first'])
 
+const subtitleTypographySchema = z.object({
+  fontFamily: z.string().max(80).optional(),
+  fontSize: z.coerce.number().min(12).max(120).optional(),
+  primaryColor: z.string().max(20).optional(),
+  outlineColor: z.string().max(20).optional(),
+  outlineWidth: z.coerce.number().min(0).max(10).optional(),
+  shadow: z.coerce.number().min(0).max(10).optional(),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  marginV: z.coerce.number().min(0).max(300).optional(),
+  alignment: z.enum(['bottom', 'top']).optional()
+}).passthrough()
+
+const subtitleStyleSchema = z.object({
+  presetId: z.string().max(80).optional(),
+  original: subtitleTypographySchema.optional(),
+  translated: subtitleTypographySchema.optional(),
+  lineGap: z.coerce.number().min(0).max(120).optional(),
+  background: z.object({
+    enabled: z.boolean().optional(),
+    color: z.string().max(20).optional(),
+    opacity: z.coerce.number().min(0).max(100).optional(),
+    padding: z.coerce.number().min(0).max(30).optional()
+  }).passthrough().optional()
+}).passthrough()
+
 const trackPolicySchema = z.object({
   subtitleLanguage: z.string().max(20).optional(),
   audioLanguage: z.string().max(20).optional(),
@@ -32,6 +58,7 @@ export const taskCreateSchema = z.object({
   customInstructions: z.string().max(4000).optional(),
   subtitleFormat: subtitleFormatSchema.optional(),
   subtitleStylePreset: z.string().optional(),
+  subtitleStyle: subtitleStyleSchema.optional(),
   bilingualLayout: bilingualLayoutSchema.optional(),
   files: z.array(z.union([
     z.string(),
@@ -59,6 +86,7 @@ export const reviewExportSchema = z.object({
   subtitleFormat: singleSubtitleFormatSchema.optional(),
   outputMode: outputModeSchema.optional(),
   subtitleStylePreset: z.string().max(80).optional(),
+  subtitleStyle: subtitleStyleSchema.optional(),
   bilingualLayout: bilingualLayoutSchema.optional()
 }).passthrough()
 

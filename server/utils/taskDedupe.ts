@@ -18,6 +18,8 @@ export interface ActiveTaskKey {
   targetLanguage: string
   outputMode: string
   subtitleFormat: string
+  subtitleStyleJson?: string
+  bilingualLayout?: string
 }
 
 export function findActiveTaskDuplicate(db: any, key: ActiveTaskKey): string | null {
@@ -28,6 +30,8 @@ export function findActiveTaskDuplicate(db: any, key: ActiveTaskKey): string | n
       AND COALESCE(root_id, '') = COALESCE(?, '')
       AND output_mode = ?
       AND subtitle_format = ?
+      AND (? = '' OR COALESCE(subtitle_style_json, '') = ?)
+      AND (? = '' OR bilingual_layout = ?)
       AND status IN (${statuses.map(() => '?').join(',')})
       AND (? = 'original' OR target_lang = ?)
     ORDER BY created_at DESC
@@ -37,6 +41,10 @@ export function findActiveTaskDuplicate(db: any, key: ActiveTaskKey): string | n
     key.rootId || '',
     key.outputMode,
     key.subtitleFormat,
+    key.subtitleStyleJson || '',
+    key.subtitleStyleJson || '',
+    key.bilingualLayout || '',
+    key.bilingualLayout || '',
     ...statuses,
     key.outputMode,
     key.targetLanguage

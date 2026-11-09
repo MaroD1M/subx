@@ -5,6 +5,7 @@ import type { AppConfig, MediaRoot } from '../../types'
 import { decryptSecret, encryptSecret, isEncryptedSecret } from './secret'
 import { getActiveTaskIds } from './activeTasks'
 import { isAudioInUse } from './asr/audioCache'
+import { createSubtitleStyle, normalizeSubtitleStyle } from '../../shared/subtitleStyles'
 
 let lastLogCleanupAt = 0
 let configCache: AppConfig | null = null
@@ -45,7 +46,7 @@ export const ConfigService = {
     async getConfig(forceFresh = false): Promise<AppConfig> {
         const now = Date.now()
         if (!forceFresh && configCache && now - configCacheAt < CONFIG_CACHE_TTL_MS) {
-            return { ...configCache, glossary: { ...configCache.glossary }, mediaRoots: Array.isArray(configCache.mediaRoots) ? [...configCache.mediaRoots] : [], customStylePresets: Array.isArray(configCache.customStylePresets) ? [...configCache.customStylePresets] : [] }
+            return { ...configCache, glossary: { ...configCache.glossary }, mediaRoots: Array.isArray(configCache.mediaRoots) ? [...configCache.mediaRoots] : [], customStylePresets: Array.isArray(configCache.customStylePresets) ? [...configCache.customStylePresets] : [], subtitleStyle: configCache.subtitleStyle ? normalizeSubtitleStyle(configCache.subtitleStyle, String(configCache.outputMode || 'bilingual')) : undefined }
         }
 
         const db = useDb()
@@ -67,6 +68,12 @@ export const ConfigService = {
             glossary: {},
             mediaRoots: [],
             customStylePresets: [],
+            outputMode: 'translated',
+            stylePreset: 'default',
+            subtitleFormat: 'srt',
+            subtitleStylePreset: 'mono_clean',
+            subtitleStyle: createSubtitleStyle('mono_clean', 'translated'),
+            bilingualLayout: 'translated_first',
             asrEnabled: false,
             asrBaseUrl: LOCAL_ASR_URL,
             asrApiKey: String(process.env.ASR_API_KEY || ''),
@@ -112,6 +119,7 @@ export const ConfigService = {
         }
 
         // Override with DB values
+        let hasSubtitleStyleRow = false
         rows.forEach(row => {
             if (row.key === 'glossary') {
                 config.glossary = safeJsonParse<Record<string, string>>(row.value, {})
@@ -119,6 +127,9 @@ export const ConfigService = {
                 config.mediaRoots = safeJsonParse<MediaRoot[]>(row.value, [])
             } else if (row.key === 'customStylePresets') {
                 config.customStylePresets = safeJsonParse<AppConfig['customStylePresets']>(row.value, [])
+            } else if (row.key === 'subtitleStyle') {
+                hasSubtitleStyleRow = true
+                config.subtitleStyle = safeJsonParse(row.value, config.subtitleStyle)
             } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs', 'asrChunkSeconds', 'asrChunkOverlapSeconds', 'asrResumeTtlHours'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
@@ -227,15 +238,27 @@ export const ConfigService = {
             }
         }
 
+        const styleOutputMode = String(config.outputMode || 'bilingual')
+        if (hasSubtitleStyleRow) {
+            config.subtitleStyle = normalizeSubtitleStyle(config.subtitleStyle, styleOutputMode)
+        } else if (config.subtitleStylePreset) {
+            config.subtitleStyle = createSubtitleStyle(config.subtitleStylePreset, styleOutputMode)
+        }
+        if (config.subtitleStyle) {
+            config.subtitleStyle = normalizeSubtitleStyle(config.subtitleStyle, styleOutputMode)
+            config.subtitleStylePreset = config.subtitleStyle.presetId
+        }
+
         configCache = {
             ...config,
             glossary: { ...config.glossary },
             mediaRoots: Array.isArray(config.mediaRoots) ? [...config.mediaRoots] : [],
-            customStylePresets: Array.isArray(config.customStylePresets) ? [...config.customStylePresets] : []
+            customStylePresets: Array.isArray(config.customStylePresets) ? [...config.customStylePresets] : [],
+            subtitleStyle: config.subtitleStyle ? normalizeSubtitleStyle(config.subtitleStyle, String(config.outputMode || 'bilingual')) : undefined
         }
         configCacheAt = now
 
-        return { ...configCache, glossary: { ...configCache.glossary }, mediaRoots: Array.isArray(configCache.mediaRoots) ? [...configCache.mediaRoots] : [], customStylePresets: Array.isArray(configCache.customStylePresets) ? [...configCache.customStylePresets] : [] }
+        return { ...configCache, glossary: { ...configCache.glossary }, mediaRoots: Array.isArray(configCache.mediaRoots) ? [...configCache.mediaRoots] : [], customStylePresets: Array.isArray(configCache.customStylePresets) ? [...configCache.customStylePresets] : [], subtitleStyle: configCache.subtitleStyle ? normalizeSubtitleStyle(configCache.subtitleStyle, String(configCache.outputMode || 'bilingual')) : undefined }
     },
 
     /**

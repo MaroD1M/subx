@@ -1,3 +1,32 @@
+/** 字幕视觉排版样式（ASS 生效，SRT 仅保留文本与换行） */
+export interface SubtitleTypographyStyle {
+  fontFamily: string
+  fontSize: number
+  primaryColor: string
+  outlineColor: string
+  outlineWidth: number
+  shadow: number
+  bold: boolean
+  italic: boolean
+  marginV: number
+  alignment: 'bottom' | 'top'
+}
+
+export interface SubtitleBackgroundStyle {
+  enabled: boolean
+  color: string
+  opacity: number
+  padding: number
+}
+
+export interface SubtitleOutputStyle {
+  presetId: string
+  original: SubtitleTypographyStyle
+  translated: SubtitleTypographyStyle
+  lineGap: number
+  background: SubtitleBackgroundStyle
+}
+
 /** 字幕条目 */
 export interface SubtitleEntry {
   id: string
@@ -65,6 +94,7 @@ export interface TranslationTask {
   translationMode?: 'non_stream' | 'stream' // 翻译模式
   subtitleFormat?: 'srt' | 'ass' | 'both'
   subtitleStylePreset?: string
+  subtitleStyle?: SubtitleOutputStyle
   bilingualLayout?: 'translated_first' | 'original_first'
   trackPolicy?: TrackPolicy
   forceRetranslate?: boolean
@@ -165,7 +195,8 @@ export interface AppConfig {
   outputMode?: string          // 输出模式
   stylePreset?: string         // 翻译风格预设
   subtitleFormat?: string      // 字幕格式 srt/ass/both
-  subtitleStylePreset?: string // 字幕样式预设
+  subtitleStylePreset?: string // 兼容旧版字幕样式预设
+  subtitleStyle?: SubtitleOutputStyle // 字幕视觉样式
   bilingualLayout?: string     // 双语排版
   embyCompatibleOutput?: boolean // Emby 主字幕 + SubX/ 变体
 }
@@ -194,6 +225,7 @@ export interface WatchOutputPolicy {
   stylePreset: string
   subtitleFormat: 'srt' | 'ass' | 'both'
   subtitleStylePreset: string
+  subtitleStyle?: SubtitleOutputStyle
   bilingualLayout: 'translated_first' | 'original_first'
   sourceType: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr'
   model: string

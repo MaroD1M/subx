@@ -3,6 +3,7 @@ import { useDb } from '../utils/db'
 import { validateMediaRoots } from '../utils/mediaRoots'
 import { configUpdateSchema, parseBody } from '../utils/validation'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 
 const ALLOWED_KEYS = new Set([
   'apiKey',
@@ -14,6 +15,7 @@ const ALLOWED_KEYS = new Set([
   'stylePreset',
   'subtitleFormat',
   'subtitleStylePreset',
+  'subtitleStyle',
   'bilingualLayout',
   'embyCompatibleOutput',
   'qualityCheckEnabled',
@@ -88,6 +90,18 @@ export default defineEventHandler(async (event) => {
     }
     if (key === 'subtitleFormat' && !['srt', 'ass', 'both'].includes(String(value))) {
       throw apiError(400, '字幕格式不合法')
+    }
+    if (key === 'subtitleStylePreset' && !body.subtitleStyle) {
+      const current = await ConfigService.getConfig()
+      const style = normalizeSubtitleStyle(value, String(body.outputMode || current.outputMode || 'bilingual'))
+      await ConfigService.updateConfig('subtitleStyle', style)
+      await ConfigService.updateConfig(key, style.presetId)
+      continue
+    }
+    if (key === 'subtitleStyle') {
+      const current = await ConfigService.getConfig()
+      await ConfigService.updateConfig(key, normalizeSubtitleStyle(value, String(body.outputMode || current.outputMode || 'bilingual')))
+      continue
     }
     if (key === 'mediaRoots') {
       const roots = validateMediaRoots(value)

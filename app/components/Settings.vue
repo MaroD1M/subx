@@ -402,6 +402,7 @@
 <script setup lang="ts">
 import { LANGUAGE_OPTIONS } from '~~/shared/languages'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 import SettingsAiSection from './SettingsAiSection.vue'
 import SettingsDefaultSection from './SettingsDefaultSection.vue'
 import SettingsAdvancedSection from './SettingsAdvancedSection.vue'
@@ -428,7 +429,13 @@ const settingsTabs = [
 const builtinStylePresets = STYLE_PRESETS
 const { data } = await useAppConfigData()
 function cloneConfig(value: any) {
-  return value ? JSON.parse(JSON.stringify(value)) : {}
+  const cloned = value ? JSON.parse(JSON.stringify(value)) : {}
+  if (cloned && typeof cloned === 'object') {
+    const outputMode = ['translated', 'bilingual', 'original'].includes(String(cloned.outputMode)) ? String(cloned.outputMode) : 'translated'
+    cloned.subtitleStyle = normalizeSubtitleStyle(cloned.subtitleStyle || cloned.subtitleStylePreset, outputMode)
+    cloned.subtitleStylePreset = cloned.subtitleStyle.presetId
+  }
+  return cloned
 }
 const config = ref<any>(cloneConfig(data.value))
 const CROSS_PAGE_CONFIG_KEYS = new Set([
@@ -724,6 +731,7 @@ function buildConfigSnapshot(value: any) {
     stylePreset: String(value?.stylePreset || ''),
     subtitleFormat: String(value?.subtitleFormat || ''),
     subtitleStylePreset: String(value?.subtitleStylePreset || ''),
+    subtitleStyle: value?.subtitleStyle || null,
     bilingualLayout: String(value?.bilingualLayout || ''),
     embyCompatibleOutput: !!value?.embyCompatibleOutput,
     qualityCheckEnabled: !!value?.qualityCheckEnabled,

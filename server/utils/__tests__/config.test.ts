@@ -34,6 +34,41 @@ describe('ConfigService local service migration', () => {
     expect(saved.asrBaseUrl).toBe('http://subx-asr:8000')
   })
 
+  it('derives structured styles from legacy preset-only config', async () => {
+    await ConfigService.updateConfig('outputMode', 'bilingual')
+    await ConfigService.updateConfig('subtitleStylePreset', 'bilingual_simple')
+
+    const legacy = await ConfigService.getConfig(true)
+    expect(legacy.subtitleStylePreset).toBe('bilingual_simple')
+    expect(legacy.subtitleStyle?.presetId).toBe('bilingual_simple')
+    expect(legacy.subtitleStyle?.translated.fontSize).toBe(48)
+    expect(legacy.subtitleStyle?.original.fontSize).toBe(28)
+  })
+
+  it('provides and persists structured subtitle styles', async () => {
+    const defaults = await ConfigService.getConfig(true)
+    expect(defaults.subtitleStyle?.presetId).toBeTruthy()
+    expect(defaults.subtitleStyle?.translated.fontSize).toBeGreaterThan(0)
+
+    await ConfigService.updateConfig('outputMode', 'bilingual')
+    await ConfigService.updateConfig('subtitleStyle', {
+      presetId: 'bilingual_study',
+      original: { fontFamily: 'Source Han Sans SC', fontSize: 36, primaryColor: '#112233' },
+      translated: { fontSize: 50, primaryColor: '#AABBCC' },
+      lineGap: 8,
+      background: { enabled: true, color: '#000000', opacity: 70, padding: 3 }
+    })
+
+    const saved = await ConfigService.getConfig(true)
+    expect(saved.subtitleStyle?.presetId).toBe('bilingual_study')
+    expect(saved.subtitleStyle?.original.fontFamily).toBe('Source Han Sans SC')
+    expect(saved.subtitleStyle?.original.fontSize).toBe(36)
+    expect(saved.subtitleStyle?.original.primaryColor).toBe('#112233')
+    expect(saved.subtitleStyle?.translated.fontSize).toBe(50)
+    expect(saved.subtitleStyle?.lineGap).toBe(8)
+    expect(saved.subtitleStyle?.background).toMatchObject({ enabled: true, color: '#000000', opacity: 70, padding: 3 })
+  })
+
   it('provides and persists OCR long-video settings', async () => {
     const defaults = await ConfigService.getConfig(true)
     expect(defaults.ocrMaxSeconds).toBe(14400)

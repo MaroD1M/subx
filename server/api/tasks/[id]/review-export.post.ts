@@ -10,6 +10,7 @@ import { isPathInside } from '../../../utils/pathSafety'
 import { acquireOutputLocks } from '../../../utils/outputLock'
 import { parseBody, reviewExportSchema } from '../../../utils/validation'
 import { TaskService } from '../../../utils/task'
+import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -40,6 +41,10 @@ export default defineEventHandler(async (event) => {
   const root = await getMediaRoot(task.root_id)
   const subtitleFormat = body.subtitleFormat || (String(task.subtitle_format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt')
   const requestedOutputMode = String(body.outputMode || task.output_mode || 'translated')
+  const storedStyle = (() => {
+    try { return task.subtitle_style_json ? JSON.parse(task.subtitle_style_json) : undefined } catch { return undefined }
+  })()
+  const requestedStyle = normalizeSubtitleStyle(body.subtitleStyle || body.subtitleStylePreset || storedStyle || task.subtitle_style_preset || 'bilingual_simple', requestedOutputMode)
   const outputSuffix = requestedOutputMode === 'original' ? 'original' : String(task.target_lang || '')
   if (!['srt', 'ass'].includes(subtitleFormat) || !isSafeOutputSuffix(outputSuffix)) {
     throw apiError(400, '导出格式或目标语言不合法')
@@ -76,12 +81,26 @@ export default defineEventHandler(async (event) => {
       outputPath,
       requestedOutputMode as any,
       subtitleFormat,
-      body.subtitleStylePreset || task.subtitle_style_preset || 'bilingual_simple',
+      requestedStyle.presetId,
       body.bilingualLayout || task.bilingual_layout || 'translated_first',
-      sourceSubtitlePath
+      sourceSubtitlePath,
+      requestedStyle
     )
 
-    db.prepare("UPDATE tasks SET output_path = ?, updated_at = datetime('now') WHERE task_id = ?").run(savedPath, id)
+    db.prepare(`
+      UPDATE tasks
+      SET output_path = ?, subtitle_format = ?, output_mode = ?, subtitle_style_preset = ?,
+          subtitle_style_json = ?, bilingual_layout = ?, updated_at = datetime('now')
+      WHERE task_id = ?
+    `).run(
+      savedPath,
+      subtitleFormat,
+      requestedOutputMode,
+      requestedStyle.presetId,
+      JSON.stringify(requestedStyle),
+      body.bilingualLayout || task.bilingual_layout || 'translated_first',
+      id
+    )
     await TaskService.updateStatus(id, 'done', 100, {
       error: null,
       stepProgress: 100,

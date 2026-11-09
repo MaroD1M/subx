@@ -152,6 +152,103 @@ describe('core API integration', () => {
     expect(content).toContain('World')
   })
 
+  it('persists structured subtitle styles and applies them to ASS output', async () => {
+    const subtitleStyle = {
+      presetId: 'bilingual_simple',
+      original: {
+        fontFamily: 'Noto Sans CJK SC',
+        fontSize: 34,
+        primaryColor: '#00FF00',
+        outlineColor: '#000000',
+        outlineWidth: 1.5,
+        shadow: 0.4,
+        bold: true,
+        italic: false,
+        marginV: 30,
+        alignment: 'bottom'
+      },
+      translated: {
+        fontFamily: 'Arial',
+        fontSize: 48,
+        primaryColor: '#FFFFFF',
+        outlineColor: '#000000',
+        outlineWidth: 2,
+        shadow: 0.8,
+        bold: false,
+        italic: false,
+        marginV: 24,
+        alignment: 'bottom'
+      },
+      lineGap: 5,
+      background: { enabled: false, color: '#000000', opacity: 45, padding: 2 }
+    }
+
+    const saved = await apiFetch('/api/config', {
+      method: 'PUT',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ outputMode: 'original', subtitleFormat: 'ass', subtitleStyle, subtitleStylePreset: 'bilingual_simple' })
+    })
+    expect(saved.status).toBe(200)
+
+    const config = await apiFetch('/api/config', { headers: { cookie } })
+    const configBody = await config.json() as any
+    expect(configBody.subtitleStyle.original.fontFamily).toBe('Noto Sans CJK SC')
+    expect(configBody.subtitleStyle.original.primaryColor).toBe('#00FF00')
+
+    const created = await apiFetch('/api/task', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filePath: 'Demo.zh.srt',
+        sourceType: 'external',
+        targetLanguage: 'zh-CN',
+        outputMode: 'original',
+        subtitleFormat: 'ass',
+        subtitleStyle,
+        subtitleStylePreset: 'bilingual_simple'
+      })
+    })
+    expect(created.status).toBe(200)
+    const taskId = (await created.json() as any).taskId as string
+
+    let task: any = null
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const response = await apiFetch(`/api/tasks/${taskId}`, { headers: { cookie } })
+      task = (await response.json() as any).task
+      if (['done', 'error', 'cancelled', 'review'].includes(task.status)) break
+      await new Promise(resolve => setTimeout(resolve, 250))
+    }
+    expect(task?.status).toBe('done')
+    expect(task?.subtitleStyle?.original?.fontFamily).toBe('Noto Sans CJK SC')
+
+    const download = await apiFetch(`/api/tasks/${taskId}/download?format=ass`, { headers: { cookie } })
+    expect(download.status).toBe(200)
+    const content = await download.text()
+    expect(content).toContain('Style: SubX-Original,Noto Sans CJK SC,34,&H0000FF00')
+    expect(content).toContain('Hello')
+
+    const review = await apiFetch(`/api/tasks/${taskId}/review`, { headers: { cookie } })
+    const reviewBody = await review.json() as any
+    expect(reviewBody.task.subtitleStyle.original.fontFamily).toBe('Noto Sans CJK SC')
+
+    const presetOnly = await apiFetch('/api/config', {
+      method: 'PUT',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ outputMode: 'bilingual', subtitleStylePreset: 'bilingual_cinema' })
+    })
+    expect(presetOnly.status).toBe(200)
+    const presetConfig = await (await apiFetch('/api/config', { headers: { cookie } })).json() as any
+    expect(presetConfig.subtitleStyle.presetId).toBe('bilingual_cinema')
+    expect(presetConfig.subtitleStyle.translated.fontSize).toBe(56)
+    expect(presetConfig.subtitleStylePreset).toBe('bilingual_cinema')
+
+    await apiFetch('/api/config', {
+      method: 'PUT',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ outputMode: 'translated', subtitleFormat: 'srt', subtitleStylePreset: 'mono_clean' })
+    })
+  })
+
   it('downloads OCR original subtitles from transcription runs', async () => {
     const db = new Database(dbPath)
     db.pragma('busy_timeout = 5000')

@@ -3,6 +3,7 @@ import { toUtcIsoString } from '~~/shared/time'
 import { useDb } from '../utils/db'
 import { getMediaRoot } from '../utils/mediaRoots'
 import { taskListQuerySchema } from '../utils/validation'
+import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 
 function isSubtitlePath(value: unknown) {
   return /\.(?:srt|ass|ssa|vtt)$/i.test(String(value || ''))
@@ -51,6 +52,9 @@ export default defineEventHandler(async (event) => {
 
     const reviewEntryCount = Number(task.review_entry_count || 0)
     const terminalStatus = ['done', 'error', 'cancelled', 'review'].includes(String(task.status))
+    const subtitleStyle = (() => {
+      try { return task.subtitle_style_json ? normalizeSubtitleStyle(JSON.parse(task.subtitle_style_json), task.output_mode) : undefined } catch { return undefined }
+    })()
     return {
       ...task,
       taskId: task.task_id,
@@ -66,7 +70,8 @@ export default defineEventHandler(async (event) => {
       outputMode: task.output_mode,
       stylePreset: task.style_preset || 'default',
       subtitleFormat: task.subtitle_format || 'srt',
-      subtitleStylePreset: task.subtitle_style_preset || 'bilingual_simple',
+      subtitleStylePreset: subtitleStyle?.presetId || task.subtitle_style_preset || 'bilingual_simple',
+      subtitleStyle,
       bilingualLayout: task.bilingual_layout || 'translated_first',
       stepProgress: Number(task.step_progress || 0),
       stepMessage: task.step_message || '',

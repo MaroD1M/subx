@@ -396,7 +396,8 @@ export const WatchService = {
             stylePrompt: '',
             translationMode: config.translationMode || 'non_stream',
             subtitleFormat: policy.subtitleFormat,
-            subtitleStylePreset: policy.subtitleStylePreset,
+            subtitleStylePreset: policy.subtitleStyle?.presetId || policy.subtitleStylePreset,
+            subtitleStyle: policy.subtitleStyle,
             bilingualLayout: policy.bilingualLayout,
             origin: 'automation',
             watchEventId: Number(row.id)

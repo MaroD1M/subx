@@ -53,6 +53,38 @@ test('shared config and watch folder caches avoid duplicate requests on navigati
   expect(watchFoldersRequests).toBeLessThanOrEqual(1)
 })
 
+test('subtitle output tab uses shared labels and sends a structured style', async ({ page }) => {
+  await page.route('**/api/tracks**', route => route.fulfill({
+    json: {
+      tracks: [{ index: 2, codec: 'subrip', language: 'eng', title: 'English', isDefault: true, isSupported: true }],
+      audioTracks: [{ index: 1, codec: 'aac', language: 'eng', channels: 2, isDefault: true }],
+      duration: 120
+    }
+  }))
+  let taskBody: any = null
+  await page.route('**/api/task', async route => {
+    taskBody = route.request().postDataJSON()
+    await route.fulfill({ json: { taskId: 'subtitle-style-test', taskIds: ['subtitle-style-test'] } })
+  })
+
+  await page.goto('/')
+  const tree = page.getByRole('tree', { name: '文件目录树' })
+  await tree.getByText('Shows', { exact: true }).click()
+  await tree.getByText('Demo Show', { exact: true }).click()
+  await tree.getByText('Demo.Show.S01E02.mkv', { exact: true }).click()
+  await page.getByRole('button', { name: '字幕输出' }).click()
+
+  await expect(page.getByText('样式预设')).toBeVisible()
+  await expect(page.getByText('字幕输出', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('bilingual_simple')).toHaveCount(0)
+  await expect(page.getByText('1920 × 1080 预览')).toBeVisible()
+
+  await page.getByRole('button', { name: '开始翻译' }).click()
+  await expect.poll(() => Boolean(taskBody?.subtitleStyle), { timeout: 5000 }).toBe(true)
+  expect(taskBody.subtitleStyle.presetId).toBeTruthy()
+  expect(taskBody.subtitleStyle.translated.fontSize).toBeGreaterThan(0)
+})
+
 test('media library cards support drag sorting', async ({ page }) => {
   await page.goto('/media-libraries')
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))

@@ -1,4 +1,4 @@
-import type { SubtitleEntry, TaskStatus, TranslationTask } from '../../types'
+import type { SubtitleEntry, SubtitleOutputStyle, TaskStatus, TranslationTask } from '../../types'
 import { useDb } from './db'
 import { logger } from './logger'
 import { QualityService } from './quality'
@@ -19,6 +19,7 @@ export interface FinalizeTaskOptions {
   srtPath: string
   subtitleFormat: string
   subtitleStylePreset: string
+  subtitleStyle?: SubtitleOutputStyle
   bilingualLayout: string
   totalChunks: number
   stylePrompt: string
@@ -31,7 +32,7 @@ export interface FinalizeTaskOptions {
 export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<string> {
   const {
     taskId, task, config, runtimeConfig, outputPath, embyVariantPath, srtPath,
-    subtitleFormat, subtitleStylePreset, bilingualLayout, totalChunks,
+    subtitleFormat, subtitleStylePreset, subtitleStyle, bilingualLayout, totalChunks,
     stylePrompt, translationContext, fallbackCount = 0, signal, updateStatus
   } = options
 
@@ -98,9 +99,9 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
   }
 
   await ensureTaskNotCancelled(taskId)
-  const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
+  const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
   if (embyVariantPath) {
-    await SubtitleService.writeSubtitle(translatedEntries, embyVariantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath)
+    await SubtitleService.writeSubtitle(translatedEntries, embyVariantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
   }
   await updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}${embyVariantPath ? '（SubX/ 变体已同步）' : ''}` })
 

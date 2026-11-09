@@ -173,7 +173,7 @@
         <div class="mb-3 flex rounded-xl border border-gray-200/80 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/60">
           <button
             type="button"
-            class="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
+            class="flex-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors sm:text-xs"
             :class="rightTab === 'tracks' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
             @click="rightTab = 'tracks'"
           >
@@ -181,11 +181,19 @@
           </button>
           <button
             type="button"
-            class="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
+            class="flex-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors sm:text-xs"
             :class="rightTab === 'settings' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
             @click="rightTab = 'settings'"
           >
             翻译设置
+          </button>
+          <button
+            type="button"
+            class="flex-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors sm:text-xs"
+            :class="rightTab === 'output' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
+            @click="rightTab = 'output'"
+          >
+            字幕输出
           </button>
         </div>
 
@@ -272,22 +280,17 @@
                       <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ currentStyle.description }}</p>
                     </div>
                   </div>
-                  <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                    <UFormField label="输出模式">
-                      <USelect v-model="options.outputMode" :items="outputModeItems" class="w-full" />
-                    </UFormField>
-                    <UFormField label="目标语言">
-                      <USelect v-model="options.targetLanguage" :items="LANGUAGE_OPTIONS" class="w-full" :disabled="options.outputMode === 'original'" />
-                    </UFormField>
-                  </div>
-                  <p v-if="options.outputMode === 'original'" class="text-[11px] text-amber-600 dark:text-amber-400">已选择仅导出原字幕：将跳过 AI 翻译，仅导出所选字幕轨道。</p>
+                  <UFormField label="目标语言">
+                    <USelect v-model="options.targetLanguage" :items="LANGUAGE_OPTIONS" class="w-full" :disabled="options.outputMode === 'original'" />
+                  </UFormField>
+                  <p v-if="options.outputMode === 'original'" class="text-[11px] text-amber-600 dark:text-amber-400">已选择仅导出原字幕：将跳过 AI 翻译，仅导出所选字幕轨道。可在「字幕输出」调整格式与样式。</p>
 
                   <button
                     type="button"
                     class="flex w-full items-center justify-between rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-2 text-left text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:bg-gray-900"
                     @click="showAdvancedOptions = !showAdvancedOptions"
                   >
-                    <span>高级设置（作品背景 / 字幕格式 / 样式）</span>
+                    <span>高级设置（作品背景 / 追加要求）</span>
                     <UIcon :name="showAdvancedOptions ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="h-4 w-4 text-gray-400" />
                   </button>
                 </div>
@@ -305,21 +308,35 @@
                     </UFormField>
                   </div>
 
-                  <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                    <UFormField label="字幕格式">
-                      <USelect v-model="options.subtitleFormat" :items="subtitleFormatItems" class="w-full" />
-                    </UFormField>
-                    <UFormField label="字幕样式">
-                      <USelect v-model="options.subtitleStylePreset" :items="subtitleStyleOptions" class="w-full" :disabled="options.outputMode === 'original'" />
-                    </UFormField>
-                  </div>
-                  <UFormField label="双语布局">
-                    <USelect v-model="options.bilingualLayout" :items="bilingualLayoutItems" :disabled="options.outputMode !== 'bilingual'" class="w-full" />
-                  </UFormField>
                 </div>
               </div>
             </div>
 
+          </div>
+
+          <div v-show="rightTab === 'output'" class="mt-2 flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 dark:border-gray-700/80 dark:bg-gray-900/30">
+            <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
+              <div class="space-y-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <UFormField label="输出模式">
+                    <USelect v-model="options.outputMode" :items="outputModeItems" class="w-full" />
+                  </UFormField>
+                  <UFormField label="字幕格式">
+                    <USelect v-model="options.subtitleFormat" :items="subtitleFormatItems" class="w-full" />
+                  </UFormField>
+                </div>
+                <UFormField label="双语布局">
+                  <USelect v-model="options.bilingualLayout" :items="bilingualLayoutItems" :disabled="options.outputMode !== 'bilingual'" class="w-full" />
+                </UFormField>
+                <SubtitleStyleEditor
+                  :model-value="options.subtitleStyle"
+                  :output-mode="options.outputMode"
+                  :subtitle-format="options.subtitleFormat"
+                  :bilingual-layout="options.bilingualLayout"
+                  @update:model-value="updateSubtitleStyle"
+                />
+              </div>
+            </div>
           </div>
 
           <div class="mt-3 shrink-0 rounded-xl border border-gray-200/85 bg-white/95 px-3 py-3 shadow-sm backdrop-blur dark:border-gray-800/80 dark:bg-gray-900/90">
@@ -390,8 +407,10 @@
 <script setup lang="ts">
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { LANGUAGE_OPTIONS } from '~~/shared/languages'
-import type { FileNode } from '~~/types'
+import { createSubtitleStyle, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '~~/shared/subtitleStyles'
+import type { FileNode, SubtitleOutputStyle } from '~~/types'
 import FileSearchResults from './FileSearchResults.vue'
+import SubtitleStyleEditor from './SubtitleStyleEditor.vue'
 
 const toast = useToast()
 const { data: appConfig } = await useAppConfigData()
@@ -419,7 +438,7 @@ function abortServerSearch() {
 const serverSearchActive = computed(() => searchQuery.value.trim().length >= 2)
 const selectedFile = ref<FileNode | null>(null)
 const activeMobileTab = ref<'files' | 'settings'>('files')
-const rightTab = ref<'tracks' | 'settings'>('tracks')
+const rightTab = ref<'tracks' | 'settings' | 'output'>('tracks')
 
 function switchMobileTab(tab: 'files' | 'settings') {
   activeMobileTab.value = tab
@@ -813,21 +832,14 @@ const bilingualLayoutItems = [
   { label: '原文在上', value: 'original_first' }
 ]
 
-const subtitleStyleOptions = computed(() => {
-  const common = [{ label: '沿用原样式', value: 'inherit' }]
-  if (options.value.outputMode === 'translated' || options.value.outputMode === 'original') {
-    return [...common, { label: '单语清爽（推荐）', value: 'mono_clean' }, { label: '单语紧凑', value: 'mono_compact' }]
-  }
-  return [...common, { label: '简洁双语（推荐）', value: 'bilingual_simple' }, { label: '影院双语', value: 'bilingual_cinema' }, { label: '学习双语', value: 'bilingual_study' }, { label: '单语清爽', value: 'mono_clean' }, { label: '单语紧凑', value: 'mono_compact' }]
-})
-
 const options = ref({
   stylePreset: 'default',
   targetLanguage: 'zh-CN',
-  outputMode: 'translated',
-  subtitleFormat: 'srt',
-  subtitleStylePreset: 'bilingual_simple',
-  bilingualLayout: 'translated_first',
+  outputMode: 'translated' as 'translated' | 'bilingual' | 'original',
+  subtitleFormat: 'srt' as 'srt' | 'ass' | 'both',
+  subtitleStylePreset: 'mono_clean',
+  subtitleStyle: createSubtitleStyle('mono_clean', 'translated') as SubtitleOutputStyle,
+  bilingualLayout: 'translated_first' as 'translated_first' | 'original_first',
   contentTitle: '',
   contentBackground: '',
   customInstructions: ''
@@ -835,12 +847,15 @@ const options = ref({
 
 watch(appConfig, (cfg: any) => {
   if (!cfg) return
+  const outputMode = cfg.outputMode || options.value.outputMode || 'translated'
+  const subtitleStyle = normalizeSubtitleStyle(cfg.subtitleStyle || cfg.subtitleStylePreset || options.value.subtitleStyle, outputMode)
   options.value = {
     stylePreset: cfg.stylePreset || options.value.stylePreset || 'default',
     targetLanguage: cfg.targetLanguage || options.value.targetLanguage || 'zh-CN',
-    outputMode: cfg.outputMode || options.value.outputMode || 'translated',
+    outputMode,
     subtitleFormat: cfg.subtitleFormat || options.value.subtitleFormat || 'srt',
-    subtitleStylePreset: cfg.subtitleStylePreset || options.value.subtitleStylePreset || 'bilingual_simple',
+    subtitleStylePreset: subtitleStyle.presetId,
+    subtitleStyle,
     bilingualLayout: cfg.bilingualLayout || options.value.bilingualLayout || 'translated_first',
     contentTitle: options.value.contentTitle,
     contentBackground: options.value.contentBackground,
@@ -849,10 +864,17 @@ watch(appConfig, (cfg: any) => {
 }, { immediate: true, once: true })
 
 watch(() => options.value.outputMode, (mode) => {
-  const allowed = subtitleStyleOptions.value.map(item => item.value)
-  if (allowed.includes(options.value.subtitleStylePreset)) return
-  options.value.subtitleStylePreset = mode === 'bilingual' ? 'bilingual_simple' : 'mono_clean'
+  const nextPreset = normalizeSubtitleStylePreset(options.value.subtitleStyle?.presetId || options.value.subtitleStylePreset, mode)
+  if (nextPreset === options.value.subtitleStyle?.presetId) return
+  options.value.subtitleStyle = createSubtitleStyle(nextPreset, mode)
+  options.value.subtitleStylePreset = options.value.subtitleStyle.presetId
 })
+
+function updateSubtitleStyle(value: SubtitleOutputStyle) {
+  const normalized = normalizeSubtitleStyle(value, options.value.outputMode)
+  options.value.subtitleStyle = normalized
+  options.value.subtitleStylePreset = normalized.presetId
+}
 
 watch(useAsr, (enabled) => {
   if (enabled) {

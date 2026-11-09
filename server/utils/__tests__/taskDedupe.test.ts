@@ -36,6 +36,37 @@ describe('task deduplication', () => {
     expect(result).toBeNull()
   })
 
+  it('matches ASS tasks by exact structured style', () => {
+    const { db, get } = makeDb({ task_id: 'styled-task' })
+    const result = findActiveTaskDuplicate(db as any, {
+      filePath: 'Shows/Demo.mkv',
+      targetLanguage: 'zh-CN',
+      outputMode: 'bilingual',
+      subtitleFormat: 'ass',
+      subtitleStyleJson: '{"presetId":"bilingual_cinema"}'
+    })
+
+    expect(result).toBe('styled-task')
+    const args = get.mock.calls[0] as any[]
+    expect(args).toContain('{"presetId":"bilingual_cinema"}')
+  })
+
+  it('matches bilingual tasks by layout', () => {
+    const { db, get } = makeDb({ task_id: 'layout-task' })
+    const result = findActiveTaskDuplicate(db as any, {
+      filePath: 'Shows/Demo.mkv',
+      targetLanguage: 'zh-CN',
+      outputMode: 'bilingual',
+      subtitleFormat: 'ass',
+      subtitleStyleJson: '{"presetId":"bilingual_simple"}',
+      bilingualLayout: 'original_first'
+    })
+
+    expect(result).toBe('layout-task')
+    const args = get.mock.calls[0] as any[]
+    expect(args).toContain('original_first')
+  })
+
   it('recognizes active task statuses', () => {
     expect(isActiveTaskStatus({ status: 'translating' } as any)).toBe(true)
     expect(isActiveTaskStatus({ status: 'done' } as any)).toBe(false)

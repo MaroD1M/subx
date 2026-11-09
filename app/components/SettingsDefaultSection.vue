@@ -7,7 +7,7 @@
             <USelect :model-value="config.targetLanguage" :items="languageOptions" class="w-full" @update:model-value="patch('targetLanguage', $event)" />
           </UFormField>
           <UFormField label="输出模式">
-            <USelect :model-value="config.outputMode" :items="outputModeItems" class="w-full" @update:model-value="patch('outputMode', $event)" />
+            <USelect :model-value="config.outputMode" :items="outputModeItems" class="w-full" @update:model-value="patchOutputMode" />
           </UFormField>
         </div>
 
@@ -64,10 +64,35 @@
         <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">分块大小按估算 Token 计算，范围 100-50000。模型上下文较大时可适当提高。</p>
       </div>
     </SettingsSection>
+
+    <SettingsSection title="默认字幕输出样式" description="作为新任务的默认字幕格式、布局和视觉样式；单任务仍可覆盖。">
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <UFormField label="字幕格式">
+            <USelect :model-value="config.subtitleFormat" :items="subtitleFormatItems" class="w-full" @update:model-value="patch('subtitleFormat', $event)" />
+          </UFormField>
+          <UFormField label="双语布局">
+            <USelect :model-value="config.bilingualLayout" :items="bilingualLayoutItems" class="w-full" :disabled="outputMode !== 'bilingual'" @update:model-value="patch('bilingualLayout', $event)" />
+          </UFormField>
+        </div>
+        <SubtitleStyleEditor
+          :model-value="subtitleStyle"
+          :output-mode="outputMode"
+          :subtitle-format="subtitleFormat"
+          :bilingual-layout="bilingualLayout"
+          @update:model-value="patchSubtitleStyle"
+        />
+      </div>
+    </SettingsSection>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import type { SubtitleOutputStyle } from '~~/types'
+import { createSubtitleStyle, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '~~/shared/subtitleStyles'
+import SubtitleStyleEditor from './SubtitleStyleEditor.vue'
+
 interface Props {
   config: Record<string, any>
   languageOptions: Array<{ label: string, value: string }>
@@ -76,12 +101,43 @@ interface Props {
   qualityThresholdPercent: number
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+
+const outputMode = computed<'translated' | 'bilingual' | 'original'>(() => {
+  const mode = String(props.config.outputMode || 'translated')
+  return mode === 'bilingual' || mode === 'original' ? mode : 'translated'
+})
+const subtitleFormat = computed<'srt' | 'ass' | 'both'>(() => {
+  const format = String(props.config.subtitleFormat || 'srt')
+  return format === 'ass' || format === 'both' ? format : 'srt'
+})
+const bilingualLayout = computed<'translated_first' | 'original_first'>(() => props.config.bilingualLayout === 'original_first' ? 'original_first' : 'translated_first')
+const subtitleStyle = computed(() => normalizeSubtitleStyle(props.config.subtitleStyle || props.config.subtitleStylePreset, outputMode.value))
+const subtitleFormatItems = [
+  { label: 'SRT', value: 'srt' },
+  { label: 'ASS', value: 'ass' },
+  { label: 'SRT + ASS', value: 'both' }
+]
+const bilingualLayoutItems = [
+  { label: '译文在上', value: 'translated_first' },
+  { label: '原文在上', value: 'original_first' }
+]
 
 const emit = defineEmits<{
   'update:config': [patch: Record<string, any>]
   'update:qualityThresholdPercent': [value: any]
 }>()
+
+function patchOutputMode(value: string) {
+  const currentPreset = props.config.subtitleStyle?.presetId || props.config.subtitleStylePreset
+  const nextPreset = normalizeSubtitleStylePreset(currentPreset, value)
+  const style = createSubtitleStyle(nextPreset, value)
+  emit('update:config', { outputMode: value, subtitleStyle: style, subtitleStylePreset: style.presetId })
+}
+
+function patchSubtitleStyle(value: SubtitleOutputStyle) {
+  emit('update:config', { subtitleStyle: value, subtitleStylePreset: value.presetId })
+}
 
 function patch(field: string, value: any) {
   emit('update:config', { [field]: value })

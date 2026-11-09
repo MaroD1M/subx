@@ -6,13 +6,14 @@ import { VideoService } from '../utils/video'
 import { parseBody, taskCreateSchema } from '../utils/validation'
 import { dedupeBatchEntries } from '../utils/fileScan'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 import { useDb } from '../utils/db'
 import { findActiveTaskDuplicate, isActiveTaskStatus } from '../utils/taskDedupe'
 import type { TrackPolicy } from '~~/types'
 
 export default defineEventHandler(async (event) => {
   const body = await parseBody(event, taskCreateSchema)
-  const { filePath, sourceType, trackIndex, trackPolicy, dedupeEpisodes, targetLanguage, outputMode, model, stylePreset, stylePrompt, contentTitle, contentBackground, customInstructions, subtitleFormat, subtitleStylePreset, bilingualLayout, files, rootId } = body
+  const { filePath, sourceType, trackIndex, trackPolicy, dedupeEpisodes, targetLanguage, outputMode, model, stylePreset, stylePrompt, contentTitle, contentBackground, customInstructions, subtitleFormat, subtitleStylePreset, subtitleStyle, bilingualLayout, files, rootId } = body
 
   const config = await ConfigService.getConfig()
   const taskIds: string[] = []
@@ -41,12 +42,16 @@ export default defineEventHandler(async (event) => {
     const requestedTarget = targetLanguage || config.targetLanguage
     const requestedOutputMode = outputMode || 'translated'
     const requestedFormat = subtitleFormat || config.subtitleFormat || 'srt'
+    const requestedLayout = (bilingualLayout || config.bilingualLayout || 'translated_first') as 'translated_first' | 'original_first'
+    const requestedStyle = normalizeSubtitleStyle(subtitleStyle || subtitleStylePreset || config.subtitleStyle || config.subtitleStylePreset, requestedOutputMode)
     const existingTaskId = findActiveTaskDuplicate(useDb(), {
       filePath: path,
       rootId: currentRootId,
       targetLanguage: requestedTarget,
       outputMode: requestedOutputMode,
-      subtitleFormat: requestedFormat
+      subtitleFormat: requestedFormat,
+      subtitleStyleJson: requestedFormat === 'srt' ? '' : JSON.stringify(requestedStyle),
+      bilingualLayout: requestedOutputMode === 'bilingual' ? requestedLayout : ''
     })
     if (existingTaskId) {
       return { taskId: existingTaskId, reused: true }
@@ -69,8 +74,9 @@ export default defineEventHandler(async (event) => {
       customInstructions: customInstructions || '',
       translationMode: config.translationMode || 'non_stream',
       subtitleFormat: requestedFormat as any,
-      subtitleStylePreset: subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
-      bilingualLayout: (bilingualLayout || config.bilingualLayout || 'translated_first') as any,
+      subtitleStylePreset: requestedStyle.presetId,
+      subtitleStyle: requestedStyle,
+      bilingualLayout: requestedLayout,
       trackPolicy: policy
     })
 
@@ -108,6 +114,7 @@ export default defineEventHandler(async (event) => {
       translationMode: oldTask.translationMode || config.translationMode || 'non_stream',
       subtitleFormat: (oldTask.subtitleFormat || config.subtitleFormat || 'srt') as any,
       subtitleStylePreset: oldTask.subtitleStylePreset || config.subtitleStylePreset || 'bilingual_simple',
+      subtitleStyle: oldTask.subtitleStyle ? normalizeSubtitleStyle(oldTask.subtitleStyle, oldTask.outputMode || 'translated') : undefined,
       bilingualLayout: (oldTask.bilingualLayout || config.bilingualLayout || 'translated_first') as any,
       trackPolicy: oldTask.trackPolicy,
       forceRetranslate: true

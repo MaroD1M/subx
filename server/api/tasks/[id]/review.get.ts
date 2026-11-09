@@ -4,6 +4,7 @@ import { useDb } from '../../../utils/db'
 import { SubtitleService } from '../../../utils/subtitle'
 import { resolveMediaPath } from '../../../utils/mediaRoots'
 import { existsSync } from 'fs'
+import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 
 function isSubtitlePath(value: unknown) {
   return /\.(?:srt|ass|ssa|vtt)$/i.test(String(value || ''))
@@ -16,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const db = useDb()
-  const task = db.prepare('SELECT task_id, status, output_mode, subtitle_format, subtitle_style_preset, bilingual_layout, target_lang, file_path, output_path, source_subtitle_path, root_id FROM tasks WHERE task_id = ?').get(id) as any
+  const task = db.prepare('SELECT task_id, status, output_mode, subtitle_format, subtitle_style_preset, subtitle_style_json, bilingual_layout, target_lang, file_path, output_path, source_subtitle_path, root_id FROM tasks WHERE task_id = ?').get(id) as any
   if (!task) {
     throw apiError(404, 'Task not found')
   }
@@ -69,13 +70,18 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  const subtitleStyle = (() => {
+    try { return task.subtitle_style_json ? normalizeSubtitleStyle(JSON.parse(task.subtitle_style_json), task.output_mode) : undefined } catch { return undefined }
+  })()
+
   return {
     task: {
       taskId: task.task_id,
       status: task.status,
       outputMode: task.output_mode,
       subtitleFormat: task.subtitle_format,
-      subtitleStylePreset: task.subtitle_style_preset,
+      subtitleStylePreset: subtitleStyle?.presetId || task.subtitle_style_preset,
+      subtitleStyle,
       bilingualLayout: task.bilingual_layout || 'translated_first',
       targetLanguage: task.target_lang,
       filePath: task.file_path,

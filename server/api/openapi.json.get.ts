@@ -37,6 +37,18 @@ export default defineEventHandler(() => {
             model: { type: 'string' },
             stylePreset: { type: 'string' },
             subtitleFormat: { type: 'string', enum: ['srt', 'ass', 'both'] },
+            subtitleStylePreset: { type: 'string', description: '兼容旧版字幕样式预设 ID' },
+            subtitleStyle: {
+              type: 'object',
+              properties: {
+                presetId: { type: 'string' },
+                original: { type: 'object', description: '原文 ASS 样式：fontFamily/fontSize/primaryColor/outlineColor/outlineWidth/shadow/bold/italic/marginV/alignment' },
+                translated: { type: 'object', description: '译文 ASS 样式，字段同 original' },
+                lineGap: { type: 'number' },
+                background: { type: 'object', properties: { enabled: { type: 'boolean' }, color: { type: 'string' }, opacity: { type: 'number' }, padding: { type: 'number' } } }
+              }
+            },
+            bilingualLayout: { type: 'string', enum: ['translated_first', 'original_first'] },
             files: { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'object' }] } },
             dedupeEpisodes: { type: 'boolean', description: '批量任务按 SxxExx 去重，保留体积最大的版本' },
             trackPolicy: {
