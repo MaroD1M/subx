@@ -28,7 +28,7 @@ describe('database migrations', () => {
     expect(columnNames(db, 'task_review_entries')).toEqual(expect.arrayContaining(['sort_order', 'quality_score', 'quality_issues']))
     expect(columnNames(db, 'task_proofread_cache')).toEqual(expect.arrayContaining(['fingerprint', 'result_json']))
     expect(db.prepare("SELECT sort_order FROM task_review_entries WHERE subtitle_id = '12'").get()).toEqual({ sort_order: 12 })
-    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }])
+    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }])
     expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='asr_checkpoints'").get()).toBeTruthy()
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_task_logs_task_id'").get()).toBeTruthy()
@@ -38,6 +38,43 @@ describe('database migrations', () => {
     expect(MIGRATIONS.some(migration => migration.version === 3)).toBe(true)
     expect(MIGRATIONS.some(migration => migration.version === 4)).toBe(true)
     expect(MIGRATIONS.some(migration => migration.version === 5)).toBe(true)
+    expect(MIGRATIONS.some(migration => migration.version === 6)).toBe(true)
+    db.close()
+  })
+
+
+  it('adds ASR checkpoint columns when upgrading from version 4', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE tasks (task_id TEXT PRIMARY KEY, file_path TEXT NOT NULL, model TEXT NOT NULL);
+    `)
+    for (const version of [1, 2, 3, 4]) {
+      db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(version)
+    }
+
+    runMigrations(db, 'sqlite')
+
+    expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='asr_checkpoints'").get()).toBeTruthy()
+    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 6 })
+    db.close()
+  })
+  it('repairs a database already marked as version 5 without the checkpoint column', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE tasks (task_id TEXT PRIMARY KEY, file_path TEXT NOT NULL, model TEXT NOT NULL);
+      CREATE TABLE asr_checkpoints (checkpoint_key TEXT NOT NULL, chunk_index INTEGER NOT NULL, PRIMARY KEY (checkpoint_key, chunk_index));
+    `)
+    for (const version of [1, 2, 3, 4, 5]) {
+      db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(version)
+    }
+
+    runMigrations(db, 'sqlite')
+
+    expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
+    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 6 })
     db.close()
   })
 

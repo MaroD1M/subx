@@ -55,6 +55,10 @@
 - 引入 Vue Test Utils + happy-dom，新增任务日志面板组件测试，`npm test` 现在同时运行后端与组件测试。
 - 新增 `npm run test:api`，用 Nuxt Test Utils 启动真实服务，覆盖健康检查、OpenAPI、认证登录/登出、配置校验与密钥保留、API Token scope 矩阵/审计/撤销、任务创建、下载、重试、取消、幂等复用、OCR/ASR 原始字幕下载、核对导出、文件创建/重命名/删除、监控目录、存储接口、通知渠道、通知实际发送、Webhook Token 校验、真实 Webhook 回调入队与去重、路径映射失败记录、任务失败与单条历史删除、整库文件搜索、SSE 建连与取消事件、请求体上限、接口限速和路径穿越拦截。
 
+### Fixed
+
+- 修复已有数据库在 ASR 检查点迁移后缺少 `tasks.asr_checkpoint_key`，导致创建、删除、重试任务返回 500；新增 migration 6 自动补齐列、检查点表和索引。
+
 ### Upgrade Notes
 
 - 从 v2.8.4 升级无需调整卷或数据库；建议升级前执行 `npm run backup`。

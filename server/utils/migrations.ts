@@ -120,6 +120,49 @@ function ensureProofreadCache(db: any, dialect: MigrationDialect) {
   `)
 }
 
+function ensureAsrCheckpoints(db: any, dialect: MigrationDialect) {
+  ensureColumn(db, dialect, 'tasks', 'asr_checkpoint_key', 'TEXT')
+  if (dialect === 'sqlite') {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS asr_checkpoints (
+        checkpoint_key TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'done',
+        language TEXT,
+        confidence REAL DEFAULT 0,
+        engine TEXT,
+        model TEXT,
+        segments_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (checkpoint_key, chunk_index)
+      )
+    `)
+  } else {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS asr_checkpoints (
+        checkpoint_key TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'done',
+        language TEXT,
+        confidence DOUBLE PRECISION DEFAULT 0,
+        engine TEXT,
+        model TEXT,
+        segments_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (checkpoint_key, chunk_index)
+      )
+    `)
+  }
+  if (hasTable(db, dialect, 'asr_checkpoints')) {
+    ensureColumn(db, dialect, 'asr_checkpoints', 'updated_at', dialect === 'sqlite' ? "TEXT NOT NULL DEFAULT (datetime('now'))" : 'TIMESTAMPTZ NOT NULL DEFAULT now()')
+  }
+  ensureIndex(db, dialect, 'asr_checkpoints', 'idx_asr_checkpoints_updated_at', 'updated_at')
+}
+
 export const MIGRATIONS: Migration[] = [
   {
     version: 3,
@@ -139,54 +182,26 @@ export const MIGRATIONS: Migration[] = [
     }
   },
   {
-    version: 5,
-    name: 'asr-checkpoints',
-    up(db, dialect) {
-      if (dialect === 'sqlite') {
-        db.exec(`
-          CREATE TABLE IF NOT EXISTS asr_checkpoints (
-            checkpoint_key TEXT NOT NULL,
-            chunk_index INTEGER NOT NULL,
-            start_ms INTEGER NOT NULL,
-            end_ms INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'done',
-            language TEXT,
-            confidence REAL DEFAULT 0,
-            engine TEXT,
-            model TEXT,
-            segments_json TEXT NOT NULL DEFAULT '[]',
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            PRIMARY KEY (checkpoint_key, chunk_index)
-          )
-        `)
-      } else {
-        db.exec(`
-          CREATE TABLE IF NOT EXISTS asr_checkpoints (
-            checkpoint_key TEXT NOT NULL,
-            chunk_index INTEGER NOT NULL,
-            start_ms INTEGER NOT NULL,
-            end_ms INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'done',
-            language TEXT,
-            confidence DOUBLE PRECISION DEFAULT 0,
-            engine TEXT,
-            model TEXT,
-            segments_json TEXT NOT NULL DEFAULT '[]',
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            PRIMARY KEY (checkpoint_key, chunk_index)
-          )
-        `)
-      }
-      ensureIndex(db, dialect, 'asr_checkpoints', 'idx_asr_checkpoints_updated_at', 'updated_at')
-    }
-  },
-  {
     version: 4,
     name: 'task-query-indexes',
     up(db, dialect) {
       ensureIndex(db, dialect, 'task_logs', 'idx_task_logs_task_id', 'task_id, id')
       ensureIndex(db, dialect, 'task_responses', 'idx_task_responses_task_chunk', 'task_id, chunk_index')
       ensureIndex(db, dialect, 'integration_events', 'idx_integration_events_dedupe', 'source, event, path, status, created_at')
+    }
+  },
+  {
+    version: 5,
+    name: 'asr-checkpoints',
+    up(db, dialect) {
+      ensureAsrCheckpoints(db, dialect)
+    }
+  },
+  {
+    version: 6,
+    name: 'repair-asr-checkpoint-column',
+    up(db, dialect) {
+      ensureAsrCheckpoints(db, dialect)
     }
   },
 ]
