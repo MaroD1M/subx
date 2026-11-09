@@ -11,6 +11,29 @@ describe('ASR chunking', () => {
     expect(plan[3]).toMatchObject({ startMs: 900_000, endMs: 1_000_000 })
   })
 
+  it('ignores empty segments returned by silent chunks', () => {
+    const merged = mergeChunkResults([
+      {
+        plan: { index: 0, startMs: 0, endMs: 300_000 },
+        reused: false,
+        result: {
+          task: 'transcribe', engine: 'test', language: 'en', duration: 300, text: '',
+          segments: [{ id: 1, start: 0, end: 0.1, text: '   ' }]
+        }
+      },
+      {
+        plan: { index: 1, startMs: 300_000, endMs: 600_000 },
+        reused: false,
+        result: {
+          task: 'transcribe', engine: 'test', language: 'en', duration: 300, text: '',
+          segments: [{ id: 1, start: 1, end: 2, text: 'Real speech' }]
+        }
+      }
+    ])
+
+    expect(merged.segments.map(segment => segment.text)).toEqual(['Real speech'])
+  })
+
   it('does not duplicate overlapping segments during merge', () => {
     const merged = mergeChunkResults([
       {

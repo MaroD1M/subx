@@ -278,7 +278,7 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
     const persisted = AsrService.persistResult(taskId, asrResult)
     allEntries = AsrService.toSubtitleEntries(asrResult)
     if (allEntries.length === 0) {
-      throw new Error('语音识别未生成有效字幕')
+      throw new Error('语音识别未生成有效字幕：音频可能没有可识别语音、音轨选择错误，或 VAD 过滤过严。请检查音轨，或关闭 VAD 后重试。')
     }
     task.sourceLanguage = asrResult.language
     task.asrRunId = persisted.runId

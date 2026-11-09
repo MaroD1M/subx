@@ -162,6 +162,7 @@ export function mergeChunkResults(results: Array<{ plan: ChunkPlan, result: AsrR
   for (const item of results) {
     const absolute = offsetSegments(item.result.segments || [], item.plan.startMs / 1000)
     for (const segment of absolute) {
+      if (!String(segment.text || '').trim()) continue
       const normalized = normalizeText(segment.text)
       const previous = segments[segments.length - 1]
       if (previous && normalized) {
@@ -262,9 +263,15 @@ export async function transcribeChunked(options: {
         }
       }
       const result = await AsrService.transcribe(chunkPath, chunkOptions, signal)
-      saveCheckpoint(checkpointKey, chunk, result)
+      const segmentCount = result.segments?.length || 0
+      if (segmentCount > 0) {
+        saveCheckpoint(checkpointKey, chunk, result)
+        onProgress?.(Math.round(((index + 1) / plan.length) * 100), `识别分段 ${index + 1}/${plan.length} 完成`)
+      } else {
+        console.warn(`[ASR] 分段 ${index + 1}/${plan.length} 未检测到语音，跳过且不写入检查点`)
+        onProgress?.(Math.round(((index + 1) / plan.length) * 100), `分段 ${index + 1}/${plan.length} 未检测到语音，已跳过`)
+      }
       results.push({ plan: chunk, result, reused: false })
-      onProgress?.(Math.round(((index + 1) / plan.length) * 100), `识别分段 ${index + 1}/${plan.length} 完成`)
     } finally {
       if (shouldRemoveChunk && existsSync(chunkPath)) {
         try { rmSync(chunkPath, { force: true }) } catch { /* ignore */ }

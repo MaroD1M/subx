@@ -95,15 +95,19 @@ function buildAsrForm(fileName: string, audio: Blob, options: AsrOptions, engine
 }
 
 function normalizeLocalResult(data: any): AsrResult {
-  if (!Array.isArray(data.segments) || data.segments.length === 0) {
-    throw new Error('ASR 未返回可用的带时间轴分段')
+  if (!data || typeof data !== 'object') {
+    throw new Error('ASR 任务已完成但未返回结果')
   }
+  if (!Array.isArray(data.segments)) {
+    throw new Error('ASR 返回结果格式异常：缺少带时间轴的 segments 字段')
+  }
+  const segments = data.segments.filter((segment: AsrSegment) => String(segment.text || '').trim())
   return {
     ...data,
     language: String(data.language || 'unknown'),
-    duration: Number(data.duration || 0),
-    text: String(data.text || ''),
-    segments: data.segments.filter((segment: AsrSegment) => String(segment.text || '').trim())
+    duration: Number(data.duration || segments[segments.length - 1]?.end || 0),
+    text: String(data.text || segments.map((segment: AsrSegment) => segment.text).join(' ')),
+    segments
   }
 }
 
@@ -494,7 +498,27 @@ export const AsrService = {
         if (candidate !== baseUrl) {
           console.warn(`[ASR] ${baseUrl} 连接失败，尝试内置地址 ${candidate}：${describeAsrError(localError)}`)
         }
-        return await transcribeLocalWithRetry(candidate, fileName, audio, options, engine, signal)
+        const result = await transcribeLocalWithRetry(candidate, fileName, audio, options, engine, signal)
+        if ((result.segments?.length || 0) === 0 && options.vad !== false && result.engine !== 'whisper-cpp' && options.engine !== 'whisper-cpp' && !signal?.aborted) {
+          console.warn(`[ASR] ${candidate} 未检测到语音分段，尝试关闭 VAD 重试`)
+          try {
+            options.onProgress?.(0, '未检测到语音，正在关闭 VAD 重试...')
+            const retry = await transcribeLocalWithRetry(candidate, fileName, audio, { ...options, vad: false }, engine, signal)
+            if ((retry.segments?.length || 0) > 0) {
+              return {
+                ...retry,
+                diagnostics: {
+                  ...(retry.diagnostics || {}),
+                  emptyVadRetry: true
+                }
+              }
+            }
+          } catch (retryError: any) {
+            if (signal?.aborted) throw retryError
+            console.warn('[ASR] 关闭 VAD 重试失败，保留空识别结果:', retryError?.message || retryError)
+          }
+        }
+        return result
       } catch (error: any) {
         localError = error
         if (!isAsrNetworkError(error)) break

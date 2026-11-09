@@ -77,6 +77,67 @@ describe('AsrService', () => {
     }
   })
 
+  it('returns an empty result instead of failing when a chunk has no speech', async () => {
+    const originalFetch = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).endsWith('/v1/audio/transcriptions/jobs')) return new Response('', { status: 404 })
+      return new Response(JSON.stringify({
+        language: 'und',
+        duration: 30,
+        text: '',
+        segments: []
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+
+    try {
+      const result = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
+        baseUrl: 'http://asr.test',
+        vad: false
+      })
+      expect(result.segments).toEqual([])
+      expect(result.duration).toBe(30)
+    } finally {
+      vi.stubGlobal('fetch', originalFetch)
+    }
+  })
+
+  it('retries once without VAD when local ASR returns no speech segments', async () => {
+    const originalFetch = globalThis.fetch
+    const vadModes: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/v1/audio/transcriptions/jobs')) return new Response('', { status: 404 })
+      const body = init?.body as FormData
+      const vad = String(body.get('vad'))
+      vadModes.push(vad)
+      if (vad === 'true') {
+        return new Response(JSON.stringify({
+          language: 'und',
+          duration: 30,
+          text: '',
+          segments: []
+        }), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        language: 'en',
+        duration: 30,
+        text: 'Recovered speech',
+        segments: [{ id: 1, start: 1, end: 2, text: 'Recovered speech' }]
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+
+    try {
+      const result = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
+        baseUrl: 'http://asr.test',
+        vad: true
+      })
+      expect(vadModes).toEqual(['true', 'false'])
+      expect(result.text).toBe('Recovered speech')
+      expect(result.diagnostics?.emptyVadRetry).toBe(true)
+    } finally {
+      vi.stubGlobal('fetch', originalFetch)
+    }
+  })
+
   it('polls ASR jobs and reports real progress', async () => {
     const originalFetch = globalThis.fetch
     process.env.ASR_POLL_MS = '1'
