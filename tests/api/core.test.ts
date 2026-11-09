@@ -330,6 +330,36 @@ describe('core API integration', () => {
     expect(finalStatus).toBe('cancelled')
   })
 
+  it('records failed tasks and deletes individual history entries', async () => {
+    const created = await apiFetch('/api/task', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filePath: 'Missing.mkv',
+        sourceType: 'embedded',
+        targetLanguage: 'zh-CN',
+        outputMode: 'original',
+        subtitleFormat: 'srt'
+      })
+    })
+    expect(created.status).toBe(200)
+    const taskId = (await created.json() as any).taskId
+
+    let status = ''
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const response = await apiFetch(`/api/tasks/${taskId}`, { headers: { cookie } })
+      status = (await response.json() as any).task.status
+      if (['done', 'error', 'cancelled', 'review'].includes(status)) break
+      await new Promise(resolve => setTimeout(resolve, 150))
+    }
+    expect(['error', 'cancelled']).toContain(status)
+
+    const removed = await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE', headers: { cookie } })
+    expect(removed.status).toBe(200)
+    const missing = await apiFetch(`/api/tasks/${taskId}`, { headers: { cookie } })
+    expect(missing.status).toBe(404)
+  })
+
   it('manages watch folders and storage endpoints', async () => {
     const folderCreated = await apiFetch('/api/files/create-folder', {
       method: 'POST',
