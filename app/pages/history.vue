@@ -103,8 +103,8 @@
 
         <template #progress-cell="{ row }">
           <div class="min-w-[62px] text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-            <span>{{ isActiveStatus(row.original.status) ? `${row.original.progress}%` : row.original.status === 'review' ? '待核对' : '—' }}</span>
-            <p v-if="isActiveStatus(row.original.status) && row.original.stepMessage" class="max-w-[180px] truncate text-[10px] font-normal text-gray-400 dark:text-gray-500">{{ row.original.stepMessage }}</p>
+            <span>{{ isActiveStatus(row.original.status) || row.original.status === 'paused' ? `${row.original.progress}%` : row.original.status === 'review' ? '待核对' : '—' }}</span>
+            <p v-if="(isActiveStatus(row.original.status) || row.original.status === 'paused') && row.original.stepMessage" class="max-w-[180px] truncate text-[10px] font-normal text-gray-400 dark:text-gray-500">{{ row.original.stepMessage }}</p>
           </div>
         </template>
 
@@ -124,6 +124,17 @@
               title="进入核对"
               aria-label="进入核对"
               @click="openReview(row.original.taskId)"
+            />
+            <UButton
+              v-if="row.original.status === 'paused'"
+              icon="i-lucide-play"
+              variant="ghost"
+              color="primary"
+              size="xs"
+              :loading="resumingTaskId === row.original.taskId"
+              title="继续任务"
+              aria-label="继续任务"
+              @click="resumeTask(row.original.taskId)"
             />
             <UButton
               v-if="['error', 'cancelled', 'review', 'done'].includes(row.original.status)"
@@ -174,7 +185,7 @@
           <AppStatusBadge :status="task.status" class="shrink-0" />
         </div>
 
-        <div v-if="isActiveStatus(task.status)" class="mt-3 space-y-1.5">
+        <div v-if="isActiveStatus(task.status) || task.status === 'paused'" class="mt-3 space-y-1.5">
           <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
             <span class="truncate">{{ task.stepMessage || '处理进度' }}</span>
             <span class="shrink-0">{{ task.progress }}%</span>
@@ -189,6 +200,7 @@
         <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
           <UButton label="详情" icon="i-lucide-eye" size="xs" color="neutral" variant="soft" :to="`/task/${task.taskId}`" />
           <UButton v-if="task.reviewAvailable" label="核对" icon="i-lucide-list-checks" size="xs" color="warning" variant="soft" @click="openReview(task.taskId)" />
+          <UButton v-if="task.status === 'paused'" label="继续" icon="i-lucide-play" size="xs" color="primary" variant="soft" :loading="resumingTaskId === task.taskId" @click="resumeTask(task.taskId)" />
           <UButton v-if="['error', 'cancelled', 'review', 'done'].includes(task.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="retryingTaskId === task.taskId" @click="retryTask(task.taskId)" />
           <a v-if="task.status === 'done' && task.subtitle_format !== 'ass'" :href="`/api/tasks/${task.taskId}/download?format=srt`" class="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/20">
             <UIcon name="i-lucide-file-text" class="h-3.5 w-3.5" /> SRT
@@ -255,6 +267,7 @@ useHead({
 const isClearModalOpen = ref(false)
 const isClearing = ref(false)
 const retryingTaskId = ref('')
+const resumingTaskId = ref('')
 const deletingTaskId = ref('')
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -290,6 +303,7 @@ const statusOptions = [
   { label: '失败', value: 'error' },
   { label: '取消', value: 'cancelled' },
   { label: '待核对', value: 'review' },
+  { label: '已暂停', value: 'paused' },
   { label: '翻译中', value: 'translating' },
   { label: '排队中', value: 'queued' }
 ]
@@ -412,6 +426,19 @@ async function retryTask(taskId) {
     toast.add({ title: '重试失败', description: e?.data?.message || '无法重试该任务', color: 'error' })
   } finally {
     retryingTaskId.value = ''
+  }
+}
+
+async function resumeTask(taskId) {
+  resumingTaskId.value = taskId
+  try {
+    await $fetch(`/api/tasks/${taskId}/resume`, { method: 'POST' })
+    toast.add({ title: '已恢复', description: '任务将复用已完成的识别分段继续执行', color: 'success' })
+    await refresh()
+  } catch (e) {
+    toast.add({ title: '恢复失败', description: e?.data?.message || '无法恢复任务', color: 'error' })
+  } finally {
+    resumingTaskId.value = ''
   }
 }
 

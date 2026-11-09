@@ -19,6 +19,7 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       source_subtitle_path TEXT,
       asr_run_id INTEGER,
       asr_confidence REAL,
+      asr_checkpoint_key TEXT,
       origin TEXT NOT NULL DEFAULT 'manual',
       watch_event_id INTEGER,
       content_title TEXT,
@@ -278,6 +279,21 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       token TEXT PRIMARY KEY,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       expires_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS asr_checkpoints (
+      checkpoint_key TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      start_ms INTEGER NOT NULL,
+      end_ms INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'done',
+      language TEXT,
+      confidence REAL DEFAULT 0,
+      engine TEXT,
+      model TEXT,
+      segments_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (checkpoint_key, chunk_index)
     );
 
     CREATE TABLE IF NOT EXISTS schema_migrations (

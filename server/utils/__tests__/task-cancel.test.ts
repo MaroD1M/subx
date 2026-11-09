@@ -45,7 +45,7 @@ const mockDb = {
       },
       run(...args: any[]) {
         if (sql.includes('INSERT INTO tasks')) {
-          const [taskId, filePath, rootId, sourceType, trackIndex, model, targetLang, outputMode, stylePreset, stylePrompt, sourceLang, _sourceSubtitlePath, asrRunId, asrConfidence, _origin, _watchEventId, contentTitle, contentBackground, customInstructions, translationMode, subtitleFormat, subtitleStylePreset, bilingualLayout, forceRetranslate, status, progress] = args
+          const [taskId, filePath, rootId, sourceType, trackIndex, model, targetLang, outputMode, stylePreset, stylePrompt, sourceLang, _sourceSubtitlePath, asrRunId, asrConfidence, _asrCheckpointKey, _origin, _watchEventId, contentTitle, contentBackground, customInstructions, translationMode, subtitleFormat, subtitleStylePreset, bilingualLayout, forceRetranslate, status, progress] = args
           dbState.set(String(taskId), { status: String(status), progress: Number(progress), error: null, forceRetranslate: Number(forceRetranslate) })
           return { changes: 1 }
         }
@@ -160,6 +160,13 @@ describe('Task cancellation guards', () => {
     const { ensureTaskNotCancelled, TaskCancelledError } = await import('../taskState')
 
     await expect(ensureTaskNotCancelled('task-remote-cancel')).rejects.toBeInstanceOf(TaskCancelledError)
+  })
+
+  it('detects a paused task from persisted status', async () => {
+    dbState.set('task-paused', { status: 'paused', progress: 10, error: null })
+    const { ensureTaskNotPaused, TaskPausedError } = await import('../taskState')
+
+    await expect(ensureTaskNotPaused('task-paused')).rejects.toBeInstanceOf(TaskPausedError)
   })
 
   it('emits cancelled as a terminal event', async () => {

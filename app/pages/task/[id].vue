@@ -156,7 +156,11 @@
             <UButton v-if="task.step === 'done'" label="返回首页" icon="i-lucide-check-circle" color="primary" to="/" />
             <UButton v-if="task.step === 'done'" label="返回历史" icon="i-lucide-history" color="neutral" variant="ghost" to="/history" />
             <UButton v-else-if="task.step === 'error' || task.step === 'cancelled'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
-            <UButton v-else label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
+            <template v-else>
+              <UButton v-if="task.step === 'paused'" label="继续任务" icon="i-lucide-play" color="primary" :loading="resuming" @click="resumeTask" />
+              <UButton v-else-if="canPauseTask" label="暂停任务" icon="i-lucide-pause" color="warning" variant="soft" :loading="pausing" @click="pauseTask" />
+              <UButton label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
+            </template>
           </div>
         </div>
 
@@ -537,6 +541,9 @@ const responseDiagnosticsSummary = computed(() => {
 })
 const showDiagnosticsSection = computed(() => !!connectionBanner.value || task.value.step === 'done')
 const cancelling = ref(false)
+const pausing = ref(false)
+const resuming = ref(false)
+const canPauseTask = computed(() => (task.value.sourceType === 'asr' || ['extracting_audio', 'transcribing'].includes(String(task.value.step))) && !['parsing', 'translating', 'exporting', 'review', 'done', 'error', 'cancelled', 'paused'].includes(String(task.value.step)))
 const toast = useToast()
 const eventSource = ref<EventSource | null>(null)
 const reconnectTimer = ref<ReturnType<typeof setTimeout> | null>(null)
@@ -602,6 +609,37 @@ function openReviewPage(subtitleId?: string) {
   navigateTo(`/review/${taskId}${query}`)
 }
 
+async function pauseTask() {
+  pausing.value = true
+  try {
+    await $fetch(`/api/tasks/${taskId}/pause`, { method: 'POST' })
+    task.value.step = 'paused'
+    task.value.stepMessage = '任务已暂停，已完成识别分段已保存'
+    task.value.currentText = null
+    appendLog({ type: 'info', message: '任务已暂停，已完成识别分段已保存。', timestamp: formatClock(), category: 'system' })
+    toast.add({ title: '已暂停', description: '当前识别分段完成后会停止，可稍后继续。', color: 'warning' })
+  } catch (e: any) {
+    toast.add({ title: '暂停失败', description: e?.data?.message || e?.message || '无法暂停任务', color: 'error' })
+  } finally {
+    pausing.value = false
+  }
+}
+
+async function resumeTask() {
+  resuming.value = true
+  try {
+    await $fetch(`/api/tasks/${taskId}/resume`, { method: 'POST' })
+    task.value.step = 'queued'
+    task.value.stepMessage = '正在恢复任务...'
+    appendLog({ type: 'info', message: '任务已恢复，将复用已完成的识别分段。', timestamp: formatClock(), category: 'system' })
+    toast.add({ title: '已恢复', description: '任务将复用已完成的识别分段继续执行。', color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: '恢复失败', description: e?.data?.message || e?.message || '无法恢复任务', color: 'error' })
+  } finally {
+    resuming.value = false
+  }
+}
+
 async function cancelTask() {
   cancelling.value = true
   try {
@@ -644,7 +682,7 @@ function resetLogs(entries: TaskLogView[]) {
 }
 
 const stepProgressValue = computed(() => Math.max(0, Math.min(100, Number(task.value.stepProgress || 0))))
-const showStepProgress = computed(() => ['probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(String(task.value.step || '')))
+const showStepProgress = computed(() => ['probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting', 'paused'].includes(String(task.value.step || '')))
 
 const statusLabel = computed(() => {
   switch (task.value.step) {
@@ -657,6 +695,7 @@ const statusLabel = computed(() => {
     case 'parsing': return '正在解析文本分块'
     case 'translating': return 'AI 翻译进行中'
     case 'exporting': return '正在生成输出文件'
+    case 'paused': return '任务已暂停'
     case 'cancelled': return '任务已取消'
     case 'done': return '任务圆满完成'
     case 'error': return '任务失败'
@@ -855,6 +894,7 @@ const stepIcon = computed(() => {
     case 'parsing': return 'i-lucide-binary'
     case 'translating': return 'i-lucide-brain'
     case 'exporting': return 'i-lucide-file-output'
+    case 'paused': return 'i-lucide-pause-circle'
     case 'review': return 'i-lucide-list-checks'
     case 'done': return 'i-lucide-check-circle-2'
     case 'cancelled': return 'i-lucide-ban'
@@ -1035,6 +1075,7 @@ onMounted(async () => {
             translating: 'AI 翻译',
             exporting: '导出文件',
             review: '字幕核对',
+            paused: '已暂停',
             done: '完成',
             cancelled: '已取消',
             error: '出错'

@@ -82,6 +82,8 @@ export default defineEventHandler(() => {
       '/api/tasks': { get: { summary: '任务列表', parameters: [{ name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'pageSize', in: 'query', schema: { type: 'integer' } }, { name: 'status', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
       '/api/tasks/{id}': { get: { ...taskPath.get, parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }] }, delete: { summary: '删除任务', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': jsonResponse({ success: true }) } } },
       '/api/tasks/{id}/cancel': { post: { summary: '取消任务', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': jsonResponse({ success: true }) } } },
+      '/api/tasks/{id}/pause': { post: { summary: '暂停 ASR 任务', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': jsonResponse({ success: true }) } } },
+      '/api/tasks/{id}/resume': { post: { summary: '继续 ASR 任务', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': jsonResponse({ success: true }) } } },
       '/api/tasks/{id}/quality': { get: { summary: '双模型质量校验结果', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
       '/api/tasks/{id}/proofread': {
         get: { summary: '读取 AI 校对缓存', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'kind', in: 'query', schema: { type: 'string', enum: ['glossary', 'consistency'] } }], responses: { '200': { description: 'OK' } } },

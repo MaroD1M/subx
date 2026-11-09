@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync } from 'fs'
 import { basename, dirname, join, relative } from 'path'
 import type { SubtitleEntry, TaskStatus, TranslationTask } from '../../types'
 import { AsrService } from './asr/client'
+import { transcribeChunked } from './asr/chunked'
 import { acquireAudioLease, extractAudioCached, releaseAudioLease } from './asr/audioCache'
 import { useDb } from './db'
 import { getMediaRoot, resolveMediaPath } from './mediaRoots'
@@ -10,7 +11,7 @@ import { SubtitleService } from './subtitle'
 import { fileNameMatchesLanguage, resolveTrackPolicy, selectTrackForPolicy } from './trackPolicy'
 import { VideoService } from './video'
 import { writeTaskLog } from './taskLog'
-import { assertTaskNotCancelled, ensureTaskNotCancelled } from './taskState'
+import { assertTaskNotCancelled, ensureTaskNotCancelled, ensureTaskNotPaused } from './taskState'
 
 export interface PrepareTaskSourceOptions {
   taskId: string
@@ -227,7 +228,7 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
     })
 
     await ensureTaskNotCancelled(taskId)
-    const asrResult = await AsrService.transcribe(audioPath, {
+    const asrOptions = {
       baseUrl: config.asrBaseUrl || process.env.ASR_INTERNAL_URL || 'http://127.0.0.1:8000',
       apiKey: config.asrApiKey,
       model: config.asrModel || 'small',
@@ -247,7 +248,20 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
       cloudBaseUrl: config.asrCloudBaseUrl || 'https://api.openai.com/v1',
       cloudApiKey: config.asrCloudApiKey || '',
       cloudModel: config.asrCloudModel || 'whisper-1',
-      cloudFallback: config.asrCloudFallback !== false,
+      cloudFallback: config.asrCloudFallback !== false
+    }
+    const sourceAbsolute = await resolveMediaPath(task.filePath, task.rootId)
+    const chunked = await transcribeChunked({
+      audioPath,
+      sourcePath: sourceAbsolute,
+      chunkSeconds: Number(config.asrChunkSeconds || 300),
+      overlapSeconds: Number(config.asrChunkOverlapSeconds ?? 2),
+      task,
+      asrOptions,
+      taskId,
+      tempDir,
+      signal,
+      ensureNotPaused: () => ensureTaskNotPaused(taskId),
       onProgress: (progress, message) => {
         const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
         void updateStatus(taskId, 'transcribing', 16 + Math.round(stepProgress * 0.12), {
@@ -256,7 +270,10 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
           currentText: message
         }).catch(error => console.error('[Task] Failed to update ASR progress', error))
       }
-    }, signal)
+    })
+    const asrResult = chunked.result
+    task.asrCheckpointKey = chunked.checkpointKey
+    db.prepare('UPDATE tasks SET asr_checkpoint_key = ? WHERE task_id = ?').run(chunked.checkpointKey, taskId)
     await ensureTaskNotCancelled(taskId)
     const persisted = AsrService.persistResult(taskId, asrResult)
     allEntries = AsrService.toSubtitleEntries(asrResult)

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   source_subtitle_path TEXT,
   asr_run_id INTEGER,
   asr_confidence DOUBLE PRECISION,
+  asr_checkpoint_key TEXT,
   origin TEXT NOT NULL DEFAULT 'manual',
   watch_event_id INTEGER,
   content_title TEXT,
@@ -279,6 +280,21 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS asr_checkpoints (
+  checkpoint_key TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  start_ms INTEGER NOT NULL,
+  end_ms INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'done',
+  language TEXT,
+  confidence DOUBLE PRECISION DEFAULT 0,
+  engine TEXT,
+  model TEXT,
+  segments_json TEXT NOT NULL DEFAULT '[]',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (checkpoint_key, chunk_index)
+);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -311,3 +327,4 @@ CREATE INDEX IF NOT EXISTS idx_translation_quality_entries_run ON translation_qu
 CREATE INDEX IF NOT EXISTS idx_translation_quality_entries_task ON translation_quality_entries(task_id, subtitle_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_translations_cache_updated_at ON translations_cache(updated_at);
+CREATE INDEX IF NOT EXISTS idx_asr_checkpoints_updated_at ON asr_checkpoints(updated_at);

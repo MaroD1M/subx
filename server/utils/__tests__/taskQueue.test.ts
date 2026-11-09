@@ -21,6 +21,23 @@ afterAll(() => {
 })
 
 describe('task queue', () => {
+  it('pauses a running task without cancelling it', async () => {
+    let finishProcess: any = null
+    const queue = new TaskQueue({
+      getTask: () => ({ taskId: 'queue-pause', status: 'translating' } as any),
+      process: () => new Promise<void>((resolve) => { finishProcess = resolve })
+    })
+
+    await queue.add('queue-pause')
+    await expect.poll(() => queue.isActive('queue-pause'), { timeout: 2000 }).toBe(true)
+    expect(queue.pause('queue-pause')).toBe(true)
+    expect((db.prepare('SELECT status FROM task_jobs WHERE task_id = ?').get('queue-pause') as any).status).toBe('paused')
+    expect(isTaskCancelled('queue-pause')).toBe(false)
+
+    finishProcess?.()
+    await new Promise(resolve => setTimeout(resolve, 20))
+  })
+
   it('claims a queued task and supports cancellation', async () => {
     let finishProcess: any = null
     const queue = new TaskQueue({

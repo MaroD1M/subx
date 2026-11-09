@@ -100,6 +100,27 @@
                 </div>
               </div>
 
+              <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
+                <div>
+                  <p class="text-sm font-medium text-gray-700 dark:text-gray-300">分段与断点</p>
+                  <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">长视频会按分段识别；暂停、失败或容器重启后可从已完成分段继续。</p>
+                </div>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <UFormField label="分段时长（分钟）">
+                    <UInput v-model="asrChunkMinutes" type="number" min="1" max="60" class="w-full" />
+                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">越短暂停生效越快，但 ASR 调用次数更多。</p>
+                  </UFormField>
+                  <UFormField label="分段重叠（秒）">
+                    <UInput v-model.number="config.asrChunkOverlapSeconds" type="number" min="0" max="30" class="w-full" />
+                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">用于减少分段边界切断句子；合并时会去重。</p>
+                  </UFormField>
+                  <UFormField label="检查点保留（小时）">
+                    <UInput v-model.number="config.asrResumeTtlHours" type="number" min="1" max="8760" class="w-full" />
+                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">暂停或失败后保留已完成分段的时间。</p>
+                  </UFormField>
+                </div>
+              </div>
+
               <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
                   <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">VAD</p><p class="text-[11px] text-gray-500 dark:text-gray-400">过滤静音</p></div>
@@ -543,6 +564,9 @@ if (config.value) {
   if (config.value.asrUploadTimeoutMs === undefined) config.value.asrUploadTimeoutMs = 30 * 60 * 1000
   if (config.value.asrPollTimeoutMs === undefined) config.value.asrPollTimeoutMs = 30 * 1000
   if (config.value.asrJobIdleTimeoutMs === undefined) config.value.asrJobIdleTimeoutMs = 30 * 60 * 1000
+  if (config.value.asrChunkSeconds === undefined) config.value.asrChunkSeconds = 300
+  if (config.value.asrChunkOverlapSeconds === undefined) config.value.asrChunkOverlapSeconds = 2
+  if (config.value.asrResumeTtlHours === undefined) config.value.asrResumeTtlHours = 168
   if (config.value.asrJobAbsoluteTimeoutMs === undefined) config.value.asrJobAbsoluteTimeoutMs = 6 * 60 * 60 * 1000
   if (config.value.asrVad === undefined) config.value.asrVad = true
   if (config.value.asrWordTimestamps === undefined) config.value.asrWordTimestamps = true
@@ -595,6 +619,10 @@ const asrPollTimeoutSeconds = computed({
 const asrJobIdleTimeoutMinutes = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.asrJobIdleTimeoutMs ?? 30 * 60 * 1000) / 60000)),
   set: (value: any) => { config.value.asrJobIdleTimeoutMs = Math.max(1, Math.min(1440, Math.round(Number(value) || 30))) * 60000 }
+})
+const asrChunkMinutes = computed({
+  get: () => Math.max(1, Math.round(Number(config.value?.asrChunkSeconds ?? 300) / 60)),
+  set: (value: any) => { config.value.asrChunkSeconds = Math.max(1, Math.min(60, Math.round(Number(value) || 5))) * 60 }
 })
 const asrJobAbsoluteTimeoutHours = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.asrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000) / 3600000)),
@@ -662,6 +690,9 @@ function buildConfigSnapshot(value: any) {
     asrPollTimeoutMs: Number(value?.asrPollTimeoutMs ?? 30 * 1000),
     asrJobIdleTimeoutMs: Number(value?.asrJobIdleTimeoutMs ?? 30 * 60 * 1000),
     asrJobAbsoluteTimeoutMs: Number(value?.asrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000),
+    asrChunkSeconds: Number(value?.asrChunkSeconds ?? 300),
+    asrChunkOverlapSeconds: Number(value?.asrChunkOverlapSeconds ?? 2),
+    asrResumeTtlHours: Number(value?.asrResumeTtlHours ?? 168),
     asrVad: value?.asrVad !== false,
     asrWordTimestamps: value?.asrWordTimestamps !== false,
     asrKeepAudio: !!value?.asrKeepAudio,

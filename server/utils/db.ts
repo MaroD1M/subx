@@ -100,6 +100,7 @@ export function useDb() {
     CREATE INDEX IF NOT EXISTS idx_tasks_origin_status ON tasks(origin, status);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_translations_cache_updated_at ON translations_cache(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_asr_checkpoints_updated_at ON asr_checkpoints(updated_at);
   `)
 
   return _db

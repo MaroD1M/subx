@@ -97,6 +97,7 @@ export default defineEventHandler(async (event) => {
       sourceType: oldTask.sourceType as 'embedded' | 'external' | 'asr' | 'ocr',
       trackIndex: oldTask.trackIndex || 0,
       model: oldTask.model || config.defaultModel,
+      asrCheckpointKey: oldTask.asrCheckpointKey,
       targetLanguage: oldTask.targetLanguage || config.targetLanguage,
       outputMode: oldTask.outputMode || 'translated',
       stylePreset: oldTask.stylePreset || 'default',

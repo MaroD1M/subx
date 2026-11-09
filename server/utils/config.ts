@@ -78,6 +78,9 @@ export const ConfigService = {
             asrPollTimeoutMs: Number(process.env.ASR_POLL_TIMEOUT_MS || 30 * 1000),
             asrJobIdleTimeoutMs: Number(process.env.ASR_JOB_IDLE_TIMEOUT_MS || 30 * 60 * 1000),
             asrJobAbsoluteTimeoutMs: Number(process.env.ASR_JOB_ABSOLUTE_TIMEOUT_MS || 6 * 60 * 60 * 1000),
+            asrChunkSeconds: Number(process.env.ASR_CHUNK_SECONDS || 300),
+            asrChunkOverlapSeconds: Number(process.env.ASR_CHUNK_OVERLAP_SECONDS || 2),
+            asrResumeTtlHours: Number(process.env.ASR_RESUME_TTL_HOURS || 168),
             asrVad: true,
             asrWordTimestamps: true,
             asrKeepAudio: false,
@@ -116,7 +119,7 @@ export const ConfigService = {
                 config.mediaRoots = safeJsonParse<MediaRoot[]>(row.value, [])
             } else if (row.key === 'customStylePresets') {
                 config.customStylePresets = safeJsonParse<AppConfig['customStylePresets']>(row.value, [])
-            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs'].includes(row.key)) {
+            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs', 'asrChunkSeconds', 'asrChunkOverlapSeconds', 'asrResumeTtlHours'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'
@@ -308,6 +311,10 @@ export const ConfigService = {
             db.prepare("DELETE FROM translations_cache WHERE updated_at < datetime('now', ?)").run(modifier)
             db.prepare("DELETE FROM api_audit_logs WHERE created_at < datetime('now', ?)").run(modifier)
             db.prepare("DELETE FROM notification_deliveries WHERE status IN ('sent', 'failed', 'skipped') AND created_at < datetime('now', ?)").run(modifier)
+            try {
+                const checkpointHours = Math.max(1, Number(config.asrResumeTtlHours || process.env.ASR_RESUME_TTL_HOURS || 168))
+                db.prepare("DELETE FROM asr_checkpoints WHERE updated_at < datetime('now', ?)").run(`-${checkpointHours} hours`)
+            } catch { /* old schema */ }
             db.prepare("DELETE FROM watch_events WHERE status IN ('done', 'failed', 'skipped', 'ignored') AND created_at < datetime('now', ?)").run(modifier)
             db.prepare("DELETE FROM integration_events WHERE created_at < datetime('now', ?)").run(modifier)
             db.prepare(`

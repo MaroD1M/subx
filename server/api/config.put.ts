@@ -43,6 +43,9 @@ const ALLOWED_KEYS = new Set([
   'asrPollTimeoutMs',
   'asrJobIdleTimeoutMs',
   'asrJobAbsoluteTimeoutMs',
+  'asrChunkSeconds',
+  'asrChunkOverlapSeconds',
+  'asrResumeTtlHours',
   'asrVad',
   'asrWordTimestamps',
   'asrKeepAudio',
@@ -202,6 +205,18 @@ export default defineEventHandler(async (event) => {
     }
     if (key === 'asrJobAbsoluteTimeoutMs') {
       await ConfigService.updateConfig(key, Math.max(10 * 60 * 1000, Math.min(7 * 24 * 60 * 60 * 1000, Number(value) || 6 * 60 * 60 * 1000)))
+      continue
+    }
+    if (key === 'asrChunkSeconds') {
+      await ConfigService.updateConfig(key, Math.max(60, Math.min(3600, Math.floor(Number(value) || 300))))
+      continue
+    }
+    if (key === 'asrChunkOverlapSeconds') {
+      await ConfigService.updateConfig(key, Math.max(0, Math.min(30, Math.floor(Number(value) || 2))))
+      continue
+    }
+    if (key === 'asrResumeTtlHours') {
+      await ConfigService.updateConfig(key, Math.max(1, Math.min(8760, Math.floor(Number(value) || 168))))
       continue
     }
     await ConfigService.updateConfig(key, value)

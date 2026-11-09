@@ -74,6 +74,7 @@
 - `2`：会话 token 改为 SHA-256 哈希
 - `3`：补齐历史列、`translation_mode`、AI 校对缓存和 `sort_order` 回填
 - `4`：补充任务日志、任务响应和集成事件去重查询索引
+- `5`：ASR 分段检查点和任务 `asr_checkpoint_key`
 
 SQLite 基线位于 `server/utils/schema.ts`，PostgreSQL 基线位于 `scripts/postgres-schema.sql`。`schemaDrift.test.ts` 会对比两边表和字段，修改任意一侧后必须同步另一侧。
 

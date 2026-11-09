@@ -1,6 +1,13 @@
 export const cancelledTaskIds = new Set<string>()
 export const taskAbortControllers = new Map<string, AbortController>()
 
+export class TaskPausedError extends Error {
+  constructor() {
+    super('任务已暂停')
+    this.name = 'TaskPausedError'
+  }
+}
+
 export class TaskCancelledError extends Error {
   constructor() {
     super('任务已取消')
@@ -37,4 +44,16 @@ export async function ensureTaskNotCancelled(taskId: string) {
 
 export function isTerminalStatus(status?: string | null) {
   return ['done', 'error', 'review', 'cancelled'].includes(String(status || ''))
+}
+
+
+export async function ensureTaskNotPaused(taskId: string) {
+  try {
+    const db = (await import('./db')).useDb()
+    const row = db.prepare('SELECT status FROM tasks WHERE task_id = ?').get(taskId) as { status?: string } | undefined
+    if (row?.status === 'paused') throw new TaskPausedError()
+  } catch (error) {
+    if (error instanceof TaskPausedError) throw error
+    // DB hiccups must not pause a running task.
+  }
 }

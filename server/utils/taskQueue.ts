@@ -62,6 +62,16 @@ export class TaskQueue {
     }
   }
 
+  pause(taskId: string) {
+    try {
+      const info = useDb().prepare("UPDATE task_jobs SET status='paused', updated_at=datetime('now') WHERE task_id = ? AND status IN ('queued', 'running')").run(taskId)
+      this.runtimeConfigs.delete(taskId)
+      return info.changes > 0
+    } catch {
+      return false
+    }
+  }
+
   cancel(taskId: string) {
     cancelledTaskIds.add(taskId)
     taskAbortControllers.get(taskId)?.abort()
@@ -75,7 +85,7 @@ export class TaskQueue {
       const info = useDb().prepare(`
         UPDATE task_jobs
         SET status='cancelled', updated_at=datetime('now')
-        WHERE task_id = ? AND status IN ('queued', 'running')
+        WHERE task_id = ? AND status IN ('queued', 'running', 'paused')
       `).run(taskId)
       removed = info.changes > 0
     } catch { /* ignore job table failures */ }
@@ -198,7 +208,9 @@ export class TaskQueue {
         ? 'done'
         : status === 'cancelled'
           ? 'cancelled'
-          : 'error'
+          : status === 'paused'
+            ? 'paused'
+            : 'error'
       useDb().prepare("UPDATE task_jobs SET status=?, locked_by=NULL, locked_at=NULL, updated_at=datetime('now') WHERE task_id = ?").run(jobStatus, taskId)
     } catch { /* ignore job persistence failures */ }
   }

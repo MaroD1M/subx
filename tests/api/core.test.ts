@@ -602,6 +602,38 @@ describe('core API integration', () => {
   })
 
 
+
+  it('pauses and resumes an ASR task', async () => {
+    const db = new Database(dbPath)
+    db.pragma('busy_timeout = 5000')
+    db.prepare(`
+      INSERT INTO tasks (task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, status, progress)
+      VALUES ('pause-api-task', 'MissingForResume.mkv', 'default', 'asr', 0, 'test-model', 'zh-CN', 'translated', 'transcribing', 20)
+    `).run()
+    db.close()
+
+    const paused = await apiFetch('/api/tasks/pause-api-task/pause', { method: 'POST', headers: { cookie } })
+    expect(paused.status).toBe(200)
+    expect(await paused.json()).toMatchObject({ success: true, status: 'paused' })
+
+    const afterPause = await apiFetch('/api/tasks/pause-api-task', { headers: { cookie } })
+    expect((await afterPause.json() as any).task.status).toBe('paused')
+
+    const resumed = await apiFetch('/api/tasks/pause-api-task/resume', { method: 'POST', headers: { cookie } })
+    expect(resumed.status).toBe(200)
+    expect(await resumed.json()).toMatchObject({ success: true, status: 'queued' })
+
+    let status = ''
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const response = await apiFetch('/api/tasks/pause-api-task', { headers: { cookie } })
+      status = (await response.json() as any).task.status
+      if (['done', 'error', 'review', 'cancelled'].includes(status)) break
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    expect(['error', 'cancelled']).toContain(status)
+    await apiFetch('/api/tasks/pause-api-task', { method: 'DELETE', headers: { cookie } })
+  })
+
   it('supports session status, login and logout', async () => {
     const session = await apiFetch('/api/auth/session', { headers: { cookie } })
     expect(session.status).toBe(200)

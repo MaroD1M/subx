@@ -16,7 +16,7 @@ import { SubtitleService } from './subtitle'
 import { TranslationService } from './translation'
 import { persistReviewEntries } from './taskSupport'
 import { TaskQueue } from './taskQueue'
-import { TaskCancelledError, assertTaskNotCancelled, cancelledTaskIds, isTaskCancelled, taskAbortControllers } from './taskState'
+import { TaskCancelledError, TaskPausedError, assertTaskNotCancelled, cancelledTaskIds, isTaskCancelled, taskAbortControllers } from './taskState'
 import { releaseAudioLease, removeCachedAudio } from './asr/audioCache'
 import { markTaskActive, unmarkTaskActive } from './activeTasks'
 import { ConfigService } from './config'
@@ -54,8 +54,8 @@ export const TaskService = {
         const db = useDb()
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, bilingual_layout, force_retranslate, status, progress, track_policy_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, bilingual_layout, force_retranslate, status, progress, track_policy_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
             task.taskId,
@@ -72,6 +72,7 @@ export const TaskService = {
             task.sourceSubtitlePath || null,
             task.asrRunId || null,
             task.asrConfidence ?? null,
+            task.asrCheckpointKey || null,
             task.origin === 'automation' ? 'automation' : 'manual',
             task.watchEventId || null,
             task.contentTitle || null,
@@ -110,6 +111,7 @@ export const TaskService = {
             sourceSubtitlePath: task.source_subtitle_path || '',
             asrRunId: task.asr_run_id || undefined,
             asrConfidence: task.asr_confidence ?? undefined,
+            asrCheckpointKey: task.asr_checkpoint_key || undefined,
             origin: task.origin === 'automation' ? 'automation' : 'manual',
             watchEventId: task.watch_event_id || undefined,
             contentTitle: task.content_title || '',
@@ -141,6 +143,9 @@ export const TaskService = {
             return
         }
         if (currentStatus === 'review' && status !== 'review' && status !== 'done') {
+            return
+        }
+        if (currentStatus === 'paused' && !['paused', 'queued', 'cancelled', 'error', 'done'].includes(status)) {
             return
         }
 
@@ -328,6 +333,14 @@ export const TaskService = {
             taskSucceeded = true
 
         } catch (e: any) {
+            if (e instanceof TaskPausedError) {
+                await this.updateStatus(taskId, 'paused', Number(taskForCleanup?.progress || 0), {
+                    stepMessage: '任务已暂停，已完成识别分段已保存',
+                    log: '任务已暂停，已完成识别分段已保存。',
+                    level: 'warn'
+                })
+                return
+            }
             if (e instanceof TaskCancelledError || isTaskCancelled(taskId)) {
                 await this.updateStatus(taskId, 'cancelled', Number(taskForCleanup?.progress || 0), {
                     error: '用户取消任务',

@@ -5,9 +5,13 @@ import { removeTaskArtifacts } from '../utils/task'
 export default defineEventHandler(async () => {
     const db = useDb()
     try {
-        const rows = db.prepare("SELECT task_id FROM tasks WHERE status IN ('done', 'error', 'review', 'cancelled')").all() as Array<{ task_id: string }>
+        const rows = db.prepare("SELECT task_id, asr_checkpoint_key FROM tasks WHERE status IN ('done', 'error', 'review', 'cancelled')").all() as Array<{ task_id: string, asr_checkpoint_key?: string }>
         const stmt = db.prepare(`DELETE FROM tasks WHERE status IN ('done', 'error', 'review', 'cancelled')`)
         const info = stmt.run()
+        try {
+            const keys = rows.map(row => row.asr_checkpoint_key).filter(Boolean)
+            for (const key of keys) db.prepare('DELETE FROM asr_checkpoints WHERE checkpoint_key = ?').run(String(key))
+        } catch { /* old schema */ }
 
         db.prepare(`DELETE FROM task_jobs WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run()
         db.prepare(`DELETE FROM task_logs WHERE task_id NOT IN (SELECT task_id FROM tasks)`).run()

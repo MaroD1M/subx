@@ -51,6 +51,7 @@ export interface TranslationTask {
   sourceSubtitlePath?: string  // 自动选择的外挂字幕路径
   asrRunId?: number            // 语音识别运行记录
   asrConfidence?: number       // 平均置信度
+  asrCheckpointKey?: string    // ASR 分段检查点 key
   origin?: 'manual' | 'automation' // 任务来源
   watchEventId?: number        // 自动任务关联的监控事件
   model: string                // 使用的模型
@@ -90,6 +91,7 @@ export type TaskStatus =
   | 'parsing'
   | 'translating'
   | 'exporting'
+  | 'paused'
   | 'review'
   | 'done'
   | 'error'
@@ -120,6 +122,9 @@ export interface AppConfig {
   asrPollTimeoutMs?: number    // 单次 ASR 状态请求超时
   asrJobIdleTimeoutMs?: number // 无进度超时
   asrJobAbsoluteTimeoutMs?: number // 单任务绝对上限
+  asrChunkSeconds?: number     // ASR 分段时长（秒）
+  asrChunkOverlapSeconds?: number // ASR 分段重叠（秒）
+  asrResumeTtlHours?: number   // ASR 检查点保留（小时）
   asrVad?: boolean             // 是否启用 VAD
   asrWordTimestamps?: boolean  // 是否请求词级时间轴
   asrKeepAudio?: boolean       // 是否保留临时音频

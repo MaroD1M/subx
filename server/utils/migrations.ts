@@ -50,6 +50,7 @@ function ensureLegacyColumns(db: any, dialect: MigrationDialect) {
     ['tasks', 'source_subtitle_path', 'TEXT'],
     ['tasks', 'asr_run_id', 'INTEGER'],
     ['tasks', 'asr_confidence', 'REAL'],
+    ['tasks', 'asr_checkpoint_key', 'TEXT'],
     ['tasks', 'origin', "TEXT NOT NULL DEFAULT 'manual'"],
     ['tasks', 'watch_event_id', 'INTEGER'],
     ['tasks', 'content_title', 'TEXT'],
@@ -135,6 +136,48 @@ export const MIGRATIONS: Migration[] = [
       if (total > 0 && zeroRows === total) {
         db.exec('UPDATE task_review_entries SET sort_order = CAST(subtitle_id AS INTEGER) WHERE sort_order = 0')
       }
+    }
+  },
+  {
+    version: 5,
+    name: 'asr-checkpoints',
+    up(db, dialect) {
+      if (dialect === 'sqlite') {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS asr_checkpoints (
+            checkpoint_key TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            start_ms INTEGER NOT NULL,
+            end_ms INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'done',
+            language TEXT,
+            confidence REAL DEFAULT 0,
+            engine TEXT,
+            model TEXT,
+            segments_json TEXT NOT NULL DEFAULT '[]',
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (checkpoint_key, chunk_index)
+          )
+        `)
+      } else {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS asr_checkpoints (
+            checkpoint_key TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            start_ms INTEGER NOT NULL,
+            end_ms INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'done',
+            language TEXT,
+            confidence DOUBLE PRECISION DEFAULT 0,
+            engine TEXT,
+            model TEXT,
+            segments_json TEXT NOT NULL DEFAULT '[]',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY (checkpoint_key, chunk_index)
+          )
+        `)
+      }
+      ensureIndex(db, dialect, 'asr_checkpoints', 'idx_asr_checkpoints_updated_at', 'updated_at')
     }
   },
   {
