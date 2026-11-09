@@ -35,20 +35,16 @@
       </div>
     </div>
 
-    <div v-if="mediaRoots.length" class="grid grid-cols-1 items-start gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <div class="surface-card overflow-hidden">
-        <div class="space-y-2 border-b border-gray-100 p-3 dark:border-gray-800">
-          <div class="flex items-center justify-between gap-2">
-            <p class="app-section-title">媒体库列表</p>
-            <span class="text-[11px] text-gray-500 dark:text-gray-400">显示 {{ filteredMediaRoots.length }} / {{ mediaRoots.length }}</span>
-          </div>
-          <UInput v-model="librarySearch" icon="i-lucide-search" size="xs" placeholder="搜索名称或路径" class="w-full" aria-label="搜索媒体库" />
-          <div class="flex items-center gap-2">
-            <USelect v-model="libraryStatusFilter" :items="libraryStatusOptions" size="xs" class="w-full" aria-label="媒体库状态筛选" />
+    <div v-if="mediaRoots.length" class="space-y-4">
+      <div class="surface-card p-3 sm:p-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex flex-1 flex-wrap items-center gap-2">
+            <UInput v-model="librarySearch" icon="i-lucide-search" size="sm" placeholder="搜索名称或路径" class="w-full sm:max-w-xs" aria-label="搜索媒体库" />
+            <USelect v-model="libraryStatusFilter" :items="libraryStatusOptions" size="sm" class="w-full sm:w-40" aria-label="媒体库状态筛选" />
             <UButton
               v-if="librarySearch || libraryStatusFilter !== 'all'"
               icon="i-lucide-filter-x"
-              size="xs"
+              size="sm"
               color="neutral"
               variant="ghost"
               aria-label="清空媒体库筛选"
@@ -56,116 +52,43 @@
               @click="clearLibraryFilters"
             />
           </div>
-        </div>
-        <div class="max-h-[calc(100vh-19rem)] space-y-1 overflow-y-auto p-2 custom-scrollbar">
-          <button
-            v-for="root in filteredMediaRoots"
-            :key="root.id"
-            type="button"
-            class="w-full rounded-xl border px-3 py-2.5 text-left transition-colors"
-            :class="selectedRootId === root.id
-              ? 'border-primary-200 bg-primary-50/80 dark:border-primary-900/50 dark:bg-primary-950/20'
-              : 'border-transparent hover:border-gray-200 hover:bg-gray-50 dark:hover:border-gray-800 dark:hover:bg-gray-900/40'"
-            @click="selectRoot(root.id)"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <p class="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{{ root.name || '未命名媒体库' }}</p>
-                <p class="mt-0.5 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400" :title="root.path">{{ root.path || '未配置路径' }}</p>
-              </div>
-              <UIcon :name="statusIcon(root)" class="mt-0.5 h-4 w-4 shrink-0" :class="statusIconClass(root)" />
-            </div>
-            <div class="mt-1.5 flex flex-wrap items-center gap-1">
-              <UBadge v-if="root.isDefault" size="xs" color="primary" variant="subtle">默认</UBadge>
-              <UBadge size="xs" :color="root.enabled !== false ? 'success' : 'neutral'" variant="subtle">{{ root.enabled !== false ? '已启用' : '已停用' }}</UBadge>
-              <UBadge v-if="isRootWatched(root)" size="xs" color="primary" variant="subtle">监控中</UBadge>
-              <UBadge v-if="rootValidation(root).length" size="xs" color="error" variant="subtle">配置异常</UBadge>
-              <span class="ml-auto text-[10px] text-gray-400">#{{ rootPosition(root) }}</span>
-            </div>
-          </button>
-          <div v-if="!filteredMediaRoots.length" class="space-y-2 px-2 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
-            <UIcon name="i-lucide-search-x" class="mx-auto h-5 w-5 text-gray-300 dark:text-gray-600" />
-            <p>没有匹配的媒体库</p>
-            <UButton label="清空筛选" size="xs" color="neutral" variant="soft" @click="clearLibraryFilters" />
-          </div>
+          <span class="text-[11px] text-gray-500 dark:text-gray-400">显示 {{ filteredMediaRoots.length }} / {{ mediaRoots.length }}</span>
         </div>
       </div>
 
-      <div v-if="selectedRoot" class="surface-card overflow-hidden">
-        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <h2 class="truncate text-base font-semibold text-gray-900 dark:text-white">{{ selectedRoot.name || '未命名媒体库' }}</h2>
-              <UBadge v-if="selectedRoot.isDefault" color="primary" variant="subtle">默认库</UBadge>
-              <UBadge :color="selectedRoot.enabled !== false ? 'success' : 'neutral'" variant="subtle">{{ selectedRoot.enabled !== false ? '已启用' : '已停用' }}</UBadge>
-              <UBadge v-if="isRootWatched(selectedRoot)" color="primary" variant="subtle">自动监控</UBadge>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <button
+          v-for="root in filteredMediaRoots"
+          :key="root.id"
+          type="button"
+          class="group flex min-h-[164px] flex-col rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:bg-gray-950/60 dark:hover:border-primary-900/50"
+          :class="rootValidation(root).length || inspectionStates[root.id]?.ok === false
+            ? 'border-red-200 dark:border-red-900/40'
+            : 'border-gray-200/80 dark:border-gray-800'"
+          @click="selectRoot(root.id)"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">
+              <UIcon name="i-lucide-library-big" class="h-5 w-5" />
             </div>
-            <p class="mt-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400" :title="selectedRoot.path">{{ selectedRoot.path || '未配置路径' }}</p>
+            <UIcon :name="statusIcon(root)" class="mt-1 h-4 w-4 shrink-0" :class="statusIconClass(root)" />
           </div>
-          <div class="flex flex-wrap items-center gap-1">
-            <UButton icon="i-lucide-arrow-up" color="neutral" variant="ghost" size="xs" aria-label="上移媒体库" :disabled="selectedRootIndex <= 0" @click="moveRoot(selectedRootIndex, -1)" />
-            <UButton icon="i-lucide-arrow-down" color="neutral" variant="ghost" size="xs" aria-label="下移媒体库" :disabled="selectedRootIndex >= mediaRoots.length - 1" @click="moveRoot(selectedRootIndex, 1)" />
-            <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="xs" aria-label="删除媒体库" @click="openRemoveDialog(selectedRootIndex)" />
+          <p class="mt-3 truncate text-sm font-semibold text-gray-900 dark:text-white">{{ root.name || '未命名媒体库' }}</p>
+          <p class="mt-1 line-clamp-2 break-all font-mono text-[11px] leading-5 text-gray-500 dark:text-gray-400" :title="root.path">{{ root.path || '未配置路径' }}</p>
+          <div class="mt-auto flex flex-wrap items-center gap-1 pt-3">
+            <span v-if="root.isDefault" class="rounded-md bg-primary-50 px-1.5 py-0.5 text-[10px] font-medium text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">默认</span>
+            <span class="rounded-md px-1.5 py-0.5 text-[10px] font-medium" :class="root.enabled !== false ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300'">{{ root.enabled !== false ? '已启用' : '已停用' }}</span>
+            <span v-if="isRootWatched(root)" class="rounded-md bg-primary-50 px-1.5 py-0.5 text-[10px] font-medium text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">监控中</span>
+            <span v-if="rootValidation(root).length" class="rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300">配置异常</span>
+            <span class="ml-auto text-[10px] text-gray-500 dark:text-gray-400">#{{ rootPosition(root) }}</span>
           </div>
-        </div>
+        </button>
+      </div>
 
-        <div class="space-y-4 p-4">
-          <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <UFormField label="媒体库名称">
-              <UInput v-model="selectedRoot.name" placeholder="例如：电影库 / 剧集库" class="w-full" />
-            </UFormField>
-            <UFormField label="容器内路径">
-              <div class="flex gap-2">
-                <UInput v-model="selectedRoot.path" placeholder="/media/movies" class="w-full min-w-0 font-mono" />
-                <UButton label="检测" icon="i-lucide-search-check" color="neutral" variant="soft" :loading="inspectingId === selectedRoot.id" @click="inspectRoot(selectedRoot)" />
-              </div>
-            </UFormField>
-          </div>
-
-          <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <UButton
-              :label="selectedRoot.isDefault ? '当前默认库' : '设为默认库'"
-              icon="i-lucide-star"
-              size="sm"
-              color="primary"
-              :variant="selectedRoot.isDefault ? 'soft' : 'ghost'"
-              :disabled="selectedRoot.isDefault || selectedRoot.enabled === false"
-              @click="setDefaultRoot(selectedRootIndex)"
-            />
-            <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/30">
-              <span class="text-sm text-gray-600 dark:text-gray-300">启用</span>
-              <USwitch v-model="selectedRoot.enabled" color="primary" :aria-label="`启用媒体库 ${selectedRoot.name}`" />
-            </div>
-            <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/30">
-              <span class="text-sm text-gray-600 dark:text-gray-300">自动监控</span>
-              <USwitch
-                :model-value="isRootWatched(selectedRoot)"
-                color="primary"
-                :disabled="!selectedRoot.path || selectedRoot.enabled === false || watchPending[selectedRoot.id] || !isRootPathSaved(selectedRoot)"
-                :aria-label="`自动监控 ${selectedRoot.name}`"
-                :title="selectedRoot.enabled === false ? '停用的媒体库不会自动监控' : isRootPathSaved(selectedRoot) ? '自动处理该媒体库新增视频' : '请先保存媒体库路径，再开启自动监控'"
-                @update:model-value="toggleRootWatch(selectedRoot, $event)"
-              />
-            </div>
-          </div>
-
-          <div v-if="rootValidation(selectedRoot).length" class="rounded-xl border border-red-100 bg-red-50/80 px-3 py-2 text-xs leading-relaxed text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
-            <p v-for="issue in rootValidation(selectedRoot)" :key="issue">{{ issue }}</p>
-          </div>
-
-          <div v-if="inspectionStates[selectedRoot.id]" class="rounded-xl border px-3 py-2 text-xs leading-relaxed" :class="inspectionStates[selectedRoot.id]?.ok ? 'border-green-100 bg-green-50/80 text-green-700 dark:border-green-900/40 dark:bg-green-950/15 dark:text-green-300' : 'border-red-100 bg-red-50/80 text-red-700 dark:border-red-900/40 dark:bg-red-950/15 dark:text-red-300'">
-            <div class="flex flex-wrap items-center gap-2">
-              <UIcon :name="inspectionStates[selectedRoot.id]?.ok ? 'i-lucide-badge-check' : 'i-lucide-badge-alert'" class="h-4 w-4 shrink-0" />
-              <span class="font-medium">{{ inspectionStates[selectedRoot.id]?.ok ? '检测通过' : '检测失败' }}</span>
-              <span class="opacity-80">{{ inspectionStates[selectedRoot.id]?.message }}</span>
-            </div>
-          </div>
-
-          <div class="rounded-xl border border-gray-200/70 bg-gray-50/70 p-3 text-xs leading-relaxed text-gray-600 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-300">
-            <p class="font-medium text-gray-800 dark:text-gray-100">路径说明</p>
-            <p class="mt-1">这里填写容器内路径，不是宿主机路径。修改路径后请重新检测。停用媒体库后首页不会显示它，自动监控也会关闭，但配置会保留。</p>
-          </div>
-        </div>
+      <div v-if="!filteredMediaRoots.length" class="surface-card space-y-2 px-2 py-10 text-center text-xs text-gray-500 dark:text-gray-400">
+        <UIcon name="i-lucide-search-x" class="mx-auto h-5 w-5 text-gray-300 dark:text-gray-600" />
+        <p>没有匹配的媒体库</p>
+        <UButton label="清空筛选" size="xs" color="neutral" variant="soft" @click="clearLibraryFilters" />
       </div>
     </div>
 
@@ -177,6 +100,95 @@
       </div>
       <UButton label="新增媒体库" icon="i-lucide-plus" color="primary" variant="soft" class="mt-3" @click="addMediaRoot" />
     </div>
+
+    <UModal v-model:open="editorOpen" :ui="{ content: 'sm:max-w-3xl' }">
+      <template #content>
+        <div class="max-h-[85vh] overflow-y-auto">
+          <div v-if="selectedRoot" class="surface-card overflow-hidden">
+            <div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="truncate text-base font-semibold text-gray-900 dark:text-white">{{ selectedRoot.name || '未命名媒体库' }}</h2>
+                  <UBadge v-if="selectedRoot.isDefault" color="primary" variant="subtle">默认库</UBadge>
+                  <UBadge :color="selectedRoot.enabled !== false ? 'success' : 'neutral'" variant="subtle">{{ selectedRoot.enabled !== false ? '已启用' : '已停用' }}</UBadge>
+                  <UBadge v-if="isRootWatched(selectedRoot)" color="primary" variant="subtle">自动监控</UBadge>
+                </div>
+                <p class="mt-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400" :title="selectedRoot.path">{{ selectedRoot.path || '未配置路径' }}</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-1">
+                <UButton icon="i-lucide-arrow-up" color="neutral" variant="ghost" size="xs" aria-label="上移媒体库" :disabled="selectedRootIndex <= 0" @click="moveRoot(selectedRootIndex, -1)" />
+                <UButton icon="i-lucide-arrow-down" color="neutral" variant="ghost" size="xs" aria-label="下移媒体库" :disabled="selectedRootIndex >= mediaRoots.length - 1" @click="moveRoot(selectedRootIndex, 1)" />
+                <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="xs" aria-label="删除媒体库" @click="openRemoveDialog(selectedRootIndex)" />
+                <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="xs" aria-label="关闭媒体库设置" @click="editorOpen = false" />
+              </div>
+            </div>
+
+            <div class="space-y-4 p-4">
+              <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <UFormField label="媒体库名称">
+                  <UInput v-model="selectedRoot.name" placeholder="例如：电影库 / 剧集库" class="w-full" />
+                </UFormField>
+                <UFormField label="容器内路径">
+                  <div class="flex gap-2">
+                    <UInput v-model="selectedRoot.path" placeholder="/media/movies" class="w-full min-w-0 font-mono" />
+                    <UButton label="检测" icon="i-lucide-search-check" color="neutral" variant="soft" :loading="inspectingId === selectedRoot.id" @click="inspectRoot(selectedRoot)" />
+                  </div>
+                </UFormField>
+              </div>
+
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <UButton
+                  :label="selectedRoot.isDefault ? '当前默认库' : '设为默认库'"
+                  icon="i-lucide-star"
+                  size="sm"
+                  color="primary"
+                  :variant="selectedRoot.isDefault ? 'soft' : 'ghost'"
+                  :disabled="selectedRoot.isDefault || selectedRoot.enabled === false"
+                  @click="setDefaultRoot(selectedRootIndex)"
+                />
+                <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/30">
+                  <span class="text-sm text-gray-600 dark:text-gray-300">启用</span>
+                  <USwitch v-model="selectedRoot.enabled" color="primary" :aria-label="`启用媒体库 ${selectedRoot.name}`" />
+                </div>
+                <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/30">
+                  <span class="text-sm text-gray-600 dark:text-gray-300">自动监控</span>
+                  <USwitch
+                    :model-value="isRootWatched(selectedRoot)"
+                    color="primary"
+                    :disabled="!selectedRoot.path || selectedRoot.enabled === false || watchPending[selectedRoot.id] || !isRootPathSaved(selectedRoot)"
+                    :aria-label="`自动监控 ${selectedRoot.name}`"
+                    :title="selectedRoot.enabled === false ? '停用的媒体库不会自动监控' : isRootPathSaved(selectedRoot) ? '自动处理该媒体库新增视频' : '请先保存媒体库路径，再开启自动监控'"
+                    @update:model-value="toggleRootWatch(selectedRoot, $event)"
+                  />
+                </div>
+              </div>
+
+              <div v-if="rootValidation(selectedRoot).length" class="rounded-xl border border-red-100 bg-red-50/80 px-3 py-2 text-xs leading-relaxed text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
+                <p v-for="issue in rootValidation(selectedRoot)" :key="issue">{{ issue }}</p>
+              </div>
+
+              <div v-if="inspectionStates[selectedRoot.id]" class="rounded-xl border px-3 py-2 text-xs leading-relaxed" :class="inspectionStates[selectedRoot.id]?.ok ? 'border-green-100 bg-green-50/80 text-green-700 dark:border-green-900/40 dark:bg-green-950/15 dark:text-green-300' : 'border-red-100 bg-red-50/80 text-red-700 dark:border-red-900/40 dark:bg-red-950/15 dark:text-red-300'">
+                <div class="flex flex-wrap items-center gap-2">
+                  <UIcon :name="inspectionStates[selectedRoot.id]?.ok ? 'i-lucide-badge-check' : 'i-lucide-badge-alert'" class="h-4 w-4 shrink-0" />
+                  <span class="font-medium">{{ inspectionStates[selectedRoot.id]?.ok ? '检测通过' : '检测失败' }}</span>
+                  <span class="opacity-80">{{ inspectionStates[selectedRoot.id]?.message }}</span>
+                </div>
+              </div>
+
+              <div class="rounded-xl border border-gray-200/70 bg-gray-50/70 p-3 text-xs leading-relaxed text-gray-600 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-300">
+                <p class="font-medium text-gray-800 dark:text-gray-100">路径说明</p>
+                <p class="mt-1">这里填写容器内路径，不是宿主机路径。修改路径后请重新检测。停用媒体库后首页不会显示它，自动监控也会关闭，但配置会保留。</p>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                <UButton label="关闭" color="neutral" variant="ghost" @click="editorOpen = false" />
+                <UButton label="保存媒体库" color="primary" :loading="pending" :disabled="!isDirty && !forceSaveInvalidRoots && !!persistedRootIds.size" @click="save" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </UModal>
 
     <details class="group surface-card overflow-hidden">
       <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
@@ -252,6 +264,7 @@ const inspectingId = ref('')
 const batchInspecting = ref(false)
 const forceSaveInvalidRoots = ref(false)
 const removeDialogOpen = ref(false)
+const editorOpen = ref(false)
 const removeTargetIndex = ref(-1)
 
 const { data, refresh } = await useAppConfigData()
@@ -380,6 +393,7 @@ function rootPosition(root: MediaRoot) {
 
 function selectRoot(id: string) {
   selectedRootId.value = id
+  editorOpen.value = true
 }
 
 function clearLibraryFilters() {
@@ -436,6 +450,7 @@ function addMediaRoot() {
   const id = `root-${Date.now()}`
   mediaRoots.value.push({ id, name: `媒体库 ${mediaRoots.value.length + 1}`, path: '', enabled: true, order: mediaRoots.value.length, isDefault: mediaRoots.value.length === 0 })
   selectedRootId.value = id
+  editorOpen.value = true
 }
 
 function removeMediaRoot(index: number) {
@@ -444,6 +459,7 @@ function removeMediaRoot(index: number) {
   if (removed?.id) delete inspectionStates.value[removed.id]
   if (removed?.isDefault && mediaRoots.value.length) mediaRoots.value[0]!.isDefault = true
   if (selectedRootId.value === removed?.id) selectedRootId.value = mediaRoots.value[Math.min(index, mediaRoots.value.length - 1)]?.id || ''
+  if (!mediaRoots.value.length) editorOpen.value = false
 }
 
 function openRemoveDialog(index: number) {

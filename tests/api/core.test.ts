@@ -24,7 +24,9 @@ await setup({
     DB_PATH: join(tempDir, 'subx.db'),
     VIDEO_DIR: join(tempDir, 'media'),
     SUBX_SECRET_KEY: 'api-test-secret',
-    NUXT_PUBLIC_TIME_ZONE: 'Asia/Shanghai'
+    NUXT_PUBLIC_TIME_ZONE: 'Asia/Shanghai',
+    NO_PROXY: '127.0.0.1,localhost',
+    no_proxy: '127.0.0.1,localhost'
   }
 })
 
@@ -33,6 +35,13 @@ const slowServer = createServer((req) => { req.on('close', () => slowSockets.del
 await new Promise<void>((resolve) => slowServer.listen(0, '127.0.0.1', resolve))
 const slowPort = (slowServer.address() as AddressInfo).port
 const slowBaseUrl = `http://127.0.0.1:${slowPort}`
+const webhookServer = createServer((req, res) => {
+  req.resume()
+  req.on('end', () => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok') })
+})
+await new Promise<void>((resolve) => webhookServer.listen(0, '127.0.0.1', resolve))
+const webhookPort = (webhookServer.address() as AddressInfo).port
+const webhookBaseUrl = `http://127.0.0.1:${webhookPort}`
 const passkey = createHash('sha256').update('api-test-passkey').digest('hex')
 let cookie = ''
 let readToken = ''
@@ -61,6 +70,7 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const socket of slowSockets) socket.destroy()
   await new Promise<void>((resolve) => slowServer.close(() => resolve()))
+  await new Promise<void>((resolve) => webhookServer.close(() => resolve()))
   rmSync(tempDir, { recursive: true, force: true })
 })
 
@@ -353,6 +363,34 @@ describe('core API integration', () => {
     expect(lastStatus).toBe(429)
   })
 
+  it('validates integration webhook tokens and test events', async () => {
+    const testEvent = await apiFetch('/api/integrations/sonarr?token=hook-token-123456', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ eventType: 'Test' })
+    })
+    expect(testEvent.status).toBe(200)
+    expect(await testEvent.json()).toMatchObject({ ok: true, test: true, source: 'sonarr' })
+
+    const invalid = await apiFetch('/api/integrations/sonarr?token=wrong-token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ eventType: 'Test' })
+    })
+    expect(invalid.status).toBe(401)
+  })
+
+  it('opens and closes the SSE progress stream', async () => {
+    const controller = new AbortController()
+    const response = await apiFetch('/api/sse/progress?taskId=missing-task', {
+      headers: { cookie },
+      signal: controller.signal
+    })
+    expect(response.status).toBe(200)
+    expect(String(response.headers.get('content-type') || '')).toContain('text/event-stream')
+    controller.abort()
+  })
+
   it('supports session status, login and logout', async () => {
     const session = await apiFetch('/api/auth/session', { headers: { cookie } })
     expect(session.status).toBe(200)
@@ -425,7 +463,7 @@ describe('core API integration', () => {
         type: 'webhook',
         name: 'API Test Webhook',
         enabled: false,
-        config: { url: 'https://example.com/subx-hook', method: 'POST' }
+        config: { url: `${webhookBaseUrl}/hook`, method: 'POST' }
       })
     })
     expect(created.status).toBe(200)
@@ -438,9 +476,13 @@ describe('core API integration', () => {
     const channels = (await listed.json() as any).channels
     expect(channels.some((item: any) => item.id === channel.id)).toBe(true)
 
+    const tested = await apiFetch(`/api/notification-channels/${channel.id}/test`, { method: 'POST', headers: { cookie } })
+    expect(tested.status).toBe(200)
+    expect(await tested.json()).toMatchObject({ ok: true })
+
     const deliveries = await apiFetch('/api/notification-deliveries?limit=10', { headers: { cookie } })
     expect(deliveries.status).toBe(200)
-    expect(Array.isArray((await deliveries.json() as any).deliveries)).toBe(true)
+    expect((await deliveries.json() as any).deliveries.some((item: any) => item.channelId === channel.id && item.status === 'sent')).toBe(true)
 
     const patched = await apiFetch(`/api/notification-channels/${channel.id}`, {
       method: 'PATCH',
@@ -449,7 +491,7 @@ describe('core API integration', () => {
         type: 'webhook',
         name: 'API Test Webhook Updated',
         enabled: false,
-        config: { url: 'https://example.com/subx-hook', method: 'POST' }
+        config: { url: `${webhookBaseUrl}/hook`, method: 'POST' }
       })
     })
     expect(patched.status).toBe(200)
