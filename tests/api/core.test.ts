@@ -16,6 +16,9 @@ mkdirSync(join(tempDir, 'media'), { recursive: true })
 writeFileSync(join(tempDir, 'media', 'Demo.zh.srt'), '1\n00:00:01,000 --> 00:00:02,000\nHello\n\n2\n00:00:02,000 --> 00:00:03,000\nWorld\n', 'utf-8')
 const slowEntries = Array.from({ length: 20 }, (_, index) => `${index + 1}\n00:00:${String(index).padStart(2, '0')},000 --> 00:00:${String(index + 1).padStart(2, '0')},000\nLine ${index + 1}\n`).join('\n')
 writeFileSync(join(tempDir, 'media', 'Slow.zh.srt'), slowEntries, 'utf-8')
+mkdirSync(join(tempDir, 'media', 'DeepSearch'), { recursive: true })
+writeFileSync(join(tempDir, 'media', 'DeepSearch', 'Nested.Movie.mkv'), '', 'utf-8')
+writeFileSync(join(tempDir, 'media', 'DeepSearch', 'Nested.Movie.zh.srt'), '1\n00:00:00,000 --> 00:00:01,000\nNested\n', 'utf-8')
 
 await setup({
   rootDir,
@@ -183,6 +186,17 @@ describe('core API integration', () => {
     })
     expect(exported.status).toBe(200)
     expect(await exported.json()).toMatchObject({ success: true })
+  })
+
+  it('searches the whole media root including nested files', async () => {
+    const result = await apiFetch('/api/files/search?rootId=default&q=Nested', { headers: { cookie } })
+    expect(result.status).toBe(200)
+    const body = await result.json() as any
+    expect(body.files.some((item: any) => item.path === 'DeepSearch/Nested.Movie.mkv')).toBe(true)
+    expect(body.files.some((item: any) => item.path === 'DeepSearch/Nested.Movie.zh.srt')).toBe(true)
+
+    const tooShort = await apiFetch('/api/files/search?rootId=default&q=x', { headers: { cookie } })
+    expect(tooShort.status).toBe(400)
   })
 
   it('lists media files and blocks path traversal', async () => {

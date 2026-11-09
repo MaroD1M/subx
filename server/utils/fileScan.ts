@@ -8,6 +8,7 @@ export const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.ts', '.m2ts'
 export const SUBTITLE_EXTENSIONS = ['.srt', '.ass', '.ssa', '.vtt']
 const MAX_SCAN_FILES = 5000
 const MAX_SCAN_DEPTH = 24
+const MAX_SEARCH_ENTRIES = 20000
 
 export interface BatchFileEntry {
   path: string
@@ -186,4 +187,71 @@ export async function scanMediaFolder(rootId: string, folderPath = '') {
     total: files.length,
     truncated
   }
+}
+
+
+export async function searchMediaFiles(rootId: string, query: string, limit = 200) {
+  const keyword = String(query || '').trim().toLowerCase()
+  if (keyword.length < 2) {
+    return { rootId, query: keyword, files: [] as ScannedFile[], total: 0, truncated: false }
+  }
+  const root = await getMediaRoot(rootId)
+  const rootAbsolute = normalize(resolve(root.path))
+  const startAbsolute = await resolveInsideRoot(rootAbsolute, '.', { allowMissing: false })
+  const maxResults = Math.min(500, Math.max(1, Number(limit) || 200))
+  const files: ScannedFile[] = []
+  let scanned = 0
+  let truncated = false
+
+  const walk = async (absoluteDir: string, depth: number) => {
+    if (truncated || depth > MAX_SCAN_DEPTH) return
+    let entries
+    try {
+      entries = await readdir(absoluteDir, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (truncated) return
+      if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue
+      const absolutePath = join(absoluteDir, entry.name)
+      let info
+      try {
+        info = await lstat(absolutePath)
+      } catch {
+        continue
+      }
+      if (info.isSymbolicLink()) continue
+      if (info.isDirectory()) {
+        await walk(absolutePath, depth + 1)
+        continue
+      }
+      if (!isVideoFile(entry.name) && !isSubtitleFile(entry.name)) continue
+      scanned += 1
+      if (scanned > MAX_SEARCH_ENTRIES) {
+        truncated = true
+        return
+      }
+      const relPath = relative(rootAbsolute, absolutePath).replaceAll('\\', '/')
+      const haystack = `${entry.name} ${relPath}`.toLowerCase()
+      if (!haystack.includes(keyword)) continue
+      files.push({
+        name: entry.name,
+        path: relPath,
+        isDir: false,
+        rootId: root.id,
+        rootName: root.name,
+        size: info.size
+      })
+      if (files.length >= maxResults) {
+        truncated = true
+        return
+      }
+    }
+  }
+
+  await walk(startAbsolute, 0)
+  files.sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'))
+  return { rootId: root.id, rootName: root.name, query: keyword, files, total: files.length, truncated }
 }
