@@ -27,6 +27,8 @@
 - 新增通知失败重试测试，覆盖失败后回到 pending、达到最大次数后标记 failed、processing 卡住恢复和禁用渠道跳过。
 - 新增 ReviewEntryCard 组件测试，覆盖状态/质量标签、最终文本编辑和使用原文事件。
 - 新增 SettingsStoragePanel 组件测试，覆盖存储统计渲染和清理确认弹窗。
+- 新增 AutomationTokensPanel 组件测试，覆盖 Token 列表、有效/撤销状态和撤销确认。
+- 新增强制事件过滤和通知去重测试，以及任务错误分类测试。
 - PostgreSQL live 测试增加双连接并发迁移，验证 advisory lock 与幂等执行。
 - 引入 Vue Test Utils + happy-dom，新增任务日志面板组件测试，`npm test` 现在同时运行后端与组件测试。
 - 新增 `npm run test:api`，用 Nuxt Test Utils 启动真实服务，覆盖健康检查、OpenAPI、认证登录/登出、配置校验与密钥保留、API Token scope/审计/撤销、任务创建、下载、重试、取消、幂等复用、OCR 原始字幕下载、核对导出、文件创建/重命名/删除、监控目录、存储接口、通知渠道、通知实际发送、Webhook Token 校验、真实 Webhook 回调入队与去重、路径映射失败记录、任务失败与单条历史删除、SSE 建连与取消事件、请求体上限、接口限速和路径穿越拦截。
