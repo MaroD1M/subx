@@ -150,6 +150,21 @@ test('media libraries visual and accessibility', async ({ page }) => {
   await expectNoSeriousA11y(page)
 })
 
+
+test('media library cards support drag sorting', async ({ page }) => {
+  await page.goto('/media-libraries')
+  await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+  await page.getByRole('button', { name: '新增媒体库' }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByPlaceholder('例如：电影库 / 剧集库').fill('Drag Library')
+  await dialog.getByPlaceholder('/media/movies').fill('/media/drag-test')
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+
+  const cards = page.getByTestId('media-root-card')
+  await expect(cards).toHaveCount(2)
+  await cards.filter({ hasText: 'Drag Library' }).dragTo(cards.first())
+  await expect(cards.first()).toContainText('Drag Library')
+})
 test('review proofread cache is actionable and filterable', async ({ page }) => {
   seedProofreadCache()
   let proofreadPostCount = 0

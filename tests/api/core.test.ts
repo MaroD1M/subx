@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import Database from 'better-sqlite3'
 import { createServer } from 'http'
 import type { AddressInfo } from 'net'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
@@ -10,6 +11,7 @@ import { setup, url } from '@nuxt/test-utils/e2e'
 
 const rootDir = fileURLToPath(new URL('../..', import.meta.url))
 const tempDir = mkdtempSync(join(tmpdir(), 'subx-api-'))
+const dbPath = join(tempDir, 'subx.db')
 mkdirSync(join(tempDir, 'media'), { recursive: true })
 writeFileSync(join(tempDir, 'media', 'Demo.zh.srt'), '1\n00:00:01,000 --> 00:00:02,000\nHello\n\n2\n00:00:02,000 --> 00:00:03,000\nWorld\n', 'utf-8')
 const slowEntries = Array.from({ length: 20 }, (_, index) => `${index + 1}\n00:00:${String(index).padStart(2, '0')},000 --> 00:00:${String(index + 1).padStart(2, '0')},000\nLine ${index + 1}\n`).join('\n')
@@ -21,7 +23,7 @@ await setup({
   build: true,
   port: 3200,
   env: {
-    DB_PATH: join(tempDir, 'subx.db'),
+    DB_PATH: dbPath,
     VIDEO_DIR: join(tempDir, 'media'),
     SUBX_SECRET_KEY: 'api-test-secret',
     NUXT_PUBLIC_TIME_ZONE: 'Asia/Shanghai',
@@ -137,6 +139,25 @@ describe('core API integration', () => {
     expect(content).toContain('World')
   })
 
+  it('downloads OCR original subtitles from transcription runs', async () => {
+    const db = new Database(dbPath)
+    db.pragma('busy_timeout = 5000')
+    db.prepare(`
+      INSERT INTO tasks (task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, status)
+      VALUES (?, ?, ?, 'ocr', 0, 'test-model', 'zh-CN', 'original', 'done')
+    `).run('ocr-download-task', 'Demo.zh.srt', 'default')
+    const run = db.prepare("INSERT INTO transcription_runs (task_id, engine, model, language) VALUES (?, 'rapidocr', 'test', 'zh')").run('ocr-download-task')
+    db.prepare('INSERT INTO asr_segments (run_id, start_ms, end_ms, text) VALUES (?, ?, ?, ?)').run(Number(run.lastInsertRowid), 0, 1000, 'OCR line one')
+    db.prepare('INSERT INTO asr_segments (run_id, start_ms, end_ms, text) VALUES (?, ?, ?, ?)').run(Number(run.lastInsertRowid), 1000, 2000, 'OCR line two')
+    db.close()
+
+    const download = await apiFetch('/api/tasks/ocr-download-task/download-original', { headers: { cookie } })
+    expect(download.status).toBe(200)
+    const content = await download.text()
+    expect(content).toContain('OCR line one')
+    expect(content).toContain('OCR line two')
+  })
+
   it('loads and updates review entries for a completed task', async () => {
     expect(completedTaskId).toBeTruthy()
     const review = await apiFetch(`/api/tasks/${completedTaskId}/review`, { headers: { cookie } })
@@ -208,7 +229,8 @@ describe('core API integration', () => {
         defaultModel: 'test-model',
         maxRetries: 0,
         concurrency: 1,
-        translationMode: 'non_stream'
+        translationMode: 'non_stream',
+        integrationWebhookToken: 'hook-token-123456'
       })
     })
     expect(configUpdate.status).toBe(200)
@@ -246,9 +268,57 @@ describe('core API integration', () => {
     expect(duplicateBody.taskId).toBe(taskId)
     expect(duplicateBody.reusedActive).toBe(1)
 
+    const webhookBody = JSON.stringify({ eventType: 'Download', episodeFile: { relativePath: 'Demo.zh.srt' } })
+    const webhookFirst = await apiFetch('/api/integrations/sonarr?token=hook-token-123456', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: webhookBody
+    })
+    expect(webhookFirst.status).toBe(200)
+    const webhookFirstBody = await webhookFirst.json() as any
+    expect(webhookFirstBody).toMatchObject({ ok: true })
+    expect(webhookFirstBody.deduped).not.toBe(true)
+    expect(webhookFirstBody.taskId).toBeTruthy()
+
+    const webhookSecond = await apiFetch('/api/integrations/sonarr?token=hook-token-123456', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: webhookBody
+    })
+    expect(webhookSecond.status).toBe(200)
+    expect(await webhookSecond.json()).toMatchObject({ ok: true, deduped: true, taskId: webhookFirstBody.taskId })
+
+    await apiFetch(`/api/tasks/${webhookFirstBody.taskId}/cancel`, { method: 'POST', headers: { cookie } })
+
+    const sseController = new AbortController()
+    const sseResponse = await apiFetch(`/api/sse/progress?taskId=${taskId}`, {
+      headers: { cookie },
+      signal: sseController.signal
+    })
+    expect(sseResponse.status).toBe(200)
+    const reader = sseResponse.body!.getReader()
+    const sseTextPromise = (async () => {
+      let text = ''
+      const decoder = new TextDecoder()
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        text += decoder.decode(value, { stream: true })
+        if (text.includes('event: cancelled')) break
+      }
+      return text
+    })()
+
     const cancelled = await apiFetch(`/api/tasks/${taskId}/cancel`, { method: 'POST', headers: { cookie } })
     expect(cancelled.status).toBe(200)
     expect(await cancelled.json()).toMatchObject({ success: true, status: 'cancelled' })
+
+    const sseText = await Promise.race([
+      sseTextPromise,
+      new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 5000))
+    ])
+    expect(sseText).toContain('event: cancelled')
+    sseController.abort()
 
     let finalStatus = ''
     for (let attempt = 0; attempt < 40; attempt++) {

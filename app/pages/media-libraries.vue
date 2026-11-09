@@ -63,6 +63,7 @@
         <button
           v-for="root in filteredMediaRoots"
           :key="root.id"
+          data-testid="media-root-card"
           type="button"
           draggable="true"
           class="group flex min-h-[164px] flex-col rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:bg-gray-950/60 dark:hover:border-primary-900/50"
