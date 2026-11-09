@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'fs'
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -20,6 +20,19 @@ describe('acquireOutputLocks', () => {
     release()
     const releaseAgain = acquireOutputLocks([output])
     releaseAgain()
+  })
+
+  it('replaces stale lock files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subx-lock-'))
+    dirs.push(dir)
+    const output = join(dir, 'Stale.srt')
+    const lockPath = `${output}.subx-output.lock`
+    writeFileSync(lockPath, JSON.stringify({ pid: 999999, at: 0, target: output }))
+    const old = new Date(Date.now() - 7 * 60 * 60 * 1000)
+    utimesSync(lockPath, old, old)
+
+    const release = acquireOutputLocks([output])
+    release()
   })
 
   it('releases all acquired locks when one path fails', () => {
