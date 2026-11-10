@@ -19,6 +19,11 @@ const mockDb = {
           return {
             task_id: taskId,
             file_path: '/tmp/demo.srt',
+            started_at: null,
+            step_started_at: null,
+            finished_at: null,
+            paused_at: null,
+            paused_total_ms: 0,
             root_id: 'root-1',
             source_type: 'external',
             track_index: 0,
@@ -52,7 +57,7 @@ const mockDb = {
         }
 
         if (sql.includes('UPDATE tasks SET status = ?, progress = ?')) {
-          const [status, progress, , stepProgress, stepMessage, error, taskId, expectedStatus] = args
+          const [status, progress, , stepProgress, stepMessage, error, _startedAt, _stepStartedAt, _finishedAt, _pausedAt, _pausedTotalMs, taskId, expectedStatus] = args
           const current = dbState.get(taskId) ?? { status: 'queued', progress: 0, error: null }
           if (expectedStatus !== undefined && current.status !== expectedStatus) return { changes: 0 }
           dbState.set(taskId, { ...current, status: String(status), progress: Number(progress), error: error == null ? null : String(error), stepProgress: Number(stepProgress), stepMessage: stepMessage == null ? null : String(stepMessage) })
@@ -141,6 +146,19 @@ afterEach(() => {
 })
 
 describe('Task cancellation guards', () => {
+  it('records task start and stage timing on status transitions', async () => {
+    dbState.set('task-timing', { status: 'queued', progress: 0, error: null })
+
+    await TaskService.updateStatus('task-timing', 'probing', 5, {
+      stepMessage: '正在分析媒体'
+    })
+
+    const progress = emitted.find(entry => entry.event === 'progress' && entry.payload.taskId === 'task-timing')
+    expect(progress?.payload.startedAt).toBeTruthy()
+    expect(progress?.payload.stepStartedAt).toBeTruthy()
+    expect(progress?.payload.finishedAt).toBeNull()
+  })
+
   it('does not overwrite cancelled tasks with later progress updates', async () => {
     dbState.set('task-cancelled', { status: 'cancelled', progress: 42, error: '用户取消任务' })
 

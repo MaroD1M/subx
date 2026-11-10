@@ -28,7 +28,7 @@ describe('database migrations', () => {
     expect(columnNames(db, 'task_review_entries')).toEqual(expect.arrayContaining(['sort_order', 'quality_score', 'quality_issues']))
     expect(columnNames(db, 'task_proofread_cache')).toEqual(expect.arrayContaining(['fingerprint', 'result_json']))
     expect(db.prepare("SELECT sort_order FROM task_review_entries WHERE subtitle_id = '12'").get()).toEqual({ sort_order: 12 })
-    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }])
+    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }])
     expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='asr_checkpoints'").get()).toBeTruthy()
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_task_logs_task_id'").get()).toBeTruthy()
@@ -40,7 +40,9 @@ describe('database migrations', () => {
     expect(MIGRATIONS.some(migration => migration.version === 5)).toBe(true)
     expect(MIGRATIONS.some(migration => migration.version === 6)).toBe(true)
     expect(MIGRATIONS.some(migration => migration.version === 7)).toBe(true)
+    expect(MIGRATIONS.some(migration => migration.version === 8)).toBe(true)
     expect(columnNames(db, 'tasks')).toContain('subtitle_style_json')
+    expect(columnNames(db, 'tasks')).toEqual(expect.arrayContaining(['started_at', 'step_started_at', 'finished_at', 'paused_at', 'paused_total_ms']))
     db.close()
   })
 
@@ -59,7 +61,7 @@ describe('database migrations', () => {
 
     expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='asr_checkpoints'").get()).toBeTruthy()
-    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 7 })
+    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 8 })
     db.close()
   })
   it('repairs a database already marked as version 5 without the checkpoint column', () => {
@@ -76,7 +78,34 @@ describe('database migrations', () => {
     runMigrations(db, 'sqlite')
 
     expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
-    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 7 })
+    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 8 })
+    db.close()
+  })
+
+  it('backfills timing fields for existing tasks', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE tasks (
+        task_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'queued',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    for (const version of [1, 2, 3, 4, 5, 6, 7]) {
+      db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(version)
+    }
+    db.prepare("INSERT INTO tasks (task_id, status, created_at, updated_at) VALUES ('done-task', 'done', '2026-01-01 00:00:00', '2026-01-01 00:10:00')").run()
+    db.prepare("INSERT INTO tasks (task_id, status, created_at, updated_at) VALUES ('queued-task', 'queued', '2026-01-01 00:00:00', '2026-01-01 00:00:00')").run()
+
+    runMigrations(db, 'sqlite')
+
+    expect(db.prepare("SELECT started_at, finished_at FROM tasks WHERE task_id = 'done-task'").get()).toEqual({
+      started_at: '2026-01-01 00:00:00',
+      finished_at: '2026-01-01 00:10:00'
+    })
+    expect(db.prepare("SELECT started_at FROM tasks WHERE task_id = 'queued-task'").get()).toEqual({ started_at: null })
     db.close()
   })
 

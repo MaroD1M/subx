@@ -78,7 +78,12 @@ export default defineEventHandler(async (event) => {
       totalChunks: task.total_chunks,
       completedChunks: task.done_chunks,
       createdAt: toUtcIsoString(task.created_at),
-      updatedAt: toUtcIsoString(task.updated_at)
+      updatedAt: toUtcIsoString(task.updated_at),
+      startedAt: task.started_at ? toUtcIsoString(task.started_at) : undefined,
+      stepStartedAt: task.step_started_at ? toUtcIsoString(task.step_started_at) : undefined,
+      finishedAt: task.finished_at ? toUtcIsoString(task.finished_at) : undefined,
+      pausedAt: task.paused_at ? toUtcIsoString(task.paused_at) : undefined,
+      pausedTotalMs: Number(task.paused_total_ms || 0)
     }
   }))
 

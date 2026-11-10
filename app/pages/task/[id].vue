@@ -39,6 +39,8 @@
             </div>
             <UProgress :model-value="stepProgressValue" aria-label="当前阶段进度" size="sm" :color="task.step === 'error' || task.step === 'cancelled' ? 'error' : 'primary'" />
           </div>
+
+          <TaskTimingCard :task="task" :time-zone="timeZone" />
         </div>
 
         <div v-if="(task.step === 'error' || task.step === 'cancelled') && task.error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-2xl flex items-start gap-3">
@@ -165,11 +167,25 @@
         </div>
 
         <div v-show="activeTab === 'asr'" class="space-y-4">
-          <div v-if="asrLoading" class="rounded-2xl border border-gray-200/70 bg-white p-4 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-950/70">
+          <div v-if="asrLoading && !asrRun && !asrPartial" class="rounded-2xl border border-gray-200/70 bg-white p-4 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-950/70">
             正在加载 ASR 识别结果...
           </div>
-          <template v-else-if="asrRun">
-            <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <template v-else-if="asrRun || asrPartial">
+            <div v-if="asrPartial && !asrRun" class="rounded-2xl border border-primary-100 bg-primary-50/60 p-4 dark:border-primary-900/40 dark:bg-primary-950/20">
+              <div class="flex items-start gap-3">
+                <UIcon :name="asrPartial.active ? 'i-lucide-loader-2' : 'i-lucide-database'" class="mt-0.5 h-5 w-5 shrink-0" :class="asrPartial.active ? 'animate-spin text-primary-600 dark:text-primary-400' : 'text-gray-500'" />
+                <div class="min-w-0 space-y-1">
+                  <p class="text-sm font-semibold text-primary-900 dark:text-primary-100">{{ asrPartialStatusText }}</p>
+                  <p class="text-xs leading-5 text-primary-800/80 dark:text-primary-200/80">
+                    已完成 {{ asrPartial.doneChunks || 0 }} 个分段，已识别 {{ asrPartial.totalSegments || asrSegments.length }} 条。
+                    <span v-if="asrPartial.updatedAt">最后更新 {{ formatDateTime(asrPartial.updatedAt, timeZone) }}。</span>
+                  </p>
+                  <p v-if="asrPartial.active" class="text-xs leading-5 text-primary-700/75 dark:text-primary-300/75">已识别内容会随分段完成持续追加；当前分段内部进度请查看上方任务进度。</p>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="asrRun" class="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div class="surface-card p-3">
                 <p class="stat-label">引擎 / 模型</p>
                 <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrRun.engine }} · {{ asrRun.model }}</p>
@@ -190,15 +206,37 @@
               </div>
             </div>
 
+            <div v-else class="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div class="surface-card p-3">
+                <p class="stat-label">识别状态</p>
+                <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrPartialStatusText }}</p>
+              </div>
+              <div class="surface-card p-3">
+                <p class="stat-label">已完成分段</p>
+                <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrPartial?.doneChunks || 0 }}</p>
+              </div>
+              <div class="surface-card p-3">
+                <p class="stat-label">已识别片段</p>
+                <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrPartial?.totalSegments || asrSegments.length }} 条</p>
+              </div>
+              <div class="surface-card p-3">
+                <p class="stat-label">最后更新</p>
+                <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrPartial?.updatedAt ? formatDateTime(asrPartial.updatedAt, timeZone) : '-' }}</p>
+              </div>
+            </div>
+
             <div class="rounded-2xl border border-gray-200/70 bg-white p-4 dark:border-gray-800 dark:bg-gray-950/70">
               <div class="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">识别分段</p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">最多展示前 500 条，低置信度会标黄。</p>
+                  <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">{{ asrRun ? '识别分段' : '实时识别结果' }}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ asrRun ? '最多展示前 500 条，低置信度会标黄。' : '识别中会随已完成分段追加，最多展示前 500 条。' }}</p>
                 </div>
                 <UBadge color="neutral" variant="subtle">{{ asrSegments.length }} 条</UBadge>
               </div>
-              <div class="max-h-[50vh] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+              <div v-if="!asrSegments.length" class="rounded-xl border border-dashed border-gray-200 px-3 py-8 text-center text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                等待第一个识别分段完成...
+              </div>
+              <div v-else class="max-h-[50vh] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                 <div v-for="segment in asrSegments" :key="segment.id" class="rounded-xl border px-3 py-2" :class="Number(segment.confidence) < 0.6 ? 'border-amber-200 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/15' : 'border-gray-100 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-900/30'">
                   <div class="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500 dark:text-gray-400">
                     <span>{{ (Number(segment.startMs) / 1000).toFixed(2) }}s → {{ (Number(segment.endMs) / 1000).toFixed(2) }}s</span>
@@ -213,7 +251,7 @@
             </div>
           </template>
           <div v-else class="rounded-2xl border border-gray-200/70 bg-white p-4 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-950/70">
-            暂无 ASR 识别结果。
+            {{ ['extracting_audio', 'transcribing', 'paused'].includes(String(task.step || '')) ? '正在等待第一个 ASR 识别分段完成...' : '暂无 ASR 识别结果。' }}
           </div>
         </div>
 
@@ -418,8 +456,9 @@
 
 <script setup lang="ts">
 definePageMeta({ key: route => String(route.params.id || '') })
-import { formatClock as formatClockInZone } from '~~/shared/time'
+import { formatClock as formatClockInZone, formatDateTime } from '~~/shared/time'
 import { reviewReasonLabel } from '~~/shared/reviewLabels'
+import TaskTimingCard from '~/components/TaskTimingCard.vue'
 
 const route = useRoute()
 const timeZone = useTimeZone()
@@ -431,14 +470,16 @@ const tabs = computed<Array<{ label: string, value: 'overview' | 'logs' | 'diagn
     { label: '日志', value: 'logs' as const },
     { label: '诊断', value: 'diagnostics' as const }
   ]
-  if (['asr', 'ocr'].includes(task.value.sourceType)) {
+  if (['asr', 'ocr'].includes(task.value.sourceType) || ['extracting_audio', 'transcribing'].includes(String(task.value.step || ''))) {
     list.push({ label: task.value.sourceType === 'ocr' ? 'OCR 详情' : '语音识别', value: 'asr' as const })
   }
   return list
 })
 const asrLoading = ref(false)
 const asrRun = ref<any>(null)
+const asrPartial = ref<any>(null)
 const asrSegments = ref<any[]>([])
+let asrPollTimer: ReturnType<typeof setInterval> | null = null
 const qualityRun = ref<any>(null)
 const qualityThreshold = ref(0.7)
 
@@ -466,6 +507,13 @@ const task = ref<any>({
   contentTitle: '',
   contentBackground: '',
   customInstructions: '',
+  createdAt: '',
+  updatedAt: '',
+  startedAt: '',
+  stepStartedAt: '',
+  finishedAt: '',
+  pausedAt: '',
+  pausedTotalMs: 0,
   reviewDiagnostics: { totalEntries: 0, needsReview: 0, issues: [] as Array<{ reason: string, count: number, subtitleIds: string[] }> }
 })
 
@@ -906,24 +954,79 @@ const stepIcon = computed(() => {
 onUnmounted(() => {
   if (eventSource.value) eventSource.value.close()
   if (reconnectTimer.value) clearTimeout(reconnectTimer.value)
+  stopAsrPolling()
 })
 
-async function loadAsrDetails() {
-  if (!['asr', 'ocr'].includes(task.value.sourceType) || asrLoading.value) return
-  asrLoading.value = true
+const ASR_POLL_MS = 8_000
+const isTerminalTask = computed(() => ['done', 'error', 'cancelled', 'review'].includes(String(task.value.step || '')))
+const asrPartialStatusText = computed(() => {
+  if (asrRun.value) return '识别完成'
+  if (task.value.step === 'paused') return '语音识别已暂停'
+  if (isTerminalTask.value) return '语音识别已结束'
+  if (task.value.step === 'extracting_audio') return '正在准备音频'
+  return '语音识别进行中'
+})
+
+function canLoadAsrDetails() {
+  return ['asr', 'ocr'].includes(task.value.sourceType)
+    || ['extracting_audio', 'transcribing', 'paused'].includes(String(task.value.step || ''))
+}
+
+function shouldPollAsrDetails() {
+  if (activeTab.value !== 'asr') return false
+  if (!canLoadAsrDetails()) return false
+  return ['extracting_audio', 'transcribing', 'paused'].includes(String(task.value.step || ''))
+}
+
+function stopAsrPolling() {
+  if (asrPollTimer) {
+    clearInterval(asrPollTimer)
+    asrPollTimer = null
+  }
+}
+
+function startAsrPolling() {
+  stopAsrPolling()
+  if (!shouldPollAsrDetails()) return
+  asrPollTimer = setInterval(() => {
+    if (document.hidden) return
+    if (!shouldPollAsrDetails()) {
+      stopAsrPolling()
+      return
+    }
+    void loadAsrDetails(true)
+  }, ASR_POLL_MS)
+}
+
+async function loadAsrDetails(silent = false) {
+  if (!canLoadAsrDetails() || (silent && asrLoading.value)) return
+  if (!silent) asrLoading.value = true
   try {
     const result: any = await $fetch(`/api/tasks/${taskId}/asr`)
     asrRun.value = result?.run || null
+    asrPartial.value = result?.partial || null
     asrSegments.value = result?.segments || []
   } catch (e) {
-    console.warn('[Task] Failed to load ASR details', e)
+    if (!silent) console.warn('[Task] Failed to load ASR details', e)
   } finally {
-    asrLoading.value = false
+    if (!silent) asrLoading.value = false
   }
 }
 
 watch(activeTab, (tab) => {
-  if (tab === 'asr') loadAsrDetails()
+  if (tab === 'asr') {
+    void loadAsrDetails()
+    startAsrPolling()
+  } else {
+    stopAsrPolling()
+  }
+})
+
+watch(() => [task.value.step, task.value.sourceType], () => {
+  if (activeTab.value !== 'asr') return
+  if (canLoadAsrDetails()) void loadAsrDetails(true)
+  if (shouldPollAsrDetails()) startAsrPolling()
+  else stopAsrPolling()
 })
 
 onMounted(async () => {
@@ -961,7 +1064,14 @@ onMounted(async () => {
         rootName: initialTask.rootName || '',
         contentTitle: initialTask.contentTitle || '',
         contentBackground: initialTask.contentBackground || '',
-        customInstructions: initialTask.customInstructions || ''
+        customInstructions: initialTask.customInstructions || '',
+        createdAt: initialTask.createdAt || '',
+        updatedAt: initialTask.updatedAt || '',
+        startedAt: initialTask.startedAt || '',
+        stepStartedAt: initialTask.stepStartedAt || '',
+        finishedAt: initialTask.finishedAt || '',
+        pausedAt: initialTask.pausedAt || '',
+        pausedTotalMs: Number(initialTask.pausedTotalMs || 0)
       }
     }
 
@@ -1011,6 +1121,17 @@ onMounted(async () => {
         completedChunks: snapshot.completedChunks || 0,
         totalChunks: snapshot.totalChunks || 0,
         error: snapshot.error || null,
+        sourceType: snapshot.sourceType || task.value.sourceType,
+        sourceLanguage: snapshot.sourceLanguage || task.value.sourceLanguage,
+        asrConfidence: snapshot.asrConfidence ?? task.value.asrConfidence,
+        asrRunId: snapshot.asrRunId ?? task.value.asrRunId,
+        createdAt: snapshot.createdAt || task.value.createdAt,
+        updatedAt: snapshot.updatedAt || task.value.updatedAt,
+        startedAt: snapshot.startedAt || task.value.startedAt,
+        stepStartedAt: snapshot.stepStartedAt || task.value.stepStartedAt,
+        finishedAt: snapshot.finishedAt || task.value.finishedAt,
+        pausedAt: snapshot.pausedAt || task.value.pausedAt,
+        pausedTotalMs: Number(snapshot.pausedTotalMs ?? task.value.pausedTotalMs ?? 0),
         currentText: ['done', 'error', 'review', 'cancelled'].includes(String(snapshot.status)) ? null : task.value.currentText
       }
       return ['done', 'error', 'review', 'cancelled'].includes(String(snapshot.status))
@@ -1063,6 +1184,7 @@ onMounted(async () => {
 
       if (data.step && data.step !== lastLoggedStep) {
         lastLoggedStep = data.step
+        void syncTaskSnapshot()
         if (!data.log) {
           const stepNames = {
             queued: '入队',

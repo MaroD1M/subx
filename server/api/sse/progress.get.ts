@@ -40,7 +40,8 @@ export default defineEventHandler((event) => {
     function writeInitialSnapshot() {
         try {
             const row = db.prepare(`
-                SELECT status, progress, step_progress, step_message, done_chunks, total_chunks, error
+                SELECT status, progress, step_progress, step_message, done_chunks, total_chunks, error,
+                       started_at, step_started_at, finished_at, paused_at, paused_total_ms
                 FROM tasks WHERE task_id = ?
             `).get(taskId) as any
             if (!row) return
@@ -53,6 +54,11 @@ export default defineEventHandler((event) => {
                 completedChunks: Number(row.done_chunks || 0),
                 totalChunks: Number(row.total_chunks || 0),
                 error: row.error || null,
+                startedAt: row.started_at || null,
+                stepStartedAt: row.step_started_at || null,
+                finishedAt: row.finished_at || null,
+                pausedAt: row.paused_at || null,
+                pausedTotalMs: Number(row.paused_total_ms || 0),
                 snapshot: true
             })
         } catch { /* keep the stream alive */ }

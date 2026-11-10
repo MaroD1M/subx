@@ -106,6 +106,11 @@ export interface TranslationTask {
   completedChunks: number
   createdAt: string            // ISO 8601
   updatedAt: string
+  startedAt?: string           // 实际开始处理时间
+  stepStartedAt?: string       // 当前阶段开始时间
+  finishedAt?: string          // 处理结束时间（含 review）
+  pausedAt?: string            // 当前暂停开始时间
+  pausedTotalMs?: number       // 累计暂停时长
   error?: string
   outputPath?: string          // 输出文件路径
 }

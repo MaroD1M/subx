@@ -214,11 +214,13 @@ export async function transcribeChunked(options: {
   signal?: AbortSignal
   ensureNotPaused?: () => Promise<void>
   onProgress?: (progress: number, message: string) => void
+  onCheckpointKey?: (checkpointKey: string) => void
 }) {
-  const { audioPath, sourcePath, chunkSeconds = DEFAULT_CHUNK_SECONDS, overlapSeconds = DEFAULT_OVERLAP_SECONDS, task, asrOptions, taskId, tempDir, signal, ensureNotPaused, onProgress } = options
+  const { audioPath, sourcePath, chunkSeconds = DEFAULT_CHUNK_SECONDS, overlapSeconds = DEFAULT_OVERLAP_SECONDS, task, asrOptions, taskId, tempDir, signal, ensureNotPaused, onProgress, onCheckpointKey } = options
   const duration = await probeDurationSeconds(audioPath)
   const plan = buildAsrChunkPlan(duration, chunkSeconds, overlapSeconds)
   const checkpointKey = await buildAsrCheckpointKey(task, asrOptions, audioPath, sourcePath, chunkSeconds, overlapSeconds)
+  onCheckpointKey?.(checkpointKey)
   const checkpoints = loadCheckpoints(checkpointKey)
   const results: Array<{ plan: ChunkPlan, result: AsrResult, reused: boolean }> = []
   let reusable = 0

@@ -262,6 +262,14 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
       tempDir,
       signal,
       ensureNotPaused: () => ensureTaskNotPaused(taskId),
+      onCheckpointKey: (checkpointKey) => {
+        task.asrCheckpointKey = checkpointKey
+        try {
+          db.prepare('UPDATE tasks SET asr_checkpoint_key = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(checkpointKey, taskId)
+        } catch (error) {
+          console.warn('[ASR] Failed to persist checkpoint key early:', error)
+        }
+      },
       onProgress: (progress, message) => {
         const stepProgress = Math.max(0, Math.min(100, Number(progress) || 0))
         void updateStatus(taskId, 'transcribing', 16 + Math.round(stepProgress * 0.12), {

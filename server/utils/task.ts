@@ -11,7 +11,7 @@ import { existsSync, rmSync, readdirSync } from 'fs'
 import { EventEmitter } from 'events'
 import { useDb } from './db'
 import { apiError } from './apiError'
-import { toUtcIsoString } from '~~/shared/time'
+import { parseTimestamp, toUtcIsoString } from '~~/shared/time'
 import { SubtitleService } from './subtitle'
 import { TranslationService } from './translation'
 import { persistReviewEntries } from './taskSupport'
@@ -138,13 +138,18 @@ export const TaskService = {
             totalChunks: task.total_chunks,
             completedChunks: task.done_chunks,
             createdAt: toUtcIsoString(task.created_at),
-            updatedAt: toUtcIsoString(task.updated_at)
+            updatedAt: toUtcIsoString(task.updated_at),
+            startedAt: task.started_at ? toUtcIsoString(task.started_at) : undefined,
+            stepStartedAt: task.step_started_at ? toUtcIsoString(task.step_started_at) : undefined,
+            finishedAt: task.finished_at ? toUtcIsoString(task.finished_at) : undefined,
+            pausedAt: task.paused_at ? toUtcIsoString(task.paused_at) : undefined,
+            pausedTotalMs: Number(task.paused_total_ms || 0)
         }
     },
 
     async updateStatus(taskId: string, status: TaskStatus, progress: number, data: any = {}) {
         const db = useDb()
-        const existing = db.prepare('SELECT status, progress, total_chunks, step_progress, step_message, error FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, total_chunks?: number, step_progress?: number, step_message?: string | null, error?: string | null } | undefined
+        const existing = db.prepare('SELECT status, progress, total_chunks, step_progress, step_message, error, started_at, step_started_at, finished_at, paused_at, paused_total_ms FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, total_chunks?: number, step_progress?: number, step_message?: string | null, error?: string | null, started_at?: string | null, step_started_at?: string | null, finished_at?: string | null, paused_at?: string | null, paused_total_ms?: number } | undefined
         const currentStatus = String(existing?.status || '')
 
         if ((currentStatus === 'cancelled' || currentStatus === 'done' || currentStatus === 'error') && status !== currentStatus) {
@@ -175,11 +180,44 @@ export const TaskService = {
         const nextError = data.error !== undefined
             ? (data.error == null ? null : String(data.error))
             : (existing?.error ?? null)
-        const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, done_chunks = COALESCE(?, done_chunks), step_progress = ?, step_message = ?, error = ?, updated_at = datetime(\'now\') WHERE task_id = ? AND status = ?')
-        const info = stmt.run(status, progress, completedChunks, stepProgress, stepMessage, nextError, taskId, currentStatus)
+
+        const statusChanged = currentStatus !== status
+        const now = new Date()
+        const nowIso = now.toISOString()
+        const processingStarted = !['queued', 'paused'].includes(status)
+        const startedAt = existing?.started_at || (processingStarted ? nowIso : null)
+        const stepStartedAt = statusChanged ? nowIso : (existing?.step_started_at || null)
+        const terminalStatus = ['done', 'error', 'cancelled', 'review'].includes(status)
+        const finishedAt = existing?.finished_at || (terminalStatus ? nowIso : null)
+        let pausedAt = existing?.paused_at || null
+        let pausedTotalMs = Number(existing?.paused_total_ms || 0)
+        if (statusChanged) {
+            if (status === 'paused' && currentStatus !== 'paused') {
+                pausedAt = nowIso
+            } else if (currentStatus === 'paused' && status !== 'paused') {
+                const pauseStart = parseTimestamp(pausedAt)
+                if (pauseStart) pausedTotalMs += Math.max(0, now.getTime() - pauseStart.getTime())
+                pausedAt = null
+            }
+        }
+
+        const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, done_chunks = COALESCE(?, done_chunks), step_progress = ?, step_message = ?, error = ?, started_at = ?, step_started_at = ?, finished_at = ?, paused_at = ?, paused_total_ms = ?, updated_at = datetime(\'now\') WHERE task_id = ? AND status = ?')
+        const info = stmt.run(status, progress, completedChunks, stepProgress, stepMessage, nextError, startedAt, stepStartedAt, finishedAt, pausedAt, pausedTotalMs, taskId, currentStatus)
         if (Number(info?.changes || 0) === 0) return
 
-        const payload: any = { taskId, step: status, progress, ...data, stepProgress, stepMessage }
+        const payload: any = {
+            taskId,
+            step: status,
+            progress,
+            ...data,
+            stepProgress,
+            stepMessage,
+            startedAt: startedAt ? toUtcIsoString(startedAt) : null,
+            stepStartedAt: stepStartedAt ? toUtcIsoString(stepStartedAt) : null,
+            finishedAt: finishedAt ? toUtcIsoString(finishedAt) : null,
+            pausedAt: pausedAt ? toUtcIsoString(pausedAt) : null,
+            pausedTotalMs
+        }
 
         if (data.log) {
             const level = status === 'error' ? 'error' : (data.level || 'info')

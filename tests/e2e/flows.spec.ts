@@ -287,6 +287,45 @@ test('subtitled video can be forced to ASR', async ({ page }) => {
   expect(taskBody.trackIndex).toBe(2)
 })
 
+test('task page shows timing and live ASR checkpoint segments', async ({ page }) => {
+  const taskId = 'live-asr-ui'
+  const checkpointKey = 'live-asr-ui-checkpoint'
+  const db = new Database(process.env.DB_PATH || join(process.cwd(), '.test-artifacts', 'subx.db'))
+  db.pragma('busy_timeout = 5000')
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO tasks (
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode,
+        status, progress, step_progress, step_message, asr_checkpoint_key,
+        created_at, updated_at, started_at, step_started_at
+      ) VALUES (?, 'Live.Asr.mkv', 'default', 'asr', 0, 'test-model', 'zh-CN', 'translated',
+        'transcribing', 16, 40, '分段 1/2：正在识别', ?,
+        datetime('now', '-120 seconds'), datetime('now'), datetime('now', '-120 seconds'), datetime('now', '-60 seconds'))
+    `).run(taskId, checkpointKey)
+    db.prepare(`
+      INSERT OR REPLACE INTO asr_checkpoints (
+        checkpoint_key, chunk_index, start_ms, end_ms, status, language, confidence, engine, model, segments_json
+      ) VALUES (?, 0, 0, 300000, 'done', 'en', 0.9, 'faster-whisper', 'small', ?)
+    `).run(checkpointKey, JSON.stringify([{ id: 1, start: 1, end: 2, text: 'First live segment' }]))
+
+    await page.goto(`/task/${taskId}`)
+    await expect(page.getByRole('heading', { name: /翻译任务/ })).toBeVisible()
+    await expect(page.getByText('开始处理')).toBeVisible()
+    await expect(page.getByText('已进行')).toBeVisible()
+    await expect(page.getByText('预计剩余')).toBeVisible()
+
+    await page.getByRole('button', { name: '语音识别' }).click()
+    await expect(page.getByText('语音识别进行中').first()).toBeVisible()
+    await expect(page.getByText('实时识别结果')).toBeVisible()
+    await expect(page.getByText('First live segment')).toBeVisible()
+    await expectNoSeriousA11y(page)
+  } finally {
+    db.prepare('DELETE FROM asr_checkpoints WHERE checkpoint_key = ?').run(checkpointKey)
+    db.prepare('DELETE FROM tasks WHERE task_id = ?').run(taskId)
+    db.close()
+  }
+})
+
 test('storage summary and targeted cleanup endpoints work', async ({ page }) => {
   const summary = await page.request.get('/api/storage')
   expect(summary.ok()).toBeTruthy()

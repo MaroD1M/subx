@@ -144,6 +144,8 @@ describe('core API integration', () => {
       await new Promise(resolve => setTimeout(resolve, 250))
     }
     expect(task?.status).toBe('done')
+    expect(task?.startedAt).toBeTruthy()
+    expect(task?.finishedAt).toBeTruthy()
 
     const download = await apiFetch(`/api/tasks/${completedTaskId}/download?format=srt`, { headers: { cookie } })
     expect(download.status).toBe(200)
@@ -303,6 +305,40 @@ describe('core API integration', () => {
 
     const emptySegments = await apiFetch(`/api/tasks/${emptySegmentsTaskId}/download-original`, { headers: { cookie } })
     expect(emptySegments.status).toBe(404)
+  })
+
+  it('returns completed ASR checkpoint segments while transcription is still running', async () => {
+    const taskId = 'live-asr-task'
+    const checkpointKey = 'live-asr-checkpoint'
+    const db = new Database(dbPath)
+    db.pragma('busy_timeout = 5000')
+    try {
+      db.prepare(`
+        INSERT INTO tasks (task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, status, asr_checkpoint_key)
+        VALUES (?, ?, ?, 'asr', 0, 'test-model', 'zh-CN', 'translated', 'transcribing', ?)
+      `).run(taskId, 'Live.Asr.mkv', 'default', checkpointKey)
+      db.prepare(`
+        INSERT INTO asr_checkpoints (checkpoint_key, chunk_index, start_ms, end_ms, status, language, confidence, engine, model, segments_json)
+        VALUES (?, 0, 0, 300000, 'done', 'en', 0.9, 'faster-whisper', 'small', ?)
+      `).run(checkpointKey, JSON.stringify([{ id: 1, start: 1, end: 2, text: 'First chunk' }]))
+      db.prepare(`
+        INSERT INTO asr_checkpoints (checkpoint_key, chunk_index, start_ms, end_ms, status, language, confidence, engine, model, segments_json)
+        VALUES (?, 1, 300000, 600000, 'done', 'en', 0.8, 'faster-whisper', 'small', ?)
+      `).run(checkpointKey, JSON.stringify([{ id: 1, start: 0.5, end: 1.5, text: 'Second chunk' }]))
+    } finally {
+      db.close()
+    }
+
+    const response = await apiFetch(`/api/tasks/${taskId}/asr`, { headers: { cookie } })
+    expect(response.status).toBe(200)
+    const body = await response.json() as any
+    expect(body.run).toBeNull()
+    expect(body.partial.active).toBe(true)
+    expect(body.partial.doneChunks).toBe(2)
+    expect(body.partial.totalSegments).toBe(2)
+    expect(body.segments.map((segment: any) => segment.text)).toEqual(['First chunk', 'Second chunk'])
+    expect(body.segments[0].startMs).toBe(1000)
+    expect(body.segments[1].startMs).toBe(300500)
   })
 
   it('loads and updates review entries for a completed task', async () => {
