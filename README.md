@@ -2,7 +2,7 @@
 
 > 把 NAS 里的生肉视频，变成能直接看的双语字幕。
 
-当前版本：**v2.8.6** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [维护说明](docs/maintenance.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.9.0** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [维护说明](docs/maintenance.md) · [更新日志](CHANGELOG.md)
 
 [项目地址](https://github.com/MaroD1M/subx) · [问题反馈](https://github.com/MaroD1M/subx/issues)
 
@@ -12,7 +12,9 @@
 
 ## ✨ 近期亮点
 
-- 🗂️ **v2.8.6 本地体验更新**：媒体库改为卡片网格并支持拖拽排序；文件浏览器支持整库递归搜索；新增 SQLite 备份/恢复脚本；优化核对页、SQLite、搜索取消和大目录渲染；AI 日志默认只保留摘要。
+- 🗂️ **v2.9.0 本地可靠性更新**：核对页批量重译改为后台任务，离开页面也会继续执行；新增应用内定时备份、系统体检和首次配置清单。
+- 🔤 **字体与实景预览**：字体选择器可搜索并显示服务器安装状态；可从视频抽帧并按完整分辨率烧录当前 ASS 样式，便于核对字号、颜色和位置。
+- 💾 **数据安全**：任务删除和清空历史改为事务执行；导出前自动备份同名旧字幕；任务失败日志不再输出 API Key 前缀和上游响应体。
 - 🎬 **长电影 OCR 不再被 2 小时限制误拦**：默认上限提升到 4 小时，并可在应用设置页调整。
 - 🧩 **PGS 长片直通**：PGS 优先走 pgsrip，不再强制整片抽帧；失败时自动回退到分段图像 OCR。
 - 💾 **VobSub / DVD 自动分段**：长视频按 30 分钟一段处理，每段完成立即清理帧文件。
@@ -68,7 +70,7 @@
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.8.6
+    image: ghcr.io/marod1m/subx:v2.9.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -85,6 +87,7 @@ services:
       - /path/to/your/media:/media
       - ./data/db:/app/db
       - ./data/temp:/app/temp
+      - ./data/backups:/app/backups
       - ./data/models:/models
 ```
 
@@ -96,7 +99,7 @@ docker compose up -d
 
 访问 `http://NAS_IP:3000`，第一次进入先设置至少 8 位访问口令。
 
-> 镜像体积参考：amd64 下载约 **586 MiB**，解压后约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.6 预计接近）。也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
+> 镜像体积会随版本、架构和内置字体变化，建议至少预留 2–3 GB 磁盘；也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
 >
 > 根目录 [`docker-compose.yml`](docker-compose.yml) 已逐项注释端口、卷、环境变量、健康检查、资源限制和 profiles；完整变量表见 [部署文档第 4 节](docs/deployment.md#4-环境变量与参数)。
 
@@ -213,7 +216,7 @@ ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/a
 >
 > 需要拆分部署时仍可使用独立 CPU sidecar：`docker compose --profile asr up -d asr`，地址改为 `http://subx-asr:8000`。
 >
-> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.8.6`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
+> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.9.0`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
 
 ---
 
@@ -266,27 +269,26 @@ curl -H "Authorization: Bearer subx_xxx" \
 
 ---
 
-## ⬆️ 升级到 v2.8.6
+## ⬆️ 升级到 v2.9.0
 
 ```bash
 docker compose pull
 docker compose up -d --force-recreate
 ```
 
-本版重点是媒体库/文件浏览体验、本地数据安全和大列表性能；从 v2.8.4 升级无需调整卷或数据库。
+本版重点是本地可靠性、备份、系统体检和依赖安全；从 v2.8.6 升级会自动执行数据库迁移 v9，无需手动改库。
 
 升级说明：
 
-- 媒体库管理改为响应式卡片网格，支持直接拖动排序；停用媒体库会保留监控配置。
-- 文件浏览器新增整库递归搜索，未加载的深层目录也会返回视频和外挂字幕；搜索支持取消旧请求。
-- 新增 `npm run backup` / `npm run restore`，备份数据库、`.secret` 和任务日志；恢复前校验完整性并保留旧库。
-- SQLite 增加 busy_timeout、synchronous=NORMAL、temp_store=MEMORY 和 32MB cache_size。
-- 超期 `task_responses` 会清空原始 prompt/response，保留 token、摘要和诊断元数据。
-- AI 日志默认只写摘要；需要完整 prompt/response 时设置 `SUBX_AI_LOG_FULL_PAYLOAD=1`。
-- 核对页默认桌面 50 条、移动端 20 条，并优化长列表渲染；FileBrowser 大目录分批显示。
-- 任务取消检查扩展到 ASR/OCR 和翻译重试边界；SSE 连接时增加数据库初始快照。
-- 修复 Settings、历史页、核对页、确认框等此前发现的界面与生命周期问题。
-- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.8.6。
+- 核对页批量重译改为后台任务，支持进度轮询、离开页面继续执行和返回页面自动恢复。
+- 新增应用内定时备份和“立即备份”；Compose 新增 `./data/backups:/app/backups` 卷，请一并更新。
+- 新增「设置 → 系统体检」，检查数据库、媒体库、FFmpeg、字体、临时目录、磁盘、AI 配置和备份状态。
+- 首页新增首次配置清单；切走设置页时会提示未保存修改。
+- 导出前自动备份同名旧字幕，最多保留 5 份隐藏备份。
+- 任务删除和清空历史改为事务执行；任务完结先写字幕文件，再写核对记录和输出路径。
+- 依赖升级：Nuxt 4.6.4 安全补丁、ESLint 10、undici 8、uuid 14、p-limit 7、FastAPI / faster-whisper / pywhispercpp 新版本。
+- 新增实景预览缓存，可在「存储与缓存」中清理。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.9.0。
 - 建议升级前执行备份。
 
 ---

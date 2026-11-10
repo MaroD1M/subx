@@ -213,6 +213,25 @@ export const MIGRATIONS: Migration[] = [
     }
   },
   {
+    version: 8,
+    name: 'task-timing',
+    up(db, dialect) {
+      const timestampType = dialect === 'sqlite' ? 'TEXT' : 'TIMESTAMPTZ'
+      ensureColumn(db, dialect, 'tasks', 'started_at', timestampType)
+      ensureColumn(db, dialect, 'tasks', 'step_started_at', timestampType)
+      ensureColumn(db, dialect, 'tasks', 'finished_at', timestampType)
+      ensureColumn(db, dialect, 'tasks', 'paused_at', timestampType)
+      ensureColumn(db, dialect, 'tasks', 'paused_total_ms', 'INTEGER NOT NULL DEFAULT 0')
+      try {
+        db.exec("UPDATE tasks SET started_at = created_at WHERE started_at IS NULL AND status <> 'queued'")
+        db.exec('UPDATE tasks SET step_started_at = COALESCE(started_at, created_at) WHERE step_started_at IS NULL')
+        db.exec("UPDATE tasks SET finished_at = updated_at WHERE finished_at IS NULL AND status IN ('done', 'error', 'cancelled', 'review')")
+      } catch {
+        // Very old or partially initialized schemas may not have created_at/updated_at yet.
+      }
+    }
+  },
+  {
     version: 9,
     name: 'review-jobs',
     up(db, dialect) {
@@ -253,25 +272,6 @@ export const MIGRATIONS: Migration[] = [
       }
       db.exec('CREATE INDEX IF NOT EXISTS idx_review_jobs_status ON review_jobs(status, created_at)')
       db.exec('CREATE INDEX IF NOT EXISTS idx_review_jobs_task ON review_jobs(task_id, created_at DESC)')
-    }
-  },
-  {
-    version: 8,
-    name: 'task-timing',
-    up(db, dialect) {
-      const timestampType = dialect === 'sqlite' ? 'TEXT' : 'TIMESTAMPTZ'
-      ensureColumn(db, dialect, 'tasks', 'started_at', timestampType)
-      ensureColumn(db, dialect, 'tasks', 'step_started_at', timestampType)
-      ensureColumn(db, dialect, 'tasks', 'finished_at', timestampType)
-      ensureColumn(db, dialect, 'tasks', 'paused_at', timestampType)
-      ensureColumn(db, dialect, 'tasks', 'paused_total_ms', 'INTEGER NOT NULL DEFAULT 0')
-      try {
-        db.exec("UPDATE tasks SET started_at = created_at WHERE started_at IS NULL AND status <> 'queued'")
-        db.exec('UPDATE tasks SET step_started_at = COALESCE(started_at, created_at) WHERE step_started_at IS NULL')
-        db.exec("UPDATE tasks SET finished_at = updated_at WHERE finished_at IS NULL AND status IN ('done', 'error', 'cancelled', 'review')")
-      } catch {
-        // Very old or partially initialized schemas may not have created_at/updated_at yet.
-      }
     }
   },
 ]

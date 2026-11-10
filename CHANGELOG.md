@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.9.0 - 2026-11-10
 
 ### Added
 
@@ -39,6 +39,21 @@
 - 自动化任务、Webhook 任务、重试任务和核对导出都会携带结构化字幕样式。
 - 任务去重加入字幕样式和双语布局，避免运行中任务复用后吞掉新的输出设置。
 - 更新使用文档和 OpenAPI 的任务字幕样式字段说明。
+
+### Fixed
+
+- 修复自动备份设置修改后不会标记为未保存、导致无法保存的问题。
+- 修复 migration 顺序：`review-jobs`（v9）现在严格在 `task-timing`（v8）之后执行。
+- 修复 README 中重复的 Ollama 说明，并更新 30 秒 Compose 示例的备份卷。
+- 修复任务日志、设置页和核对页中的若干边界问题。
+
+### Dependencies
+
+- Nuxt 升级到 4.6.4 安全补丁版本。
+- Node 依赖升级：ESLint 10、undici 8、uuid 14、p-limit 7、Vite / Vitest 等传递依赖同步更新。
+- Python 依赖升级：FastAPI、faster-whisper、pywhispercpp、python-multipart、pysrt、pytesseract。
+- 通过 npm overrides 修复 `minimatch`、`glob`、`esbuild` 安全告警；`deepmerge` 告警因上游无修复版本且仅构建期使用，标记为已处理。
+- GitHub Actions 升级到当前大版本：checkout v7、setup-node v7、download-artifact v8、upload-artifact v7、login-action v4、setup-buildx-action v4、setup-qemu-action v4、build-push-action v7、metadata-action v6。
 
 ### Tests
 

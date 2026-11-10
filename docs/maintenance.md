@@ -30,7 +30,10 @@
 - `ReviewProofreadPanel.vue`：AI 校对面板
 - `AutomationTokensPanel.vue`：API Token 创建、撤销和列表
 - `SettingsStoragePanel.vue`：存储统计与缓存清理
+- `SettingsBackupPanel.vue`：自动备份设置、立即备份和备份列表
+- `SettingsHealthPanel.vue`：系统体检
 - `TaskLogsPanel.vue`：任务日志展示、折叠和滚动
+- `useServerFonts.ts`：服务器字体列表与安装状态
 - `shared/reviewFilters.ts`：筛选纯逻辑
 - `shared/reviewLabels.ts`：状态、原因和质量标签
 
@@ -76,6 +79,9 @@
 - `4`：补充任务日志、任务响应和集成事件去重查询索引
 - `5`：ASR 分段检查点和任务 `asr_checkpoint_key`
 - `6`：修复已有 v5 数据库缺失 ASR 检查点列/表/索引
+- `7`：新增 `subtitle_style_json`
+- `8`：任务计时字段与历史任务回填
+- `9`：新增 `review_jobs` 后台重译任务表
 
 SQLite 基线位于 `server/utils/schema.ts`，PostgreSQL 基线位于 `scripts/postgres-schema.sql`。`schemaDrift.test.ts` 会对比两边表和字段，修改任意一侧后必须同步另一侧。
 
@@ -123,8 +129,21 @@ npm run check:versions
 
 检查范围包括 README、使用/部署/测试文档、Dockerfile、Compose、`.env.example`、OpenAPI、镜像清理 workflow 和拉取脚本。
 
+## 发版流程
+
+1. 确认 `CHANGELOG.md` 已把 `Unreleased` 改为正式版本和发布日期。
+2. 更新 `package.json` 版本：`npm version x.y.z --no-git-tag-version`。
+3. 同步 README、docs、Dockerfile、Compose、`.env.example`、OpenAPI、镜像清理 workflow 和拉取脚本。
+4. 执行 `npm run check:versions`。
+5. 执行完整验证：`lint`、`typecheck`、`test`、`test:api`、`test:e2e`、`build`。
+6. 更新文档截图：`npm run preview:images`。
+7. 推送 `master`，等待 CI、PostgreSQL Smoke、All-in-One、ASR/OCR Sidecar 镜像构建全部成功。
+8. 打正式 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`。
+9. 检查 GHCR 上 `latest`、`X.Y.Z` 和 `vX.Y.Z` 标签指向同一 digest。
+
 ## 发版注意
 
-- 版本号目前分布在 `package.json`、README、文档、Compose、Dockerfile 和 workflow 中，发版前需要统一检查。
-- 镜像构建以 `master` 推送触发，`latest` 跟随默认分支。
+- 版本号目前分布在多个文件中，发版前必须执行 `npm run check:versions`。
+- 镜像构建以 `master` 推送触发，`latest` 跟随默认分支；正式 tag 会触发版本镜像。
 - 数据目录、数据库和模型目录升级前应备份。
+- 新 migration 必须同时更新 SQLite 基线、PostgreSQL 基线、migration 测试和本文档的迁移列表。

@@ -239,6 +239,19 @@ test('settings storage tab is accessible', async ({ page }) => {
   await expectNoSeriousA11y(page)
 })
 
+test('auto backup settings persist after saving and reloading', async ({ page }) => {
+  await page.goto('/settings?tab=storage')
+  await expect(page.getByText('自动备份').first()).toBeVisible()
+  const backupSwitch = page.getByRole('switch', { name: '启用自动备份' })
+  if (!(await backupSwitch.isChecked())) await backupSwitch.click()
+  await expect(page.getByText('有未保存的更改')).toBeVisible()
+  const saved = page.waitForResponse(response => response.url().includes('/api/config') && response.request().method() === 'PUT')
+  await page.getByRole('button', { name: '保存修改' }).click()
+  await saved
+  await page.reload()
+  await expect(page.getByRole('switch', { name: '启用自动备份' })).toBeChecked()
+})
+
 test('subtitled video can be forced to ASR', async ({ page }) => {
   // 从设置页真实保存，验证返回首页后 ASR 开关立即生效（而不是使用旧缓存）。
   await page.goto('/settings', { waitUntil: 'networkidle' })
