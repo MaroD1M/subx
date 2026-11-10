@@ -20,8 +20,30 @@ if (process.platform === 'win32') {
 
 export interface MediaProbeInfo {
     duration: number
+    width: number
+    height: number
+    fps: number
     subtitleTracks: TrackInfo[]
     audioTracks: TrackInfo[]
+}
+
+function parseFrameRate(value: unknown): number {
+    const match = String(value || '').match(/^(\d+)(?:\/(\d+))?$/)
+    if (!match) return 0
+    const numerator = Number(match[1])
+    const denominator = match[2] ? Number(match[2]) : 1
+    if (!denominator || !Number.isFinite(numerator / denominator)) return 0
+    return Math.round((numerator / denominator) * 1000) / 1000
+}
+
+function readRotation(stream: any): number {
+    const sideDataRotation = Array.isArray(stream?.side_data_list)
+        ? Number(stream.side_data_list.find((item: any) => item?.rotation != null)?.rotation)
+        : 0
+    const tagRotation = Number(stream?.tags?.rotate)
+    return Number.isFinite(sideDataRotation) && sideDataRotation !== 0
+        ? sideDataRotation
+        : (Number.isFinite(tagRotation) ? tagRotation : 0)
 }
 
 const VIDEO_EXTRACT_TIMEOUT_MS = 2 * 60 * 60 * 1000
@@ -56,6 +78,13 @@ export const VideoService = {
                 }
 
                 const streams = metadata.streams || []
+                const videoStream = streams.find(stream => stream.codec_type === 'video') as any
+                const rotation = videoStream ? readRotation(videoStream) : 0
+                const rotated = Math.abs(rotation) % 180 === 90
+                const rawWidth = Number(videoStream?.width || 0)
+                const rawHeight = Number(videoStream?.height || 0)
+                const width = rotated ? rawHeight : rawWidth
+                const height = rotated ? rawWidth : rawHeight
                 const subtitleTracks: TrackInfo[] = streams
                     .filter(s => s.codec_type === 'subtitle')
                     .map(s => ({
@@ -83,6 +112,9 @@ export const VideoService = {
 
                 resolve({
                     duration: Number(metadata.format?.duration || 0),
+                    width: Number.isFinite(width) ? width : 0,
+                    height: Number.isFinite(height) ? height : 0,
+                    fps: parseFrameRate(videoStream?.avg_frame_rate || videoStream?.r_frame_rate),
                     subtitleTracks,
                     audioTracks
                 })

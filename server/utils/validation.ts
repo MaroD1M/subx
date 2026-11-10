@@ -94,6 +94,19 @@ export const reviewRetranslateSchema = z.object({
   subtitleIds: z.array(z.union([z.string(), z.number()])).min(1)
 })
 
+export const previewFrameSchema = z.object({
+  taskId: z.string().max(80).optional(),
+  filePath: z.string().max(4096).optional(),
+  rootId: z.string().max(120).optional(),
+  time: z.coerce.number().min(0).optional(),
+  outputMode: outputModeSchema.optional(),
+  subtitleStylePreset: z.string().max(80).optional(),
+  subtitleStyle: subtitleStyleSchema.optional(),
+  bilingualLayout: bilingualLayoutSchema.optional(),
+  originalText: z.string().max(1000).optional(),
+  translatedText: z.string().max(1000).optional()
+}).passthrough()
+
 export const proofreadRequestSchema = z.preprocess(value => value ?? {}, z.object({
   kind: z.enum(['glossary', 'consistency']).optional(),
   refresh: z.boolean().optional()
@@ -162,7 +175,7 @@ export const apiTokenCreateSchema = z.object({
 })
 
 export const storageCleanupSchema = z.object({
-  targets: z.array(z.enum(['asrAudio', 'aiLogs', 'taskTemp', 'taskLogs', 'ocrTemp', 'translationCache'])).min(1),
+  targets: z.array(z.enum(['asrAudio', 'aiLogs', 'taskTemp', 'taskLogs', 'ocrTemp', 'previewCache', 'translationCache'])).min(1),
   days: z.coerce.number().int().min(1).max(3650).optional(),
   all: z.boolean().optional()
 })

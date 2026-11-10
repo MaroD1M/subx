@@ -65,6 +65,9 @@ export const ConfigService = {
             translationMode: 'non_stream',
             streamUsage: false,
             logRetentionDays: 7,
+            autoBackupEnabled: false,
+            autoBackupIntervalHours: 24,
+            autoBackupKeep: 10,
             glossary: {},
             mediaRoots: [],
             customStylePresets: [],
@@ -130,11 +133,11 @@ export const ConfigService = {
             } else if (row.key === 'subtitleStyle') {
                 hasSubtitleStyleRow = true
                 config.subtitleStyle = safeJsonParse(row.value, config.subtitleStyle)
-            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs', 'asrChunkSeconds', 'asrChunkOverlapSeconds', 'asrResumeTtlHours'].includes(row.key)) {
+            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs', 'asrChunkSeconds', 'asrChunkOverlapSeconds', 'asrResumeTtlHours', 'autoBackupIntervalHours', 'autoBackupKeep'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'
-            } else if (['asrEnabled', 'asrVad', 'asrWordTimestamps', 'asrKeepAudio', 'asrCloudEnabled', 'asrCloudFallback', 'asrDiarization', 'ocrEnabled', 'notificationEnabled', 'embyCompatibleOutput', 'qualityCheckEnabled'].includes(row.key)) {
+            } else if (['asrEnabled', 'asrVad', 'asrWordTimestamps', 'asrKeepAudio', 'asrCloudEnabled', 'asrCloudFallback', 'asrDiarization', 'ocrEnabled', 'notificationEnabled', 'embyCompatibleOutput', 'qualityCheckEnabled', 'autoBackupEnabled'].includes(row.key)) {
                 (config as any)[row.key] = row.value === 'true' || row.value === '1'
             } else if (row.key === 'translationMode') {
                 config.translationMode = row.value === 'stream' ? 'stream' : 'non_stream'
@@ -323,6 +326,7 @@ export const ConfigService = {
             const modifier = `-${days} days`
             db.prepare("DELETE FROM task_logs WHERE created_at < datetime('now', ?)").run(modifier)
             db.prepare("DELETE FROM task_logs WHERE task_id NOT IN (SELECT task_id FROM tasks)").run()
+            try { db.prepare("DELETE FROM review_jobs WHERE status IN ('done', 'error') AND updated_at < datetime('now', ?)").run(modifier) } catch { /* old schema */ }
             db.prepare("DELETE FROM task_responses WHERE task_id NOT IN (SELECT task_id FROM tasks)").run()
             redactExpiredTaskResponses(db, days)
             db.prepare("DELETE FROM task_review_entries WHERE task_id NOT IN (SELECT task_id FROM tasks)").run()

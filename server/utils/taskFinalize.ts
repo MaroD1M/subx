@@ -90,6 +90,12 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
     }
   }
 
+  await ensureTaskNotCancelled(taskId)
+  const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
+  if (embyVariantPath) {
+    await SubtitleService.writeSubtitle(translatedEntries, embyVariantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
+  }
+
   if (allIssues.length > 0) {
     const preview = allIssues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
     persistReviewEntries(taskId, translatedEntries, allIssues)
@@ -98,11 +104,6 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
     persistReviewEntries(taskId, translatedEntries, [])
   }
 
-  await ensureTaskNotCancelled(taskId)
-  const savedPath = await SubtitleService.writeSubtitle(translatedEntries, outputPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
-  if (embyVariantPath) {
-    await SubtitleService.writeSubtitle(translatedEntries, embyVariantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
-  }
   await updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}${embyVariantPath ? '（SubX/ 变体已同步）' : ''}` })
 
   TranslationService.cleanupPartialFiles(taskId, totalChunks)

@@ -23,22 +23,32 @@ export default defineEventHandler(async (event) => {
       throw apiError(409, '任务仍在运行或排队中，请先取消任务')
     }
 
-    if (task.asr_checkpoint_key) {
-      try { db.prepare('DELETE FROM asr_checkpoints WHERE checkpoint_key = ?').run(task.asr_checkpoint_key) } catch { /* old schema */ }
+    let deletedCount = 0
+    db.exec('BEGIN')
+    try {
+      if (task.asr_checkpoint_key) {
+        try { db.prepare('DELETE FROM asr_checkpoints WHERE checkpoint_key = ?').run(task.asr_checkpoint_key) } catch { /* old schema */ }
+      }
+      db.prepare('DELETE FROM task_jobs WHERE task_id = ?').run(id)
+      db.prepare('DELETE FROM task_logs WHERE task_id = ?').run(id)
+      db.prepare('DELETE FROM task_review_entries WHERE task_id = ?').run(id)
+      try { db.prepare('DELETE FROM task_proofread_cache WHERE task_id = ?').run(id) } catch { /* old schema */ }
+      try { db.prepare('DELETE FROM translation_quality_entries WHERE task_id = ?').run(id) } catch { /* old schema */ }
+      try { db.prepare('DELETE FROM translation_quality_runs WHERE task_id = ?').run(id) } catch { /* old schema */ }
+      try { db.prepare('DELETE FROM asr_segments WHERE run_id IN (SELECT id FROM transcription_runs WHERE task_id = ?)').run(id) } catch { /* old schema */ }
+      try { db.prepare('DELETE FROM transcription_runs WHERE task_id = ?').run(id) } catch { /* old schema */ }
+      try { db.prepare('DELETE FROM review_jobs WHERE task_id = ?').run(id) } catch { /* old schema */ }
+      db.prepare('DELETE FROM task_responses WHERE task_id = ?').run(id)
+      const info = db.prepare('DELETE FROM tasks WHERE task_id = ?').run(id)
+      deletedCount = Number(info.changes || 0)
+      db.exec('COMMIT')
+    } catch (error) {
+      try { db.exec('ROLLBACK') } catch { /* ignore rollback failure */ }
+      throw error
     }
-    db.prepare('DELETE FROM task_jobs WHERE task_id = ?').run(id)
-    db.prepare('DELETE FROM task_logs WHERE task_id = ?').run(id)
-    db.prepare('DELETE FROM task_review_entries WHERE task_id = ?').run(id)
-    try { db.prepare('DELETE FROM task_proofread_cache WHERE task_id = ?').run(id) } catch { /* old schema */ }
-    try { db.prepare('DELETE FROM translation_quality_entries WHERE task_id = ?').run(id) } catch { /* old schema */ }
-    try { db.prepare('DELETE FROM translation_quality_runs WHERE task_id = ?').run(id) } catch { /* old schema */ }
-    try { db.prepare('DELETE FROM asr_segments WHERE run_id IN (SELECT id FROM transcription_runs WHERE task_id = ?)').run(id) } catch { /* old schema */ }
-    try { db.prepare('DELETE FROM transcription_runs WHERE task_id = ?').run(id) } catch { /* old schema */ }
-    db.prepare('DELETE FROM task_responses WHERE task_id = ?').run(id)
-    const info = db.prepare('DELETE FROM tasks WHERE task_id = ?').run(id)
     removeTaskArtifacts(id)
 
-    return { success: true, deletedCount: info.changes }
+    return { success: true, deletedCount }
   } catch (error: any) {
     if (error?.statusCode) throw error
     console.error('Failed to delete task:', error)

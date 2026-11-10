@@ -52,11 +52,18 @@ services:
       # 但只读时无法向媒体目录输出字幕。
       - /path/to/your/media:/media
 
+      # 可选：自定义字幕字体目录。放入 ttf/otf 后重启容器，
+      # 实景预览和字体列表会自动识别 /fonts 下的字体。
+      # - ./data/fonts:/fonts:ro
+
       # SQLite 数据库、密钥文件和任务日志，必须持久化。
       - ./data/db:/app/db
 
       # 临时字幕和 AI 日志，建议保留方便排查。
       - ./data/temp:/app/temp
+
+      # 应用内自动备份和立即备份，必须持久化。
+      - ./data/backups:/app/backups
 
       # ASR 模型缓存。容器重建不会丢模型；建议预留 10–20GB。
       # 对应 ASR_MODEL_DIR=/models。

@@ -1,6 +1,6 @@
 import { apiError } from '../../../utils/apiError'
-import { existsSync } from 'fs'
-import { dirname, join } from 'path'
+import { copyFileSync, existsSync, readdirSync, unlinkSync } from 'fs'
+import { basename, dirname, join } from 'path'
 import { useDb } from '../../../utils/db'
 import { ConfigService } from '../../../utils/config'
 import { SubtitleService } from '../../../utils/subtitle'
@@ -11,6 +11,24 @@ import { acquireOutputLocks } from '../../../utils/outputLock'
 import { parseBody, reviewExportSchema } from '../../../utils/validation'
 import { TaskService } from '../../../utils/task'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
+
+function backupExistingOutput(outputPath: string): string {
+  if (!existsSync(outputPath)) return ''
+  const dir = dirname(outputPath)
+  const prefix = `.${basename(outputPath)}.subx-backup-`
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupPath = join(dir, `${prefix}${stamp}`)
+  copyFileSync(outputPath, backupPath)
+  try {
+    const backups = readdirSync(dir)
+      .filter(name => name.startsWith(prefix))
+      .sort()
+    for (const name of backups.slice(0, Math.max(0, backups.length - 5))) {
+      unlinkSync(join(dir, name))
+    }
+  } catch { /* backup retention is best effort */ }
+  return backupPath
+}
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -76,6 +94,7 @@ export default defineEventHandler(async (event) => {
 
   const releaseOutputLock = acquireOutputLocks([outputPath])
   try {
+    const backupPath = backupExistingOutput(outputPath)
     const savedPath = await SubtitleService.writeSubtitle(
       entries as any,
       outputPath,
@@ -108,7 +127,7 @@ export default defineEventHandler(async (event) => {
       log: '字幕核对完成，已导出最终文件。'
     })
 
-    return { success: true, outputPath: savedPath }
+    return { success: true, outputPath: savedPath, backupPath }
   } finally {
     releaseOutputLock()
   }

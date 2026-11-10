@@ -66,6 +66,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     ffmpeg \
+    fontconfig \
+    fonts-dejavu-core \
+    fonts-noto-cjk \
+    fonts-wqy-microhei \
     gosu \
     libatomic1 \
     libgl1 \
@@ -114,8 +118,16 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 RUN groupadd --gid 1001 nodejs && \
     useradd --uid 1001 --gid 1001 --create-home --shell /usr/sbin/nologin nuxt && \
-    mkdir -p /media /app/db /app/temp /models /app/asr-service /app/ocr-service && \
-    chown -R nuxt:nodejs /media /app/db /app/temp /models /app/asr-service /app/ocr-service
+    mkdir -p /media /app/db /app/temp /app/backups /models /app/asr-service /app/ocr-service /fonts && \
+    printf '%s\n' \
+      '<?xml version="1.0"?>' \
+      '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
+      '<fontconfig>' \
+      '  <dir>/fonts</dir>' \
+      '</fontconfig>' \
+      > /etc/fonts/conf.d/99-subx-custom-fonts.conf && \
+    fc-cache -f >/dev/null 2>&1 || true && \
+    chown -R nuxt:nodejs /media /app/db /app/temp /app/backups /models /app/asr-service /app/ocr-service /fonts
 
 WORKDIR /app
 

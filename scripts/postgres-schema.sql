@@ -274,6 +274,24 @@ CREATE TABLE IF NOT EXISTS translation_quality_entries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS review_jobs (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  subtitle_ids_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'queued',
+  total INTEGER NOT NULL DEFAULT 0,
+  completed INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  result_json TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_jobs_status ON review_jobs(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_review_jobs_task ON review_jobs(task_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS auth (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   passkey_hash TEXT NOT NULL,

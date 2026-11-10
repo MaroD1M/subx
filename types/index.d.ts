@@ -197,6 +197,9 @@ export interface AppConfig {
   integrationPathTo?: string
   streamUsage?: boolean        // 是否开启流式 Token 统计
   logRetentionDays?: number    // AI 日志保留天数
+  autoBackupEnabled?: boolean  // 是否启用应用内定时备份
+  autoBackupIntervalHours?: number // 自动备份间隔（小时）
+  autoBackupKeep?: number      // 自动备份保留份数
   outputMode?: string          // 输出模式
   stylePreset?: string         // 翻译风格预设
   subtitleFormat?: string      // 字幕格式 srt/ass/both

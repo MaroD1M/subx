@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { SubtitleService } from '../subtitle'
-import { createSubtitleStyle, getSubtitleStylePresetLabel, getSubtitleStylePresetOptions, hexToAssColor, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '../../../shared/subtitleStyles'
+import { buildSubtitleFontOptions, createSubtitleStyle, getSubtitleStylePresetLabel, getSubtitleStylePresetOptions, hexToAssColor, isFontInstalled, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '../../../shared/subtitleStyles'
 import { STYLE_PRESETS } from '../../../shared/stylePresets'
 import type { SubtitleEntry } from '../../../types'
 
@@ -125,5 +125,25 @@ describe('structured ASS output', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('subtitle font options', () => {
+  it('merges recommended fonts with server fonts and marks availability', () => {
+    const options = buildSubtitleFontOptions(['Arial', 'Noto Sans CJK SC', 'Custom Sans'])
+    const byValue = new Map(options.map(option => [option.value, option]))
+    expect(byValue.get('Arial')?.installed).toBe(true)
+    expect(byValue.get('Noto Sans CJK SC')?.installed).toBe(true)
+    expect(byValue.get('Custom Sans')?.installed).toBe(true)
+    expect(byValue.get('Custom Sans')?.description).toContain('服务器已安装')
+    expect(byValue.get('Microsoft YaHei')?.installed).toBe(false)
+    expect(byValue.get('Microsoft YaHei')?.description).toContain('未安装')
+    expect(options.filter(option => option.value === 'Arial')).toHaveLength(1)
+  })
+
+  it('matches font families case-insensitively', () => {
+    expect(isFontInstalled('noto sans cjk sc', ['Noto Sans CJK SC'])).toBe(true)
+    expect(isFontInstalled('  Arial  ', ['arial'])).toBe(true)
+    expect(isFontInstalled('Missing', ['Arial'])).toBe(false)
   })
 })

@@ -26,7 +26,22 @@
         </div>
         <div class="grid grid-cols-2 gap-2">
           <UFormField label="字体" class="col-span-2">
-            <UInput v-model="draft.original.fontFamily" :list="fontListId" icon="i-lucide-type" :disabled="typographyDisabled" />
+            <USelectMenu
+              v-model="draft.original.fontFamily"
+              :items="fontOptions"
+              value-key="value"
+              label-key="value"
+              :filter-fields="['value', 'description']"
+              :search-input="{ placeholder: '搜索或输入字体名' }"
+              create-item
+              virtualize
+              icon="i-lucide-type"
+              :loading="serverFontsLoading"
+              :disabled="typographyDisabled"
+              class="w-full"
+              @create="(font: string) => setFontFamily('original', font)"
+            />
+            <p v-if="fontWarning(draft.original.fontFamily)" class="mt-1 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{{ fontWarning(draft.original.fontFamily) }}</p>
           </UFormField>
           <UFormField label="字号">
             <UInputNumber v-model="draft.original.fontSize" :min="12" :max="120" :step="1" :disabled="typographyDisabled" />
@@ -70,7 +85,22 @@
         </div>
         <div class="grid grid-cols-2 gap-2">
           <UFormField label="字体" class="col-span-2">
-            <UInput v-model="draft.translated.fontFamily" :list="fontListId" icon="i-lucide-type" :disabled="typographyDisabled" />
+            <USelectMenu
+              v-model="draft.translated.fontFamily"
+              :items="fontOptions"
+              value-key="value"
+              label-key="value"
+              :filter-fields="['value', 'description']"
+              :search-input="{ placeholder: '搜索或输入字体名' }"
+              create-item
+              virtualize
+              icon="i-lucide-type"
+              :loading="serverFontsLoading"
+              :disabled="typographyDisabled"
+              class="w-full"
+              @create="(font: string) => setFontFamily('translated', font)"
+            />
+            <p v-if="fontWarning(draft.translated.fontFamily)" class="mt-1 text-[11px] leading-4 text-amber-600 dark:text-amber-400">{{ fontWarning(draft.translated.fontFamily) }}</p>
           </UFormField>
           <UFormField label="字号">
             <UInputNumber v-model="draft.translated.fontSize" :min="12" :max="120" :step="1" :disabled="typographyDisabled" />
@@ -123,38 +153,77 @@
       </UFormField>
     </div>
 
-    <div class="overflow-hidden rounded-2xl border border-gray-800 bg-gray-950 shadow-inner">
-      <div class="relative flex aspect-video justify-center overflow-hidden bg-gradient-to-b from-gray-700 via-gray-900 to-black p-5" :class="previewContainerClass">
-        <div class="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent" />
-        <div class="relative flex w-full flex-col items-center" :class="[previewClasses, previewInnerClass]">
-          <template v-if="bilingualLayout === 'original_first'">
-            <span v-if="showOriginal" :style="originalPreviewStyle" :class="previewTextClasses">This is the original subtitle.</span>
-            <span v-if="showTranslated" :style="translatedPreviewStyle" :class="previewTextClasses">这是译文示例字幕。</span>
-          </template>
-          <template v-else>
-            <span v-if="showTranslated" :style="translatedPreviewStyle" :class="previewTextClasses">这是译文示例字幕。</span>
-            <span v-if="showOriginal" :style="originalPreviewStyle" :class="previewTextClasses">This is the original subtitle.</span>
-          </template>
+    <div class="space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="min-w-0">
+          <p class="text-xs font-medium text-gray-700 dark:text-gray-200">字幕预览</p>
+          <p class="text-[11px] text-gray-500 dark:text-gray-400">{{ realPreviewEnabled ? '从视频抽取真实画面并烧录当前字幕样式' : '使用示例背景快速预览字号、颜色和布局' }}</p>
         </div>
-        <span class="absolute bottom-2 left-3 text-[10px] font-medium tracking-wide text-white/35">1920 × 1080 预览</span>
+        <div v-if="hasPreviewSource" class="flex items-center gap-2">
+          <UButton v-if="realPreviewEnabled && realPreviewImageUrl" label="原图" icon="i-lucide-external-link" size="xs" color="neutral" variant="ghost" @click="openRealPreview" />
+          <UButton v-if="realPreviewEnabled && realPreviewImageUrl" label="下载" icon="i-lucide-download" size="xs" color="neutral" variant="ghost" @click="downloadRealPreview" />
+          <USwitch v-model="realPreviewEnabled" :disabled="!canRealPreview" aria-label="实景预览" />
+          <span class="text-xs text-gray-600 dark:text-gray-300">实景预览</span>
+        </div>
+      </div>
+      <p v-if="hasPreviewSource && !canRealPreview" class="text-[11px] leading-4 text-gray-500 dark:text-gray-400">{{ realPreviewDisabledReason }}</p>
+      <div v-if="realPreviewEnabled && previewDuration > 0" class="flex items-center gap-3 rounded-xl border border-gray-200/70 bg-gray-50/60 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/40">
+        <USlider v-model="previewTime" :min="0" :max="Math.max(0.1, previewDuration)" :step="0.1" class="flex-1" aria-label="预览时间点" @change="onPreviewTimeCommit" />
+        <span class="w-14 text-right font-mono text-[11px] text-gray-500 dark:text-gray-400">{{ formatPreviewTime(previewTime) }}</span>
       </div>
     </div>
-    <datalist :id="fontListId">
-      <option v-for="font in SUBTITLE_FONT_OPTIONS" :key="font.value" :value="font.value">{{ font.label }}</option>
-    </datalist>
+
+    <div class="overflow-hidden rounded-2xl border border-gray-800 bg-gray-950 shadow-inner">
+      <div class="relative flex aspect-video justify-center overflow-hidden bg-gradient-to-b from-gray-700 via-gray-900 to-black p-5" :class="realPreviewEnabled ? '' : previewContainerClass">
+        <template v-if="realPreviewEnabled">
+          <img v-if="realPreviewImageUrl" :src="realPreviewImageUrl" alt="实景字幕预览" title="点击查看完整分辨率原图" class="absolute inset-0 h-full w-full cursor-zoom-in object-contain" @click="openRealPreview" />
+          <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-xs text-white/60">
+            <UIcon name="i-lucide-image" class="h-7 w-7" />
+            <span>{{ realPreviewError || '正在准备实景预览...' }}</span>
+          </div>
+          <div v-if="realPreviewLoading" class="absolute inset-0 flex items-center justify-center bg-gray-950/45">
+            <UIcon name="i-lucide-loader-2" class="h-6 w-6 animate-spin text-white" />
+          </div>
+          <div v-if="realPreviewError && realPreviewImageUrl" class="absolute inset-x-3 bottom-9 rounded-lg bg-red-950/85 px-3 py-2 text-[11px] leading-4 text-red-100">
+            {{ realPreviewError }}
+          </div>
+          <span class="absolute bottom-2 left-3 rounded bg-black/35 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-white/70">{{ realPreviewMetaLabel }}</span>
+        </template>
+        <template v-else>
+          <div class="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent" />
+          <div class="relative flex w-full flex-col items-center" :class="[previewClasses, previewInnerClass]">
+            <template v-if="bilingualLayout === 'original_first'">
+              <span v-if="showOriginal" :style="originalPreviewStyle" :class="previewTextClasses">This is the original subtitle.</span>
+              <span v-if="showTranslated" :style="translatedPreviewStyle" :class="previewTextClasses">这是译文示例字幕。</span>
+            </template>
+            <template v-else>
+              <span v-if="showTranslated" :style="translatedPreviewStyle" :class="previewTextClasses">这是译文示例字幕。</span>
+              <span v-if="showOriginal" :style="originalPreviewStyle" :class="previewTextClasses">This is the original subtitle.</span>
+            </template>
+          </div>
+          <span class="absolute bottom-2 left-3 text-[10px] font-medium tracking-wide text-white/35">1920 × 1080 预览</span>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, nextTick, ref, useId, watch } from 'vue'
+import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { SubtitleOutputStyle, SubtitleTypographyStyle } from '~~/types'
-import { SUBTITLE_FONT_OPTIONS, createSubtitleStyle, getSubtitleStylePresetDefinition, getSubtitleStylePresetOptions, normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
+import { buildSubtitleFontOptions, createSubtitleStyle, getSubtitleStylePresetDefinition, getSubtitleStylePresetOptions, isFontInstalled, normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
+import { useServerFonts } from '../composables/useServerFonts'
 
 const props = defineProps<{
   modelValue: SubtitleOutputStyle
   outputMode: 'translated' | 'bilingual' | 'original'
   subtitleFormat?: 'srt' | 'ass' | 'both'
   bilingualLayout?: 'translated_first' | 'original_first'
+  previewSource?: {
+    taskId?: string
+    filePath?: string
+    rootId?: string
+  }
 }>()
 
 const emit = defineEmits<{
@@ -191,8 +260,33 @@ const ColorField = defineComponent({
 })
 
 const draft = ref(normalizeSubtitleStyle(props.modelValue, props.outputMode))
-const fontListId = `subx-font-options-${useId()}`
+const { fonts: serverFonts, loading: serverFontsLoading, load: loadServerFonts } = useServerFonts()
+const fontOptions = computed(() => buildSubtitleFontOptions(serverFonts.value))
 let syncingFromProps = false
+
+const realPreviewEnabled = ref(false)
+const realPreviewImageUrl = ref('')
+const realPreviewLoading = ref(false)
+const realPreviewError = ref('')
+const previewTime = ref(0)
+const previewDuration = ref(0)
+const previewMeta = ref({ width: 0, height: 0, time: 0, duration: 0 })
+let previewRequestId = 0
+let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+const previewSourceKey = computed(() => `${props.previewSource?.taskId || ''}|${props.previewSource?.filePath || ''}|${props.previewSource?.rootId || ''}`)
+const hasPreviewSource = computed(() => Boolean(props.previewSource && (props.previewSource.taskId || props.previewSource.filePath)))
+const canRealPreview = computed(() => hasPreviewSource.value && props.subtitleFormat !== 'srt' && draft.value.presetId !== 'inherit')
+const realPreviewDisabledReason = computed(() => {
+  if (!props.previewSource || (!props.previewSource.taskId && !props.previewSource.filePath)) return '选择视频后可启用实景预览；设置页仅显示示例背景。'
+  if (props.subtitleFormat === 'srt') return 'SRT 不保存字体和颜色，无法生成带样式的实景预览。'
+  if (draft.value.presetId === 'inherit') return '“沿用原样式”暂不支持实景预览。'
+  return ''
+})
+const realPreviewMetaLabel = computed(() => {
+  const { width, height } = previewMeta.value
+  return width && height ? `${width} × ${height} 实景预览` : '实景预览'
+})
 
 const presetOptions = computed(() => getSubtitleStylePresetOptions(props.outputMode))
 const currentPreset = computed(() => getSubtitleStylePresetDefinition(draft.value.presetId))
@@ -228,6 +322,160 @@ watch(draft, (value) => {
   const normalized = normalizeSubtitleStyle(value, props.outputMode)
   emit('update:modelValue', normalized)
 }, { deep: true })
+
+function setFontFamily(target: 'original' | 'translated', family: string) {
+  const value = String(family || '').trim()
+  if (!value) return
+  draft.value[target].fontFamily = value
+}
+
+function fontWarning(family: string) {
+  if (!serverFonts.value.length || isFontInstalled(family, serverFonts.value)) return ''
+  return `服务器未安装「${family}」，实景预览可能回退到其他字体`
+}
+
+function revokePreviewImage() {
+  if (realPreviewImageUrl.value) URL.revokeObjectURL(realPreviewImageUrl.value)
+  realPreviewImageUrl.value = ''
+}
+
+function clearPreviewSchedule() {
+  if (!previewDebounceTimer) return
+  clearTimeout(previewDebounceTimer)
+  previewDebounceTimer = null
+}
+
+function scheduleRealPreview(time?: number) {
+  if (!realPreviewEnabled.value || !canRealPreview.value) return
+  clearPreviewSchedule()
+  previewDebounceTimer = setTimeout(() => {
+    previewDebounceTimer = null
+    void requestRealPreview(time)
+  }, 300)
+}
+
+async function requestRealPreview(time?: number) {
+  if (!canRealPreview.value) return
+  const requestId = ++previewRequestId
+  realPreviewLoading.value = true
+  realPreviewError.value = ''
+
+  try {
+    const source = props.previewSource!
+    const body: Record<string, unknown> = {
+      outputMode: props.outputMode,
+      bilingualLayout: props.bilingualLayout || 'translated_first',
+      subtitleStyle: normalizeSubtitleStyle(draft.value, props.outputMode)
+    }
+    if (source.taskId) {
+      body.taskId = source.taskId
+    } else {
+      body.filePath = source.filePath
+      body.rootId = source.rootId
+    }
+    if (time != null && Number.isFinite(time)) body.time = Math.max(0, time)
+
+    const response = await fetch('/api/preview/frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => null)
+      throw new Error(String(data?.message || data?.statusMessage || `实景预览生成失败 (${response.status})`))
+    }
+
+    const blob = await response.blob()
+    if (requestId !== previewRequestId) return
+
+    const nextUrl = URL.createObjectURL(blob)
+    revokePreviewImage()
+    realPreviewImageUrl.value = nextUrl
+    const width = Number(response.headers.get('X-Preview-Width') || 0)
+    const height = Number(response.headers.get('X-Preview-Height') || 0)
+    const responseTime = Number(response.headers.get('X-Preview-Time') || 0)
+    const duration = Number(response.headers.get('X-Preview-Duration') || 0)
+    previewMeta.value = { width, height, time: responseTime, duration }
+    previewDuration.value = duration
+    previewTime.value = responseTime
+  } catch (error: any) {
+    if (requestId === previewRequestId) {
+      realPreviewError.value = error?.message || '实景预览生成失败'
+    }
+  } finally {
+    if (requestId === previewRequestId) realPreviewLoading.value = false
+  }
+}
+
+function onPreviewTimeCommit(event: Event) {
+  const raw = (event as any)?.target?.value
+  const value = Array.isArray(raw) ? Number(raw[0]) : Number(raw)
+  if (!Number.isFinite(value)) return
+  previewTime.value = Math.max(0, value)
+  void requestRealPreview(previewTime.value)
+}
+
+function formatPreviewTime(seconds: number) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    : `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
+
+function openRealPreview() {
+  if (!realPreviewImageUrl.value) return
+  window.open(realPreviewImageUrl.value, '_blank', 'noopener,noreferrer')
+}
+
+function downloadRealPreview() {
+  if (!realPreviewImageUrl.value) return
+  const link = document.createElement('a')
+  link.href = realPreviewImageUrl.value
+  link.download = 'subx-preview.png'
+  link.click()
+}
+
+onMounted(() => {
+  void loadServerFonts()
+})
+
+onBeforeUnmount(() => {
+  clearPreviewSchedule()
+  previewRequestId += 1
+  revokePreviewImage()
+})
+
+watch(realPreviewEnabled, (enabled) => {
+  clearPreviewSchedule()
+  previewRequestId += 1
+  realPreviewLoading.value = false
+  realPreviewError.value = ''
+  if (!enabled) return
+  previewTime.value = 0
+  previewDuration.value = 0
+  previewMeta.value = { width: 0, height: 0, time: 0, duration: 0 }
+  revokePreviewImage()
+  void requestRealPreview()
+})
+
+watch(canRealPreview, (can) => {
+  if (!can) realPreviewEnabled.value = false
+})
+
+watch(previewSourceKey, () => {
+  revokePreviewImage()
+  previewDuration.value = 0
+  previewTime.value = 0
+  previewMeta.value = { width: 0, height: 0, time: 0, duration: 0 }
+  if (realPreviewEnabled.value) scheduleRealPreview()
+})
+
+watch([() => JSON.stringify(draft.value), () => props.outputMode, () => props.bilingualLayout], () => {
+  if (realPreviewEnabled.value) scheduleRealPreview(previewDuration.value > 0 ? previewTime.value : undefined)
+})
 
 function resetPreset() {
   draft.value = createSubtitleStyle(draft.value.presetId, props.outputMode)

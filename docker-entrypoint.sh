@@ -16,8 +16,11 @@ if [ "$(id -u)" = "0" ]; then
     exec "$@"
   fi
 
-  mkdir -p "$DB_DIR" /app/temp "$MODEL_DIR"
-  chown -R "$PUID:$PGID" "$DB_DIR" /app/temp 2>/dev/null || true
+  mkdir -p "$DB_DIR" /app/temp /app/backups "$MODEL_DIR" /fonts
+  chown -R "$PUID:$PGID" "$DB_DIR" /app/temp /app/backups 2>/dev/null || true
+  if command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f /fonts >/dev/null 2>&1 || true
+  fi
 
   MODEL_OWNER="$(stat -c '%u:%g' "$MODEL_DIR" 2>/dev/null || true)"
   if [ "${CHOWN_MODELS:-false}" = "true" ] || { [ -n "$MODEL_OWNER" ] && [ "$MODEL_OWNER" != "$PUID:$PGID" ]; }; then

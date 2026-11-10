@@ -8,13 +8,22 @@ export default defineEventHandler(async (event) => {
     throw apiError(400, 'Task ID is required')
   }
 
+  const query = getQuery(event) as { limit?: string }
+  const limit = Math.min(5000, Math.max(1, Math.floor(Number(query.limit) || 2000)))
   const db = useDb()
+  const totalRow = db.prepare('SELECT COUNT(*) AS count FROM task_logs WHERE task_id = ?').get(id) as { count?: number } | undefined
+  const total = Number(totalRow?.count || 0)
   const rows = db.prepare(`
     SELECT id, task_id, step, category, level, message, created_at
-    FROM task_logs
-    WHERE task_id = ?
+    FROM (
+      SELECT id, task_id, step, category, level, message, created_at
+      FROM task_logs
+      WHERE task_id = ?
+      ORDER BY id DESC
+      LIMIT ?
+    ) recent
     ORDER BY id ASC
-  `).all(id) as any[]
+  `).all(id, limit) as any[]
 
   return {
     logs: rows.map(row => ({
@@ -25,6 +34,9 @@ export default defineEventHandler(async (event) => {
       level: row.level,
       message: row.message,
       createdAt: toUtcIsoString(row.created_at)
-    }))
+    })),
+    total,
+    limit,
+    truncated: total > rows.length
   }
 })

@@ -23,6 +23,7 @@ export type StorageTarget =
   | 'taskTemp'
   | 'taskLogs'
   | 'ocrTemp'
+  | 'previewCache'
   | 'translationCache'
 
 export interface StorageCategory {
@@ -59,6 +60,7 @@ const TEMP_ROOT = join(process.cwd(), 'temp')
 const ASR_AUDIO_DIR = join(TEMP_ROOT, 'asr-audio')
 const AI_LOGS_DIR = join(TEMP_ROOT, 'ai-logs')
 const TASK_LOG_DIR = join(process.cwd(), 'db', 'logs')
+const PREVIEW_DIR = join(TEMP_ROOT, 'preview')
 const MODEL_DIR = process.env.ASR_MODEL_DIR || '/models'
 const OCR_TEMP_DIR = resolve(process.env.OCR_TEMP_DIR || join(TEMP_ROOT, 'ocr'))
 const OCR_TEMP_PREFIXES = ['subx-ocr-', 'subx-preprocess-']
@@ -185,12 +187,13 @@ function category(key: StorageCategory['key'], label: string, description: strin
 
 export const StorageService = {
   async summary(): Promise<StorageSummary> {
-    const [asrAudio, aiLogs, taskTemp, taskLogs, ocrTemp, models, disk] = await Promise.all([
+    const [asrAudio, aiLogs, taskTemp, taskLogs, ocrTemp, previewCache, models, disk] = await Promise.all([
       scanFiles(ASR_AUDIO_DIR),
       scanFiles(AI_LOGS_DIR),
       scanFiles(TEMP_ROOT, { recursive: false, match: name => TEMP_FILE_PATTERN.test(name) }),
       scanFiles(TASK_LOG_DIR, { recursive: false, match: name => name.startsWith('task_') && name.endsWith('.log') }),
       scanOcrTemp(),
+      scanFiles(PREVIEW_DIR, { recursive: false, match: name => /\.(?:png|ass)$/i.test(name) }),
       existsSync(MODEL_DIR) ? scanFiles(MODEL_DIR) : Promise.resolve({ bytes: 0, files: 0, paths: [] }),
       diskStats()
     ])
@@ -199,6 +202,7 @@ export const StorageService = {
       category('asrAudio', 'ASR 音频缓存', '语音识别提取的 WAV，失败重试会复用。', asrAudio, ASR_AUDIO_DIR, true, asrAudioDefaultDays()),
       category('ocrTemp', 'OCR 临时图像', 'OCR 抽帧临时目录，默认位于 temp/ocr；兼容清理旧 /tmp 残留。', ocrTemp, OCR_TEMP_DIR, true, 1),
       category('taskTemp', '任务临时文件', '字幕临时文件、音频片段、分块 partial 等。', taskTemp, TEMP_ROOT),
+      category('previewCache', '实景预览缓存', '实景字幕预览生成的 PNG 和临时 ASS。', previewCache, PREVIEW_DIR, true, 1),
       category('aiLogs', 'AI 请求日志', '每次翻译请求的请求/响应调试日志。', aiLogs, AI_LOGS_DIR),
       category('taskLogs', '任务日志文件', 'db/logs 下的任务文本日志。', taskLogs, TASK_LOG_DIR),
       category('translationCache', '翻译缓存', 'SQLite/PostgreSQL 中可复用的翻译结果。', translationCache, '数据库', true, 30),
@@ -215,7 +219,7 @@ export const StorageService = {
   },
 
   async cleanup(targets: StorageTarget[], options: { days?: number, all?: boolean } = {}): Promise<StorageCleanupResult> {
-    const allowed = new Set<StorageTarget>(['asrAudio', 'aiLogs', 'taskTemp', 'taskLogs', 'ocrTemp', 'translationCache'])
+    const allowed = new Set<StorageTarget>(['asrAudio', 'aiLogs', 'taskTemp', 'taskLogs', 'ocrTemp', 'previewCache', 'translationCache'])
     const selected = Array.from(new Set(targets)).filter((target): target is StorageTarget => allowed.has(target as StorageTarget))
     const result: StorageCleanupResult = { deletedBytes: 0, deletedFiles: 0, categories: [], errors: [] }
     if (!selected.length) return result
@@ -226,6 +230,7 @@ export const StorageService = {
     const categoryDays: Record<StorageTarget, number> = {
       asrAudio: asrAudioDefaultDays(),
       ocrTemp: 1,
+      previewCache: 1,
       taskTemp: 7,
       aiLogs: 7,
       taskLogs: 7,
@@ -272,6 +277,8 @@ export const StorageService = {
           await cleanDirectoryFiles(AI_LOGS_DIR, 'aiLogs')
         } else if (target === 'taskTemp') {
           await cleanDirectoryFiles(TEMP_ROOT, 'taskTemp', name => TEMP_FILE_PATTERN.test(name) && !belongsToActiveTask(name))
+        } else if (target === 'previewCache') {
+          await cleanDirectoryFiles(PREVIEW_DIR, 'previewCache', name => /\.(?:png|ass)$/i.test(name))
         } else if (target === 'taskLogs') {
           await cleanDirectoryFiles(TASK_LOG_DIR, 'taskLogs', name => name.startsWith('task_') && name.endsWith('.log') && !belongsToActiveTask(name))
         } else if (target === 'ocrTemp') {

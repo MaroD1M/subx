@@ -21,6 +21,7 @@ import { releaseAudioLease, removeCachedAudio } from './asr/audioCache'
 import { markTaskActive, unmarkTaskActive } from './activeTasks'
 import { ConfigService } from './config'
 import { classifyTaskError } from './taskError'
+import { logger } from './logger'
 import { resolveTaskLogCategory, writeTaskLog } from './taskLog'
 import { finalizeTaskOutput } from './taskFinalize'
 import { prepareTaskSource } from './taskSource'
@@ -400,24 +401,29 @@ export const TaskService = {
             }
 
             const message = e?.message || 'Unknown error'
-            const classified = classifyTaskError(message)
-            const maskedKey = runtimeConfig?.apiKey ? `${runtimeConfig.apiKey.substring(0, 6)}...` : 'MISSING'
-            console.error('\n' + '='.repeat(50))
-            console.error(`[DEBUG] 任务失败详情 - Task ID: ${taskId}`)
-            console.error(`[DEBUG] 接口地址 (Base URL): ${runtimeConfig?.baseUrl || 'https://api.openai.com/v1'}`)
-            console.error(`[DEBUG] API Key (前6位): ${maskedKey}`)
-            console.error(`[DEBUG] 使用模型: ${taskForCleanup?.model || 'unknown'}`)
-            console.error(`[DEBUG] 目标语言: ${taskForCleanup?.targetLanguage || 'unknown'}`)
-            console.error(`[DEBUG] 错误信息: ${message}`)
-            if (e.response?.data) {
-                console.error(`[DEBUG] API 响应详情: ${JSON.stringify(e.response.data)}`)
-            }
-            console.error('='.repeat(50) + '\n')
+            const safeMessage = runtimeConfig?.apiKey ? message.split(runtimeConfig.apiKey).join('***') : message
+            const safeStack = runtimeConfig?.apiKey && e?.stack ? String(e.stack).split(runtimeConfig.apiKey).join('***') : String(e?.stack || '')
+            const classified = classifyTaskError(safeMessage)
+            logger.error({
+                taskId,
+                baseUrl: runtimeConfig?.baseUrl || 'https://api.openai.com/v1',
+                model: taskForCleanup?.model || 'unknown',
+                targetLanguage: taskForCleanup?.targetLanguage || 'unknown',
+                apiKeyConfigured: Boolean(runtimeConfig?.apiKey),
+                responseStatus: e?.response?.status,
+                err: {
+                    name: e?.name || 'Error',
+                    message: safeMessage,
+                    code: e?.code,
+                    status: e?.status || e?.response?.status,
+                    stack: safeStack.split('\n').slice(0, 5).join('\n')
+                }
+            }, 'task failed')
 
             await this.updateStatus(taskId, 'error', Number(taskForCleanup?.progress || 0), {
-                error: `${classified.summary} (${message})`,
+                error: `${classified.summary} (${safeMessage})`,
                 stepMessage: classified.summary,
-                log: `!!! 任务失败: ${classified.summary}${e.stack ? '\n堆栈信息: ' + e.stack.split('\n').slice(0, 3).join('\n') : ''}`
+                log: `!!! 任务失败: ${classified.summary}${safeStack ? '\n堆栈信息: ' + safeStack.split('\n').slice(0, 3).join('\n') : ''}`
             })
         } finally {
             releaseOutputLocks?.()

@@ -229,6 +229,24 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS review_jobs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      subtitle_ids_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'queued',
+      total INTEGER NOT NULL DEFAULT 0,
+      completed INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      result_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      started_at TEXT,
+      finished_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_review_jobs_status ON review_jobs(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_review_jobs_task ON review_jobs(task_id, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS task_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       task_id TEXT NOT NULL,

@@ -79,6 +79,8 @@ http://<主机IP>:3000
 5. 回首页开始翻译。
 
 > 镜像体积参考：amd64 下载约 **586 MiB**，解压后文件约 **1.57 GiB**（磁盘约 1.6–1.8 GB）；arm64 下载约 **520 MiB**（v2.6.x 实测，v2.8.6 预计接近）。模型体积参考：`tiny` 约 75MB、`small` 约 500MB、`medium` 约 1.5GB、`large-v3` 约 3GB。建议为 `./data/models` 预留 10–20GB。
+>
+> 实景字幕预览需要中文字体，镜像已内置 `fonts-noto-cjk`、`fonts-wqy-microhei` 和 `fonts-dejavu-core`，镜像体积会比旧版更大。如需使用自己的字体，把字体文件放到宿主机目录并挂载到容器 `/fonts`，然后重启容器即可。
 
 > [!TIP]
 > 不想读全文？先只改三处：媒体路径、`PUID/PGID`、`SUBX_SECRET_KEY`。然后 `docker compose up -d`，进设置页下载模型。其他默认值先别动，真的够用。
@@ -525,10 +527,20 @@ docker compose up -d --force-recreate
 备份：
 
 - 推荐在宿主机执行 `npm run backup`，默认写入 `backups/subx-*`，包含数据库、`.secret` 和任务日志。
-- 恢复前停止容器，再执行 `npm run restore -- ./backups/subx-*`；脚本会校验完整性并保留旧数据库。
+- 备份目录默认权限为 `0700`，数据库和 `.secret` 为 `0600`；`backups/` 已加入 `.gitignore`，不要上传或提交。
+- 只保留最近 10 份备份：`npm run backup -- --keep 10`。
+- 不想把加密密钥放进备份时使用 `npm run backup -- --no-secret`；但这样的备份无法恢复已加密的 AI Key 和通知密钥。
+- 恢复前停止容器，再执行 `npm run restore -- ./backups/subx-*`；脚本会校验完整性、检查 schema 版本并保留旧数据库。
+- 如果备份 schema 高于当前程序，恢复会被拒绝；如果要从新库降级到旧备份，需要确认后追加 `--force`。
 - 也可以手动备份 `DB_PATH` 所在目录，例如 `./data/db`；建议停止容器后备份，或同时备份 `-wal`/`-shm` 文件。
 - 备份模型缓存 `./data/models`，避免重新下载。
 - 如需保留排查日志，同时备份 `./data/temp`。
+- 也可以在「设置 → 存储与缓存 → 自动备份」中启用应用内定时备份（仅 SQLite），设置间隔和保留份数。应用内备份写入容器 `/app/backups`，Compose 默认映射到 `./data/backups`，请确保该目录已挂载。
+- 需要定时备份时，可在宿主机 crontab 中执行（路径按实际项目目录修改）：
+
+```bash
+0 3 * * * cd /path/to/subx && /usr/bin/npm run backup -- --keep 10 >> ./data/backup.log 2>&1
+```
 
 ## 13. PostgreSQL 运行时
 

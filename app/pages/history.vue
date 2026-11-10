@@ -363,6 +363,45 @@ const overviewSummaryText = computed(() => {
   ].join(' · ')
 })
 const tasks = computed(() => data.value?.tasks || [])
+const hasActiveTasks = computed(() => tasks.value.some(task => isActiveStatus(task.status)))
+let liveRefreshTimer = null
+
+function refreshLiveTasks() {
+  if (typeof document === 'undefined') return
+  if (document.visibilityState !== 'visible') return
+  if (pending.value || !hasActiveTasks.value) return
+  void refresh()
+}
+
+function startLiveRefresh() {
+  if (liveRefreshTimer) return
+  liveRefreshTimer = window.setInterval(refreshLiveTasks, 4000)
+}
+
+function stopLiveRefresh() {
+  if (!liveRefreshTimer) return
+  window.clearInterval(liveRefreshTimer)
+  liveRefreshTimer = null
+}
+
+function handleHistoryVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    refreshLiveTasks()
+    startLiveRefresh()
+  } else {
+    stopLiveRefresh()
+  }
+}
+
+onMounted(() => {
+  startLiveRefresh()
+  document.addEventListener('visibilitychange', handleHistoryVisibilityChange)
+})
+
+onBeforeUnmount(() => {
+  stopLiveRefresh()
+  document.removeEventListener('visibilitychange', handleHistoryVisibilityChange)
+})
 const riskTagLabels = {
   non_dialogue: '非对白内容',
   lyrics: '歌词/吟唱',

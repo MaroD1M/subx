@@ -3,6 +3,8 @@ import { globalTaskQueue, taskEvents } from '../utils/task'
 import { WatchService } from '../utils/watchService'
 import { NotificationService } from '../utils/notifications'
 import { IntegrationService } from '../utils/integrations'
+import { ReviewJobService } from '../utils/reviewJobs'
+import { startAutoBackupScheduler } from '../utils/backup'
 
 let automationListenersRegistered = false
 const RECOVERY_INTERVAL_MS = 5 * 60 * 1000
@@ -44,6 +46,11 @@ async function recoverRuntimeState() {
 
 export default defineNitroPlugin(async () => {
   await recoverRuntimeState()
+  try {
+    ReviewJobService.recoverInterrupted()
+  } catch (e) {
+    console.error('[Reconcile] Failed to recover review jobs:', e)
+  }
 
   try {
     await ConfigService.cleanupLogs()
@@ -64,5 +71,11 @@ export default defineNitroPlugin(async () => {
       void recoverRuntimeState()
     }, RECOVERY_INTERVAL_MS)
     globalState.__subxRecoveryTimer.unref?.()
+  }
+
+  try {
+    startAutoBackupScheduler()
+  } catch (e) {
+    console.error('[Reconcile] Failed to start auto backup scheduler:', e)
   }
 })

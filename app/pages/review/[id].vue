@@ -168,6 +168,7 @@
           <span class="mx-1 hidden h-4 w-px bg-gray-200 dark:bg-gray-700 sm:block" />
           <UButton label="重译选中" size="xs" color="primary" variant="soft" :loading="retranslating" title="对已勾选条目调用模型重译；会覆盖当前译文和最终导出" @click="retranslateSelected" />
           <UButton label="重译筛选" size="xs" color="primary" variant="ghost" :loading="retranslating" title="直接重译当前筛选出的全部条目" @click="retranslateFiltered" />
+          <span v-if="retranslating && retranslateProgress" class="text-[11px] font-medium text-primary-700 dark:text-primary-300">{{ retranslateProgress.completed }} / {{ retranslateProgress.total }} 块</span>
           <UButton label="设为原文" size="xs" color="warning" variant="ghost" title="只把选中条目的最终导出设为原文，不改变当前译文" @click="applyBulkOriginal" />
           <UPopover :content="{ align: 'end' }">
             <UButton label="更多" icon="i-lucide-ellipsis" size="xs" color="neutral" variant="ghost" title="顺序与错位修正" />
@@ -336,6 +337,7 @@
           :output-mode="exportMode"
           :subtitle-format="exportFormat"
           :bilingual-layout="bilingualLayout"
+          :preview-source="{ taskId }"
           @update:model-value="updateExportStyle"
         />
       </template>
@@ -407,6 +409,7 @@ const saving = ref(false)
 const exporting = ref(false)
 const retranslating = ref(false)
 const retranslatingSingleId = ref('')
+const retranslateProgress = ref<{ completed: number, total: number } | null>(null)
 const clipUrl = ref('')
 const clipEntryId = ref('')
 const clipRangeText = ref('')
@@ -1631,15 +1634,41 @@ async function confirmRetranslate(count: number, scope: string) {
   })
 }
 
+async function waitForReviewJob(jobId: string) {
+  for (let attempt = 0; attempt < 1800; attempt++) {
+    const response: any = await $fetch(`/api/review-jobs/${jobId}`)
+    const job = response?.job
+    if (!job) throw new Error('重译任务不存在')
+    retranslateProgress.value = { completed: Number(job.completed || 0), total: Number(job.total || 0) }
+    if (job.status === 'done') return job
+    if (job.status === 'error') throw new Error(job.error || '重译任务失败')
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  throw new Error('重译任务等待超时，后台可能仍在执行，请稍后刷新核对页')
+}
+
 async function retranslateIds(subtitleIds: string[]) {
   if (!subtitleIds.length) return
-  const result: any = await $fetch(`/api/tasks/${taskId}/review-retranslate`, {
-    method: 'POST',
-    body: { subtitleIds }
-  })
-  await Promise.all([loadReview(), loadPreview(), refreshProofreadCacheState()])
-  const count = Array.isArray(result?.entries) ? result.entries.length : subtitleIds.length
-  toast.add({ title: `已重译 ${count} 条字幕`, description: '当前译文和最终导出已更新，可继续校对或导出。', color: 'success' })
+  retranslateProgress.value = { completed: 0, total: 0 }
+  try {
+    const response: any = await $fetch(`/api/tasks/${taskId}/review-retranslate`, {
+      method: 'POST',
+      body: { subtitleIds }
+    })
+    const job = response?.job
+    if (!job?.id) throw new Error('未能创建后台重译任务')
+    toast.add({
+      title: '重译任务已进入后台',
+      description: `${subtitleIds.length} 条字幕正在重译，离开页面也会继续执行。`,
+      color: 'info'
+    })
+    const completedJob: any = await waitForReviewJob(job.id)
+    await Promise.all([loadReview(), loadPreview(), refreshProofreadCacheState()])
+    const count = Array.isArray(completedJob?.result?.entries) ? completedJob.result.entries.length : subtitleIds.length
+    toast.add({ title: `已重译 ${count} 条字幕`, description: '当前译文和最终导出已更新，可继续校对或导出。', color: 'success' })
+  } finally {
+    retranslateProgress.value = null
+  }
 }
 
 async function retranslateSelected() {
@@ -1695,11 +1724,15 @@ async function exportReviewed() {
   exporting.value = true
   try {
     await saveChanges(false)
-    await $fetch(`/api/tasks/${taskId}/review-export`, {
+    const result: any = await $fetch(`/api/tasks/${taskId}/review-export`, {
       method: 'POST',
       body: { outputMode: exportMode.value, subtitleStylePreset: exportStyle.value, subtitleStyle: exportSubtitleStyle.value, subtitleFormat: exportFormat.value, bilingualLayout: bilingualLayout.value }
     })
-    toast.add({ title: '已保存并导出最终字幕', description: '字幕文件已生成，任务将标记为完成。', color: 'success' })
+    toast.add({
+      title: '已保存并导出最终字幕',
+      description: result?.backupPath ? '字幕文件已生成；原同名文件已自动备份。' : '字幕文件已生成，任务将标记为完成。',
+      color: 'success'
+    })
     await navigateTo(`/task/${taskId}`)
   } catch (error: any) {
     toast.add({ title: '导出失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
@@ -1833,6 +1866,25 @@ function handleShortcut(event: KeyboardEvent) {
   }
 }
 
+async function resumeActiveReviewJob() {
+  try {
+    const response: any = await $fetch('/api/review-jobs/latest', { query: { taskId } })
+    const job = response?.job
+    if (!job || !['queued', 'running'].includes(String(job.status))) return
+    retranslating.value = true
+    retranslateProgress.value = { completed: Number(job.completed || 0), total: Number(job.total || 0) }
+    const completedJob: any = await waitForReviewJob(job.id)
+    await Promise.all([loadReview(), loadPreview(), refreshProofreadCacheState()])
+    const count = Array.isArray(completedJob?.result?.entries) ? completedJob.result.entries.length : job.total
+    toast.add({ title: `后台重译已完成 ${count} 条字幕`, description: '当前译文和最终导出已更新。', color: 'success' })
+  } catch (error: any) {
+    toast.add({ title: '后台重译未完成', description: error?.data?.message || error?.message || '请稍后刷新核对页查看结果', color: 'warning' })
+  } finally {
+    retranslating.value = false
+    retranslateProgress.value = null
+  }
+}
+
 onMounted(async () => {
   if (window.matchMedia('(max-width: 767px)').matches) {
     pageSize.value = 20
@@ -1842,6 +1894,7 @@ onMounted(async () => {
   try {
     await loadReview()
     await Promise.all([loadPreview(), loadCachedProofread('consistency', true)])
+    void resumeActiveReviewJob()
   } catch (error: any) {
     toast.add({ title: '核对页加载失败', description: error?.data?.message || error?.message || '请返回历史页后重试', color: 'error' })
   }

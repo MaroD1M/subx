@@ -28,6 +28,7 @@ demo_db
 db/
 data/
 temp
+backups/
 release.sh
 .vscode
 yarn.lock

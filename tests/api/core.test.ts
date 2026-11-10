@@ -1,8 +1,9 @@
 import { createHash } from 'crypto'
+import { execFileSync } from 'child_process'
 import Database from 'better-sqlite3'
 import { createServer } from 'http'
 import type { AddressInfo } from 'net'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
@@ -20,6 +21,23 @@ mkdirSync(join(tempDir, 'media', 'DeepSearch'), { recursive: true })
 writeFileSync(join(tempDir, 'media', 'DeepSearch', 'Nested.Movie.mkv'), '', 'utf-8')
 writeFileSync(join(tempDir, 'media', 'DeepSearch', 'Nested.Movie.zh.srt'), '1\n00:00:00,000 --> 00:00:01,000\nNested\n', 'utf-8')
 
+let previewVideoReady = false
+try {
+  execFileSync('ffmpeg', [
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-f', 'lavfi',
+    '-i', 'color=c=0x223344:s=320x180:d=2',
+    '-c:v', 'mpeg4',
+    '-pix_fmt', 'yuv420p',
+    '-y',
+    join(tempDir, 'media', 'Preview.mp4')
+  ])
+  previewVideoReady = true
+} catch {
+  previewVideoReady = false
+}
+
 await setup({
   rootDir,
   server: true,
@@ -28,6 +46,7 @@ await setup({
   env: {
     DB_PATH: dbPath,
     VIDEO_DIR: join(tempDir, 'media'),
+    SUBX_BACKUP_DIR: join(tempDir, 'backups'),
     SUBX_SECRET_KEY: 'api-test-secret',
     NUXT_PUBLIC_TIME_ZONE: 'Asia/Shanghai',
     NO_PROXY: '127.0.0.1,localhost',
@@ -366,6 +385,25 @@ describe('core API integration', () => {
     })
     expect(exported.status).toBe(200)
     expect(await exported.json()).toMatchObject({ success: true })
+
+    const reExported = await apiFetch(`/api/tasks/${completedTaskId}/review-export`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ subtitleFormat: 'srt', outputMode: 'original', bilingualLayout: 'translated_first' })
+    })
+    expect(reExported.status).toBe(200)
+    const reExportedBody = await reExported.json() as any
+    expect(reExportedBody.backupPath).toContain('.subx-backup-')
+    expect(existsSync(reExportedBody.backupPath)).toBe(true)
+  })
+
+  it('limits task log responses', async () => {
+    const response = await apiFetch(`/api/tasks/${completedTaskId}/logs?limit=1`, { headers: { cookie } })
+    expect(response.status).toBe(200)
+    const body = await response.json() as any
+    expect(body.limit).toBe(1)
+    expect(body.logs.length).toBeLessThanOrEqual(1)
+    expect(Number(body.total)).toBeGreaterThanOrEqual(body.logs.length)
   })
 
   it('searches the whole media root including nested files', async () => {
@@ -571,6 +609,34 @@ describe('core API integration', () => {
     expect(missing.status).toBe(404)
   })
 
+  it('returns system diagnostics', async () => {
+    const response = await apiFetch('/api/health/diagnostics', { headers: { cookie } })
+    expect(response.status).toBe(200)
+    const body = await response.json() as any
+    expect(['ok', 'warning', 'error']).toContain(body.summary)
+    expect(Array.isArray(body.checks)).toBe(true)
+    const ids = body.checks.map((check: any) => check.id)
+    expect(ids).toEqual(expect.arrayContaining(['database', 'media', 'ffmpeg', 'fonts', 'temp', 'disk', 'ai', 'backup', 'auth']))
+  })
+
+  it('creates and lists application backups', async () => {
+    const initial = await apiFetch('/api/backups', { headers: { cookie } })
+    expect(initial.status).toBe(200)
+    const initialBody = await initial.json() as any
+    expect(Array.isArray(initialBody.backups)).toBe(true)
+
+    const created = await apiFetch('/api/backups', { method: 'POST', headers: { cookie } })
+    expect(created.status).toBe(200)
+    const createdBody = await created.json() as any
+    expect(createdBody.backup?.name).toContain('subx-')
+    expect(createdBody.backup?.schemaVersion).toBeGreaterThan(0)
+    expect(existsSync(createdBody.backup.path)).toBe(true)
+
+    const listed = await apiFetch('/api/backups', { headers: { cookie } })
+    const listedBody = await listed.json() as any
+    expect(listedBody.backups.some((item: any) => item.name === createdBody.backup.name)).toBe(true)
+  })
+
   it('manages watch folders and storage endpoints', async () => {
     const folderCreated = await apiFetch('/api/files/create-folder', {
       method: 'POST',
@@ -672,6 +738,37 @@ describe('core API integration', () => {
       lastStatus = response.status
     }
     expect(lastStatus).toBe(429)
+  })
+
+  it.skipIf(!previewVideoReady)('lists server fonts and renders a real frame preview', async () => {
+    const fontsResponse = await apiFetch('/api/fonts', { headers: { cookie } })
+    expect(fontsResponse.status).toBe(200)
+    const fonts = await fontsResponse.json() as any
+    expect(Array.isArray(fonts.fonts)).toBe(true)
+
+    const preview = await apiFetch('/api/preview/frame', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filePath: 'Preview.mp4',
+        rootId: 'default',
+        time: 0.5,
+        outputMode: 'translated',
+        subtitleStyle: {
+          presetId: 'mono_clean',
+          translated: { fontFamily: 'Noto Sans CJK SC', fontSize: 48, primaryColor: '#FFFFFF', outlineColor: '#000000', outlineWidth: 2, shadow: 0.6, marginV: 24, alignment: 'bottom' }
+        },
+        originalText: 'Hello',
+        translatedText: '这是译文示例字幕。'
+      })
+    })
+    expect(preview.status).toBe(200)
+    expect(preview.headers.get('content-type')).toContain('image/png')
+    expect(Number(preview.headers.get('x-preview-width'))).toBe(320)
+    expect(Number(preview.headers.get('x-preview-height'))).toBe(180)
+    expect(Number(preview.headers.get('x-preview-time'))).toBeCloseTo(0.5, 2)
+    const image = Buffer.from(await preview.arrayBuffer())
+    expect(image.length).toBeGreaterThan(100)
   })
 
   it('validates integration webhook tokens and test events', async () => {

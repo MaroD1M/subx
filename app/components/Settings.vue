@@ -366,6 +366,11 @@
 
         <div v-if="activeTab === 'storage'" class="space-y-4">
           <SettingsStoragePanel />
+          <SettingsBackupPanel :config="config" @update:config="applyConfigPatch" />
+        </div>
+
+        <div v-if="activeTab === 'health'" class="space-y-4">
+          <SettingsHealthPanel />
         </div>
       </div>
     </div>
@@ -406,13 +411,15 @@ import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 import SettingsAiSection from './SettingsAiSection.vue'
 import SettingsDefaultSection from './SettingsDefaultSection.vue'
 import SettingsAdvancedSection from './SettingsAdvancedSection.vue'
+import SettingsBackupPanel from './SettingsBackupPanel.vue'
+import SettingsHealthPanel from './SettingsHealthPanel.vue'
 
-const emit = defineEmits(['close', 'saved'])
+const emit = defineEmits(['close', 'saved', 'dirty'])
 const route = useRoute()
 const isGuideOpen = ref(false)
 const requestedTab = String(route.query.tab || '')
-const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'styles' | 'glossary' | 'advanced' | 'storage'>(
-  ['ai', 'asr', 'ocr', 'defaults', 'styles', 'glossary', 'advanced', 'storage'].includes(requestedTab)
+const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'styles' | 'glossary' | 'advanced' | 'storage' | 'health'>(
+  ['ai', 'asr', 'ocr', 'defaults', 'styles', 'glossary', 'advanced', 'storage', 'health'].includes(requestedTab)
     ? requestedTab as any
     : 'ai'
 )
@@ -424,7 +431,8 @@ const settingsTabs = [
   { label: '翻译风格', icon: 'i-lucide-wand-sparkles', value: 'styles' as const },
   { label: '术语表', icon: 'i-lucide-book-a', value: 'glossary' as const },
   { label: '高级设置', icon: 'i-lucide-settings-2', value: 'advanced' as const },
-  { label: '存储与缓存', icon: 'i-lucide-hard-drive', value: 'storage' as const }
+  { label: '存储与缓存', icon: 'i-lucide-hard-drive', value: 'storage' as const },
+  { label: '系统体检', icon: 'i-lucide-stethoscope', value: 'health' as const }
 ]
 const builtinStylePresets = STYLE_PRESETS
 const { data } = await useAppConfigData()
@@ -561,6 +569,9 @@ if (config.value) {
   if (config.value.concurrency) config.value.concurrency = Number(config.value.concurrency)
   if (config.value.maxRetries) config.value.maxRetries = Number(config.value.maxRetries)
   if (config.value.logRetentionDays) config.value.logRetentionDays = Number(config.value.logRetentionDays)
+  if (config.value.autoBackupEnabled === undefined) config.value.autoBackupEnabled = false
+  if (config.value.autoBackupIntervalHours === undefined) config.value.autoBackupIntervalHours = 24
+  if (config.value.autoBackupKeep === undefined) config.value.autoBackupKeep = 10
   if (!config.value.providerType) config.value.providerType = 'openai-compatible'
   if (config.value.asrEnabled === undefined) config.value.asrEnabled = false
   if (!config.value.asrBaseUrl) config.value.asrBaseUrl = 'http://127.0.0.1:8000'
@@ -751,6 +762,8 @@ function buildConfigSnapshot(value: any) {
 
 const currentSnapshot = computed(() => buildConfigSnapshot(config.value))
 const hasUnsavedChanges = computed(() => initialSnapshot.value !== '' && currentSnapshot.value !== initialSnapshot.value)
+
+watch(hasUnsavedChanges, value => emit('dirty', value), { immediate: true })
 
 function addCustomStyle() {
   if (!Array.isArray(config.value.customStylePresets)) config.value.customStylePresets = []

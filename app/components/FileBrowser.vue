@@ -333,6 +333,7 @@
                   :output-mode="options.outputMode"
                   :subtitle-format="options.subtitleFormat"
                   :bilingual-layout="options.bilingualLayout"
+                  :preview-source="subtitlePreviewSource"
                   @update:model-value="updateSubtitleStyle"
                 />
               </div>
@@ -938,6 +939,12 @@ const isSubtitleFile = computed(() => {
   if (!selectedFile.value) return false
   const name = selectedFile.value.name.toLowerCase()
   return name.endsWith('.srt') || name.endsWith('.vtt') || name.endsWith('.ass') || name.endsWith('.ssa')
+})
+
+const subtitlePreviewSource = computed(() => {
+  const file = selectedFile.value
+  if (!file || file.isDir || isSubtitleFile.value || !file.path) return undefined
+  return { filePath: file.path, rootId: file.rootId || activeRootId.value }
 })
 
 let selectionSeq = 0

@@ -11,16 +11,64 @@ export interface SubtitleStylePresetDefinition extends SubtitleStylePresetOption
   style: SubtitleOutputStyle
 }
 
-export const SUBTITLE_FONT_OPTIONS = [
-  { label: 'Arial', value: 'Arial' },
-  { label: 'Noto Sans CJK SC', value: 'Noto Sans CJK SC' },
-  { label: 'Source Han Sans SC', value: 'Source Han Sans SC' },
-  { label: 'Microsoft YaHei', value: 'Microsoft YaHei' },
-  { label: 'PingFang SC', value: 'PingFang SC' },
-  { label: '思源黑体', value: 'Source Han Sans CN' },
-  { label: '文泉驿微米黑', value: 'WenQuanYi Micro Hei' },
-  { label: 'DejaVu Sans', value: 'DejaVu Sans' }
+export interface SubtitleFontOption {
+  label: string
+  value: string
+  description?: string
+  group?: string
+  installed?: boolean
+}
+
+export const SUBTITLE_FONT_OPTIONS: SubtitleFontOption[] = [
+  { label: 'Arial', value: 'Arial', group: '西文' },
+  { label: 'DejaVu Sans', value: 'DejaVu Sans', group: '西文' },
+  { label: 'Noto Sans CJK SC', value: 'Noto Sans CJK SC', group: '中文' },
+  { label: 'Source Han Sans SC', value: 'Source Han Sans SC', group: '中文' },
+  { label: 'Microsoft YaHei', value: 'Microsoft YaHei', group: '中文' },
+  { label: 'PingFang SC', value: 'PingFang SC', group: '中文' },
+  { label: '思源黑体', value: 'Source Han Sans CN', group: '中文' },
+  { label: '文泉驿微米黑', value: 'WenQuanYi Micro Hei', group: '中文' }
 ]
+
+export function normalizeFontFamilyKey(value: unknown): string {
+  return String(value ?? '').trim().toLocaleLowerCase()
+}
+
+export function isFontInstalled(fontFamily: unknown, serverFonts: readonly string[] = []): boolean {
+  const target = normalizeFontFamilyKey(fontFamily)
+  if (!target) return false
+  return serverFonts.some(font => normalizeFontFamilyKey(font) === target)
+}
+
+export function buildSubtitleFontOptions(serverFonts: readonly string[] = []): SubtitleFontOption[] {
+  const hasServerFonts = serverFonts.length > 0
+  const recommendedKeys = new Set(SUBTITLE_FONT_OPTIONS.map(font => normalizeFontFamilyKey(font.value)))
+  const recommended = SUBTITLE_FONT_OPTIONS.map(font => {
+    const installed = isFontInstalled(font.value, serverFonts)
+    return {
+      ...font,
+      installed,
+      description: hasServerFonts
+        ? installed ? '服务器已安装，可用于实景预览' : '服务器未安装，实景预览可能回退到其他字体'
+        : '写入 ASS 字体名，播放端需安装该字体'
+    }
+  })
+
+  const extra = serverFonts
+    .map(font => String(font || '').trim())
+    .filter(Boolean)
+    .filter(font => !recommendedKeys.has(normalizeFontFamilyKey(font)))
+    .sort((a, b) => a.localeCompare(b, 'en'))
+    .map(font => ({
+      label: font,
+      value: font,
+      group: '服务器字体',
+      installed: true,
+      description: '服务器已安装，可用于实景预览'
+    }))
+
+  return [...recommended, ...extra]
+}
 
 function typography(overrides: Partial<SubtitleTypographyStyle> = {}): SubtitleTypographyStyle {
   return {

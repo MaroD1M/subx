@@ -213,6 +213,49 @@ export const MIGRATIONS: Migration[] = [
     }
   },
   {
+    version: 9,
+    name: 'review-jobs',
+    up(db, dialect) {
+      if (dialect === 'sqlite') {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS review_jobs (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            subtitle_ids_json TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'queued',
+            total INTEGER NOT NULL DEFAULT 0,
+            completed INTEGER NOT NULL DEFAULT 0,
+            error TEXT,
+            result_json TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            started_at TEXT,
+            finished_at TEXT
+          )
+        `)
+      } else {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS review_jobs (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            subtitle_ids_json TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'queued',
+            total INTEGER NOT NULL DEFAULT 0,
+            completed INTEGER NOT NULL DEFAULT 0,
+            error TEXT,
+            result_json TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            started_at TIMESTAMPTZ,
+            finished_at TIMESTAMPTZ
+          )
+        `)
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_review_jobs_status ON review_jobs(status, created_at)')
+      db.exec('CREATE INDEX IF NOT EXISTS idx_review_jobs_task ON review_jobs(task_id, created_at DESC)')
+    }
+  },
+  {
     version: 8,
     name: 'task-timing',
     up(db, dialect) {

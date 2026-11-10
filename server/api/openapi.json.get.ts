@@ -89,6 +89,40 @@ export default defineEventHandler(() => {
     },
     paths: {
       '/api/health': { get: { summary: '健康检查', security: [], responses: { '200': jsonResponse({ ok: true }) } } },
+      '/api/fonts': { get: { summary: '服务器已安装字体列表', responses: { '200': jsonResponse({ fonts: ['Noto Sans CJK SC'], available: true }) } } },
+      '/api/backups': {
+        get: { summary: '备份列表与自动备份设置', responses: { '200': { description: 'OK' } } },
+        post: { summary: '立即创建应用内备份', responses: { '200': jsonResponse({ success: true }) } }
+      },
+      '/api/health/diagnostics': { get: { summary: '系统体检', responses: { '200': { description: 'OK' } } } },
+      '/api/review-jobs/{id}': { get: { summary: '核对重译后台任务状态', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/review-jobs/latest': { get: { summary: '任务最近一次核对重译任务', parameters: [{ name: 'taskId', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/preview/frame': {
+        post: {
+          summary: '按时间点生成完整分辨率实景字幕预览图',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    taskId: { type: 'string', description: '核对页任务 ID；与 filePath 二选一' },
+                    filePath: { type: 'string', description: '首页视频相对路径；与 taskId 二选一' },
+                    rootId: { type: 'string' },
+                    time: { type: 'number', description: '秒；省略时自动选择字幕中点或视频 10% 位置' },
+                    outputMode: { type: 'string', enum: ['translated', 'bilingual', 'original'] },
+                    subtitleStylePreset: { type: 'string' },
+                    subtitleStyle: { type: 'object' },
+                    bilingualLayout: { type: 'string', enum: ['translated_first', 'original_first'] }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: 'image/png；响应头包含 X-Preview-Width/Height/Time/Duration' } }
+        }
+      },
       '/api/files/scan': { get: { summary: '递归扫描目录内的视频文件', parameters: [{ name: 'rootId', in: 'query', required: true, schema: { type: 'string' } }, { name: 'path', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
       '/api/task': { post: { summary: '创建任务', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TaskCreate' } } } }, responses: { '200': jsonResponse({ taskId: 'uuid' }) } } },
       '/api/tasks': { get: { summary: '任务列表', parameters: [{ name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'pageSize', in: 'query', schema: { type: 'integer' } }, { name: 'status', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
@@ -127,7 +161,7 @@ export default defineEventHandler(() => {
       '/api/asr/metrics': { get: { summary: 'ASR 指标', responses: { '200': { description: 'OK' } } } },
       '/api/ocr/status': { get: { summary: 'OCR 服务状态', responses: { '200': { description: 'OK' } } } },
       '/api/storage': { get: { summary: '存储与缓存占用', responses: { '200': { description: 'OK' } } } },
-      '/api/storage/cleanup': { post: { summary: '按类型清理 SubX 缓存', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['targets'], properties: { targets: { type: 'array', items: { type: 'string', enum: ['asrAudio', 'aiLogs', 'taskTemp', 'taskLogs', 'ocrTemp', 'translationCache'] } }, days: { type: 'integer' }, all: { type: 'boolean' } } } } } }, responses: { '200': { description: 'OK' } } } },
+      '/api/storage/cleanup': { post: { summary: '按类型清理 SubX 缓存', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['targets'], properties: { targets: { type: 'array', items: { type: 'string', enum: ['asrAudio', 'aiLogs', 'taskTemp', 'taskLogs', 'ocrTemp', 'previewCache', 'translationCache'] } }, days: { type: 'integer' }, all: { type: 'boolean' } } } } } }, responses: { '200': { description: 'OK' } } } },
       '/api/asr/models': { get: { summary: 'ASR 模型列表、安装状态与下载任务', responses: { '200': { description: 'OK' } } } },
       '/api/asr/models-download': { post: { summary: '开始 ASR 模型下载', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['model'], properties: { model: { type: 'string' }, engine: { type: 'string', enum: ['auto', 'faster-whisper', 'whisper-cpp'] }, proxy: { type: 'string' }, force: { type: 'boolean' } } } } } }, responses: { '200': jsonResponse({ ok: true, jobId: 'uuid', status: 'queued' }) } } },
       '/api/asr/models-download-status': { get: { summary: 'ASR 模型下载进度', parameters: [{ name: 'jobId', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
