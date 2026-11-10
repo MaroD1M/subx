@@ -23,9 +23,7 @@ test('home visual and accessibility', async ({ page }) => {
   await filesResponse
   await expect(page.getByText('Movies').first()).toBeVisible()
   await expect(page.getByText('选择一个视频开始')).toBeVisible()
-  await expect(page).toHaveScreenshot('home.png', {
-    fullPage: true
-  })
+  await expect(page).toHaveScreenshot('home.png')
   await expectNoSeriousA11y(page)
 })
 
@@ -37,9 +35,7 @@ test('home dark visual and accessibility', async ({ page }) => {
   await expect(page.getByText('文件浏览器')).toBeVisible()
   await filesResponse
   await expect(page.getByText('Movies').first()).toBeVisible()
-  await expect(page).toHaveScreenshot('home-dark.png', {
-    fullPage: true
-  })
+  await expect(page).toHaveScreenshot('home-dark.png')
   await expectNoSeriousA11y(page)
 })
 
@@ -215,8 +211,6 @@ test.describe('mobile', () => {
   test('mobile home visual', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
-    await expect(page).toHaveScreenshot('mobile-home.png', {
-      fullPage: true
-    })
+    await expect(page).toHaveScreenshot('mobile-home.png')
   })
 })
