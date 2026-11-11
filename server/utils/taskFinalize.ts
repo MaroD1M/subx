@@ -7,6 +7,9 @@ import { TranslationService, type TranslationContext } from './translation'
 import { writeTaskLog } from './taskLog'
 import { persistReviewEntries } from './taskSupport'
 import { assertTaskNotCancelled, ensureTaskNotCancelled } from './taskState'
+import { analyzeSubtitleQuality } from './subtitleQuality'
+import { buildChineseVariantEntries, buildChineseVariantPaths } from './chineseVariant'
+import { CostService } from './cost'
 
 export interface FinalizeTaskOptions {
   taskId: string
@@ -62,6 +65,23 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
   const issues = SubtitleService.validateTranslatedEntries(translatedEntries, task.targetLanguage)
   let allIssues: Array<{ id: string, reason: string, severity?: 'soft' | 'hard' }> = issues
 
+  if (config.subtitleQualityEnabled === true) {
+    const quality = analyzeSubtitleQuality(translatedEntries, {
+      maxCharsPerLine: Number(config.subtitleQualityMaxCharsPerLine ?? 20),
+      maxLines: Number(config.subtitleQualityMaxLines ?? 2),
+      maxCps: Number(config.subtitleQualityMaxCps ?? 20),
+      minDurationMs: Number(config.subtitleQualityMinDurationMs ?? 700),
+      maxDurationMs: Number(config.subtitleQualityMaxDurationMs ?? 8000),
+      gapMs: Number(config.subtitleQualityGapMs ?? 80)
+    }, config.subtitleQualityAutoFixEnabled === true)
+    translatedEntries = quality.entries
+    allIssues = [...allIssues, ...quality.issues]
+    if (quality.issues.length > 0) {
+      const issueCounts = Object.entries(quality.counts).map(([reason, count]) => `${reason}:${count}`).join(', ')
+      writeTaskLog(taskId, 'exporting', 'warn', `[质检] 检出 ${quality.issues.length} 条字幕技术问题（${issueCounts}）${quality.autoFixed ? `，自动修正 ${quality.autoFixed} 条` : ''}`)
+    }
+  }
+
   if (config.qualityCheckEnabled === true && config.qualityCheckModel && config.qualityCheckModel !== task.model) {
     try {
       await updateStatus(taskId, 'translating', 87, { log: `正在进行双模型质量校验：${config.qualityCheckModel}` })
@@ -96,6 +116,18 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
     await SubtitleService.writeSubtitle(translatedEntries, embyVariantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
   }
 
+  let variantPaths: string[] = []
+  if (config.chineseVariantOutputEnabled === true && task.outputMode !== 'original') {
+    const variantEntries = buildChineseVariantEntries(translatedEntries, task.targetLanguage)
+    variantPaths = buildChineseVariantPaths(outputPath, embyVariantPath, task.targetLanguage)
+    for (const variantPath of variantPaths) {
+      await SubtitleService.writeSubtitle(variantEntries, variantPath, task.outputMode as 'translated' | 'bilingual' | 'original', subtitleFormat as any, subtitleStylePreset, bilingualLayout as any, srtPath, subtitleStyle)
+    }
+    if (variantPaths.length) {
+      writeTaskLog(taskId, 'exporting', 'info', `[简繁] 已同步输出变体: ${variantPaths.join(', ')}`)
+    }
+  }
+
   if (allIssues.length > 0) {
     const preview = allIssues.slice(0, 5).map(issue => `#${issue.id}:${issue.reason}`).join(', ')
     persistReviewEntries(taskId, translatedEntries, allIssues)
@@ -109,6 +141,7 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
   TranslationService.cleanupPartialFiles(taskId, totalChunks)
 
   useDb().prepare('UPDATE tasks SET output_path = ?, updated_at = datetime(\'now\') WHERE task_id = ?').run(savedPath, taskId)
+  await CostService.recordTaskCost(taskId)
   const fallbackRatio = translatedEntries.length > 0 ? fallbackCount / translatedEntries.length : 0
   if (fallbackCount > 0 && fallbackRatio >= 0.05) {
     await updateStatus(taskId, 'review', 100, {

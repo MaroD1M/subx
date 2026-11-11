@@ -32,6 +32,8 @@ import { deriveOutputBaseName, isSafeOutputSuffix } from './outputNaming'
 import { isPathInside } from './pathSafety'
 import { acquireOutputLocks } from './outputLock'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
+import { CostService } from './cost'
+import { buildChineseVariantPaths } from './chineseVariant'
 
 export const taskEvents = new EventEmitter()
 taskEvents.setMaxListeners(0)
@@ -235,14 +237,14 @@ export const TaskService = {
             const category = data.category || resolveTaskLogCategory(status, level, data.log)
             const logId = writeTaskLog(taskId, status, level, data.log, category)
             taskEvents.emit('progress', { ...payload, level, category, logId })
-            if (status === 'done' || status === 'error' || status === 'cancelled') {
+            if (status === 'done' || status === 'review' || status === 'error' || status === 'cancelled') {
                 taskEvents.emit(status, { ...payload, level, category, logId, final: true })
             }
             return
         }
 
         taskEvents.emit('progress', payload)
-        if (status === 'done' || status === 'error' || status === 'cancelled') {
+        if (status === 'done' || status === 'review' || status === 'error' || status === 'cancelled') {
             taskEvents.emit(status, { ...payload, final: true })
         }
     },
@@ -296,17 +298,25 @@ export const TaskService = {
                 ? join(dirname(inputPath), 'SubX', `${outputBaseName}.${outputSuffix}.${outputExt}`)
                 : ''
             const outputBasePath = outputPath.replace(/\.[^.]+$/, '')
-            const plannedOutputPaths = task.subtitleFormat === 'both'
-                ? [`${outputBasePath}.srt`, `${outputBasePath}.ass`]
-                : [outputPath]
+            const expandOutputPaths = (candidate: string) => task.subtitleFormat === 'both'
+                ? [`${candidate.replace(/\.[^.]+$/, '')}.srt`, `${candidate.replace(/\.[^.]+$/, '')}.ass`]
+                : [candidate]
+            const chineseVariantPaths = config.chineseVariantOutputEnabled === true && task.outputMode !== 'original'
+                ? buildChineseVariantPaths(outputPath, embyVariantPath, task.targetLanguage)
+                : []
+            const plannedOutputPaths = [
+                ...expandOutputPaths(outputPath),
+                ...(embyVariantPath ? expandOutputPaths(embyVariantPath) : []),
+                ...chineseVariantPaths.flatMap(expandOutputPaths)
+            ]
             const protectedSourcePaths = [inputPath, srtPath].filter(Boolean)
             if (plannedOutputPaths.some(candidate => protectedSourcePaths.includes(candidate))) {
                 throw new Error('输出路径与源字幕文件相同，请更改目标语言或输出模式')
             }
-            if (!isPathInside(prepared.rootPath, outputPath) || (embyVariantPath && !isPathInside(prepared.rootPath, embyVariantPath))) {
+            if (!isPathInside(prepared.rootPath, outputPath) || (embyVariantPath && !isPathInside(prepared.rootPath, embyVariantPath)) || chineseVariantPaths.some(candidate => !isPathInside(prepared.rootPath, candidate))) {
                 throw new Error('输出路径超出媒体库范围')
             }
-            releaseOutputLocks = acquireOutputLocks([outputPath, embyVariantPath].filter(Boolean))
+            releaseOutputLocks = acquireOutputLocks([outputPath, embyVariantPath, ...chineseVariantPaths].filter(Boolean))
             keepAsrAudio = Boolean(config.asrKeepAudio)
 
             const chunkSize = Math.min(50000, Math.max(500, config.chunkSize || 5000))
@@ -456,6 +466,9 @@ export const TaskService = {
             try {
                 TranslationService.cleanupPartialFiles(taskId, Number(taskForCleanup?.totalChunks || 0) + 1)
             } catch { /* ignore cleanup failures */ }
+            try {
+                await CostService.recordTaskCost(taskId)
+            } catch { /* cost accounting is best-effort */ }
         }
     }
 }

@@ -48,4 +48,46 @@ describe('PostgreSQL schema compatibility', () => {
 
     await client.end()
   })
+
+  it('supports the coverage, memory, metadata and cost tables', async () => {
+    const db = newDb()
+    const pg = db.adapters.createPg()
+    const client = new pg.Client()
+    await client.connect()
+    const schema = readFileSync(join(process.cwd(), 'scripts', 'postgres-schema.sql'), 'utf-8')
+    await client.query(schema)
+
+    await client.query(`
+      INSERT INTO coverage_auto_fill_policies (root_id, enabled, target_language, schedule_type, output_policy_json)
+      VALUES ('root-1', 1, 'zh-CN', 'daily', '{}')
+      ON CONFLICT(root_id) DO UPDATE SET enabled=excluded.enabled
+    `)
+    await client.query(`
+      INSERT INTO library_coverage_index (root_id, target_language, path, status)
+      VALUES ('root-1', 'zh-CN', 'Show.S01E01.mkv', 'missing')
+      ON CONFLICT(root_id, target_language, path) DO UPDATE SET status=excluded.status
+    `)
+    await client.query(`
+      INSERT INTO translation_memory (target_language, source_hash, source_text, translated_text, series_key, confidence)
+      VALUES ('zh-CN', 'hash-1', 'Hello world', '你好世界', 'series-1', 0.9)
+      ON CONFLICT(target_language, source_hash, series_key) DO UPDATE SET translated_text=excluded.translated_text
+    `)
+    await client.query(`
+      INSERT INTO media_metadata_cache (cache_key, payload_json, expires_at)
+      VALUES ('tmdb:test', '{}', now())
+      ON CONFLICT(cache_key) DO UPDATE SET payload_json=excluded.payload_json
+    `)
+    await client.query(`
+      INSERT INTO cost_usage (task_id, model, prompt_tokens, completion_tokens, total_tokens, cost_usd)
+      VALUES ('task-1', 'model-a', 10, 20, 30, 0.001)
+      ON CONFLICT(task_id) DO UPDATE SET cost_usd=excluded.cost_usd
+    `)
+    const memory = await client.query('SELECT COUNT(*)::int AS count FROM translation_memory')
+    expect(memory.rows[0]?.count).toBe(1)
+    const costs = await client.query("SELECT COALESCE(SUM(cost_usd), 0) AS total FROM cost_usage")
+    expect(Number(costs.rows[0]?.total)).toBeCloseTo(0.001)
+    const monthly = await client.query('SELECT COUNT(*)::int AS count FROM cost_usage WHERE created_at >= $1 AND created_at < $2', ['2026-01-01 00:00:00', '2026-12-31 00:00:00'])
+    expect(monthly.rows[0]?.count).toBe(1)
+    await client.end()
+  })
 })

@@ -5,6 +5,8 @@ import { NotificationService } from '../utils/notifications'
 import { IntegrationService } from '../utils/integrations'
 import { ReviewJobService } from '../utils/reviewJobs'
 import { startAutoBackupScheduler } from '../utils/backup'
+import { CoverageAutoFillService } from '../utils/coverageAutoFill'
+import { updateCoverageIndexForTask } from '../utils/libraryCoverage'
 
 let automationListenersRegistered = false
 const RECOVERY_INTERVAL_MS = 5 * 60 * 1000
@@ -16,17 +18,23 @@ function registerAutomationListeners() {
   taskEvents.on('done', ({ taskId }: { taskId: string }) => {
     WatchService.finishTask(taskId, 'done')
     IntegrationService.finishTask(taskId, 'done')
+    updateCoverageIndexForTask(taskId)
     void NotificationService.notifyTaskEvent(taskId, 'task_done')
     void NotificationService.notifyTaskEvent(taskId, 'low_confidence')
+  })
+  taskEvents.on('review', ({ taskId }: { taskId: string }) => {
+    updateCoverageIndexForTask(taskId)
   })
   taskEvents.on('error', ({ taskId }: { taskId: string }) => {
     WatchService.finishTask(taskId, 'error')
     IntegrationService.finishTask(taskId, 'error')
+    updateCoverageIndexForTask(taskId)
     void NotificationService.notifyTaskEvent(taskId, 'task_error')
   })
   taskEvents.on('cancelled', ({ taskId }: { taskId: string }) => {
     WatchService.finishTask(taskId, 'cancelled')
     IntegrationService.finishTask(taskId, 'cancelled')
+    updateCoverageIndexForTask(taskId)
     void NotificationService.notifyTaskEvent(taskId, 'task_cancelled')
   })
 }
@@ -77,5 +85,11 @@ export default defineNitroPlugin(async () => {
     startAutoBackupScheduler()
   } catch (e) {
     console.error('[Reconcile] Failed to start auto backup scheduler:', e)
+  }
+
+  try {
+    CoverageAutoFillService.startScheduler()
+  } catch (e) {
+    console.error('[Reconcile] Failed to start coverage auto-fill scheduler:', e)
   }
 })

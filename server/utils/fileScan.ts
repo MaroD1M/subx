@@ -22,6 +22,7 @@ export interface ScannedFile {
   rootId: string
   rootName: string
   size: number
+  mtimeMs?: number
 }
 
 function extensionOf(name: string) {
@@ -168,7 +169,8 @@ export async function scanMediaFolder(rootId: string, folderPath = '') {
         isDir: false,
         rootId: root.id,
         rootName: root.name,
-        size: info.size
+        size: info.size,
+        mtimeMs: info.mtimeMs
       })
       if (files.length >= MAX_SCAN_FILES) {
         truncated = true
@@ -263,7 +265,8 @@ export async function searchMediaFiles(rootId: string, query: string, limit = 20
         isDir: false,
         rootId: root.id,
         rootName: root.name,
-        size: info.size
+        size: info.size,
+        mtimeMs: info.mtimeMs
       })
       if (files.length >= maxResults) {
         truncated = true

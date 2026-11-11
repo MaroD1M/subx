@@ -28,7 +28,16 @@ export const REVIEW_REASON_LABELS: Record<string, string> = {
   overlong_translation: '译文异常偏长',
   suspected_shift: '疑似错位/串行',
   low_asr_confidence: 'ASR 置信度偏低',
-  low_quality_translation: '双模型质量评分偏低'
+  low_quality_translation: '双模型质量评分偏低',
+  quality_empty: '译文为空',
+  line_too_long: '单行过长',
+  too_many_lines: '行数过多',
+  cps_too_high: '阅读速度过快',
+  duration_too_short: '显示时间过短',
+  duration_too_long: '显示时间过长',
+  timing_overlap: '时间轴重叠',
+  gap_too_small: '字幕间隔过短',
+  untranslated_sdh: '残留英文音效标记'
 }
 
 export const QUALITY_ISSUE_LABELS: Record<string, string> = {

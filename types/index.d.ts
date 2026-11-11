@@ -225,6 +225,24 @@ export interface AppConfig {
   subtitleStyle?: SubtitleOutputStyle // 字幕视觉样式
   bilingualLayout?: string     // 双语排版
   embyCompatibleOutput?: boolean // Emby 主字幕 + SubX/ 变体
+  chineseVariantOutputEnabled?: boolean // 同时输出简体和繁体
+  subtitleQualityEnabled?: boolean
+  subtitleQualityMaxCharsPerLine?: number
+  subtitleQualityMaxLines?: number
+  subtitleQualityMaxCps?: number
+  subtitleQualityMinDurationMs?: number
+  subtitleQualityMaxDurationMs?: number
+  subtitleQualityGapMs?: number
+  subtitleQualityAutoFixEnabled?: boolean
+  translationMemoryEnabled?: boolean
+  metadataEnabled?: boolean
+  metadataProvider?: 'tmdb'
+  metadataApiKey?: string
+  metadataLanguage?: string
+  costBudgetEnabled?: boolean
+  costBudgetMonthlyUsd?: number
+  costPricePromptPer1M?: number
+  costPriceCompletionPer1M?: number
 }
 
 /** 监控规则 */
@@ -272,6 +290,128 @@ export interface WatchFolder {
   updatedAt?: string
   pendingEvents?: number
   failedEvents?: number
+}
+
+/** 媒体库缺字幕自动补齐策略 */
+export interface CoverageAutoFillPolicy {
+  rootId: string
+  enabled: boolean
+  targetLanguage: string
+  scheduleType: 'daily' | 'interval'
+  intervalHours: number
+  dailyTime: string
+  runWindowStart: string
+  runWindowEnd: string
+  maxTasksPerRun: number
+  skipRecentDays: number
+  includeEmbedded: boolean
+  outputPolicy: WatchOutputPolicy
+  lastRunAt?: string
+  lastRunStatus?: 'idle' | 'running' | 'done' | 'skipped' | 'error'
+  lastRunSummary?: string
+  nextRunAt?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CoverageAutoFillResult {
+  rootId: string
+  dryRun: boolean
+  candidates: number
+  created: number
+  skipped: number
+  reasons: Record<string, number>
+  preview: Array<{ path: string, name: string, seriesTitle: string }>
+  budgetBlocked?: boolean
+  estimatedCostUsd?: number
+  summary?: string
+}
+
+export interface CostSummary {
+  month: string
+  budgetEnabled: boolean
+  budgetUsd: number
+  spentUsd: number
+  remainingUsd: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  taskCount: number
+  byModel: Array<{ model: string, tasks: number, totalTokens: number, costUsd: number }>
+}
+
+export interface TranslationMemoryStats {
+  total: number
+  byLanguage: Array<{ targetLanguage: string, entries: number, uses: number }>
+  topTerms?: Array<{ sourceText: string, translatedText: string, uses: number }>
+  lastUpdatedAt?: string
+}
+
+export interface OperationsRuntimeOverview {
+  tasks: {
+    queued: number
+    active: number
+    review: number
+    failed: number
+    done: number
+    total: number
+  }
+  activity: Array<{ date: string, label: string, done: number, failed: number, created: number }>
+  queue: {
+    running: number
+    queued: number
+    concurrency: number
+    avgDurationMs: number
+    etaSeconds: number
+  }
+  cost: CostSummary
+  coverage: {
+    available: boolean
+    total: number
+    done: number
+    missing: number
+    review: number
+    processing: number
+    failed: number
+  }
+  memory: TranslationMemoryStats
+}
+
+export interface TaskDiagnosticsOverview {
+  summary: {
+    totalTasks: number
+    doneTasks: number
+    reviewTasks: number
+    errorTasks: number
+    cancelledTasks: number
+  }
+  translation: {
+    totalChunks: number
+    missingIdChunks: number
+    chunksWithParseLoss: number
+    retriedChunks: number
+    singleRetriedChunks: number
+    fallbackChunks: number
+    totalRetryAttempts: number
+    totalSingleRetryAttempts: number
+    totalFallbackCount: number
+  }
+  riskTags: Array<{ tag: string, count: number }>
+  responseIssues: Array<{ issue: string, count: number }>
+  reviewReasons: Array<{ reason: string, count: number }>
+  sampledTasks: Array<{
+    taskId: string
+    status: string
+    filePath: string
+    createdAt: string
+    updatedAt: string
+  }>
+}
+
+export interface OperationsOverview {
+  generatedAt: string
+  runtime: OperationsRuntimeOverview
+  diagnostics: TaskDiagnosticsOverview
 }
 
 export interface WatchEvent {

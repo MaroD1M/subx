@@ -13,7 +13,7 @@ export default defineEventHandler(() => {
     openapi: '3.1.0',
     info: {
       title: 'SubX API',
-      version: '2.9.2',
+      version: '2.9.3',
       description: 'SubX 任务、目录监控、通知与 API Token 接口。使用 Authorization: Bearer <token> 或 X-API-Token。'
     },
     servers: [{ url: '/' }],
@@ -170,6 +170,17 @@ export default defineEventHandler(() => {
       '/api/asr/models-download-cancel': { post: { summary: '取消 ASR 模型下载并清理部分文件', responses: { '200': { description: 'OK' } } } },
       '/api/asr/models-delete': { post: { summary: '卸载 ASR 模型', responses: { '200': { description: 'OK' } } } },
       '/api/library/coverage': { get: { summary: '媒体库字幕覆盖检查', parameters: [{ name: 'rootId', in: 'query', required: true, schema: { type: 'string' } }, { name: 'targetLanguage', in: 'query', schema: { type: 'string' } }, { name: 'refresh', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/library/coverage-policy': {
+        get: { summary: '查询媒体库自动补齐策略', parameters: [{ name: 'rootId', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } },
+        put: { summary: '保存媒体库自动补齐策略', responses: { '200': { description: 'OK' } } }
+      },
+      '/api/library/coverage-auto-fill': { post: { summary: '预览或立即补齐缺失字幕', requestBody: { content: { 'application/json': { schema: { type: 'object', required: ['rootId'], properties: { rootId: { type: 'string' }, dryRun: { type: 'boolean' }, force: { type: 'boolean' } } } } } }, responses: { '200': { description: 'OK' } } } },
+      '/api/operations/overview': { get: { summary: '运行状态、字幕覆盖、成本、记忆与任务诊断合并总览', responses: { '200': { description: 'OK' } } } },
+      '/api/cost/summary': { get: { summary: '本月 token 与费用统计', parameters: [{ name: 'month', in: 'query', schema: { type: 'string', example: '2026-11' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/translation-memory/stats': { get: { summary: '翻译记忆统计', responses: { '200': { description: 'OK' } } } },
+      '/api/translation-memory/mine': { post: { summary: '从媒体库已有双语字幕学习翻译记忆', requestBody: { content: { 'application/json': { schema: { type: 'object', required: ['rootId'], properties: { rootId: { type: 'string' }, targetLanguage: { type: 'string' }, limitFiles: { type: 'integer' }, limitPairs: { type: 'integer' } } } } } }, responses: { '200': { description: 'OK' } } } },
+      '/api/translation-memory/clear': { post: { summary: '清空指定语言的翻译记忆', requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { targetLanguage: { type: 'string' } } } } } }, responses: { '200': { description: 'OK' } } } },
+      '/api/metadata/test': { post: { summary: '检测 TMDB 元数据 API', responses: { '200': { description: 'OK' } } } },
       '/api/series/profile': {
         get: { summary: '查询系列记忆', parameters: [{ name: 'rootId', in: 'query', schema: { type: 'string' } }, { name: 'filePath', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } },
         put: { summary: '保存系列记忆', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['filePath'], properties: { rootId: { type: 'string' }, filePath: { type: 'string' }, seriesKey: { type: 'string' }, title: { type: 'string' }, background: { type: 'string' }, summary: { type: 'string' }, glossary: { type: 'object' } } } } } }, responses: { '200': { description: 'OK' } } }

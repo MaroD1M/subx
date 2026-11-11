@@ -2,9 +2,15 @@ import { readFileSync } from 'node:fs'
 import { STYLE_PRESETS } from './shared/stylePresets'
 
 const NAV_ICONS = ['home', 'history', 'library-big', 'list-checks', 'workflow', 'settings']
+const FEATURE_ICONS = [
+  'activity', 'brain-circuit', 'calendar-check-2', 'chart-no-axes-combined',
+  'chevron-down', 'chevron-up', 'circle-dashed', 'clock-3', 'loader-2',
+  'save', 'scan-search', 'wallet', 'wand-sparkles'
+]
 const CLIENT_BUNDLE_ICONS = Array.from(new Set([
   ...STYLE_PRESETS.map(preset => preset.icon.replace(/^i-lucide-/, '')),
-  ...NAV_ICONS
+  ...NAV_ICONS,
+  ...FEATURE_ICONS
 ])).map(name => `lucide:${name}`)
 
 export default defineNuxtConfig({

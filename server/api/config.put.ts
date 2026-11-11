@@ -83,7 +83,25 @@ const ALLOWED_KEYS = new Set([
   'ocrJobAbsoluteTimeoutMs',
   'automationConcurrency',
   'notificationEnabled',
-  'notificationLowConfidenceThreshold'
+  'notificationLowConfidenceThreshold',
+  'chineseVariantOutputEnabled',
+  'subtitleQualityEnabled',
+  'subtitleQualityMaxCharsPerLine',
+  'subtitleQualityMaxLines',
+  'subtitleQualityMaxCps',
+  'subtitleQualityMinDurationMs',
+  'subtitleQualityMaxDurationMs',
+  'subtitleQualityGapMs',
+  'subtitleQualityAutoFixEnabled',
+  'translationMemoryEnabled',
+  'metadataEnabled',
+  'metadataProvider',
+  'metadataApiKey',
+  'metadataLanguage',
+  'costBudgetEnabled',
+  'costBudgetMonthlyUsd',
+  'costPricePromptPer1M',
+  'costPriceCompletionPer1M'
 ])
 
 export default defineEventHandler(async (event) => {
@@ -91,7 +109,7 @@ export default defineEventHandler(async (event) => {
 
   for (const [key, value] of Object.entries(body)) {
     if (!ALLOWED_KEYS.has(key)) continue
-    if ((key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'fallbackApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken') && String(value).includes('*')) continue
+    if ((key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'fallbackApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken' || key === 'metadataApiKey') && String(value).includes('*')) continue
     if (key === 'integrationWebhookToken' && !String(value).trim()) continue
     if (key === 'targetLanguage' && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,34}$/.test(String(value || '').trim())) {
       throw apiError(400, '目标语言格式不合法')
@@ -126,6 +144,22 @@ export default defineEventHandler(async (event) => {
           }
         }
         const rootIds = new Set(roots.map(root => String(root.id)))
+        const removedRootIds = new Set<string>()
+        for (const folder of watchFolders) {
+          const rootId = String(folder.root_id)
+          if (!rootIds.has(rootId)) removedRootIds.add(rootId)
+        }
+        try {
+          const indexedRoots = db.prepare('SELECT DISTINCT root_id FROM library_coverage_index').all() as Array<{ root_id?: string }>
+          for (const row of indexedRoots) {
+            const rootId = String(row.root_id || '')
+            if (rootId && !rootIds.has(rootId)) removedRootIds.add(rootId)
+          }
+        } catch { /* older schema */ }
+        for (const rootId of removedRootIds) {
+          try { db.prepare('DELETE FROM library_coverage_index WHERE root_id = ?').run(rootId) } catch { /* older schema */ }
+          try { db.prepare('DELETE FROM coverage_auto_fill_policies WHERE root_id = ?').run(rootId) } catch { /* older schema */ }
+        }
         const profileRoots = db.prepare('SELECT DISTINCT root_id FROM series_profiles WHERE root_id IS NOT NULL').all() as Array<{ root_id?: string }>
         for (const row of profileRoots) {
           const rootId = String(row.root_id || '')
@@ -155,6 +189,30 @@ export default defineEventHandler(async (event) => {
         .filter(preset => preset.id && preset.name && preset.prompt)
       await ConfigService.updateConfig(key, sanitized)
       continue
+    }
+    if (['subtitleQualityMaxCharsPerLine', 'subtitleQualityMaxLines', 'subtitleQualityMaxCps', 'subtitleQualityMinDurationMs', 'subtitleQualityMaxDurationMs', 'subtitleQualityGapMs', 'costBudgetMonthlyUsd', 'costPricePromptPer1M', 'costPriceCompletionPer1M'].includes(key)) {
+      const numeric = Number(value)
+      const limits: Record<string, [number, number]> = {
+        subtitleQualityMaxCharsPerLine: [8, 80],
+        subtitleQualityMaxLines: [1, 6],
+        subtitleQualityMaxCps: [5, 60],
+        subtitleQualityMinDurationMs: [100, 10000],
+        subtitleQualityMaxDurationMs: [1000, 60000],
+        subtitleQualityGapMs: [0, 2000],
+        costBudgetMonthlyUsd: [0, 1000000],
+        costPricePromptPer1M: [0, 1000000],
+        costPriceCompletionPer1M: [0, 1000000]
+      }
+      const [min, max] = limits[key]!
+      await ConfigService.updateConfig(key, Math.max(min, Math.min(max, Number.isFinite(numeric) ? numeric : min)))
+      continue
+    }
+    if (key === 'metadataProvider') {
+      await ConfigService.updateConfig(key, 'tmdb')
+      continue
+    }
+    if (key === 'metadataLanguage' && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,20}$/.test(String(value || '').trim())) {
+      throw apiError(400, '元数据语言格式不合法')
     }
     if (key === 'chunkSize') {
       await ConfigService.updateConfig(key, Math.min(50000, Math.max(100, Number(value) || 5000)))

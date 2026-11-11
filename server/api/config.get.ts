@@ -33,6 +33,11 @@ export default defineEventHandler(async () => {
         ? `${integrationToken.slice(0, 4)}****${integrationToken.slice(-4)}`
         : integrationToken.replace(/./g, '*')
 
+    const metadataKey = String(config.metadataApiKey || '')
+    const maskedMetadataKey = metadataKey.length > 8
+        ? `${metadataKey.slice(0, 4)}****${metadataKey.slice(-4)}`
+        : metadataKey.replace(/./g, '*')
+
     return {
         ...config,
         apiKey: maskedKey,
@@ -40,6 +45,7 @@ export default defineEventHandler(async () => {
         asrCloudApiKey: maskedAsrCloudKey,
         fallbackApiKey: maskedFallbackKey,
         integrationWebhookToken: maskedIntegrationToken,
-        ocrApiKey: maskedOcrKey
+        ocrApiKey: maskedOcrKey,
+        metadataApiKey: maskedMetadataKey
     }
 })

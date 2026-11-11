@@ -1,10 +1,10 @@
 # SubX 部署文档
 
-> 适用版本：v2.9.2
+> 适用版本：v2.9.3
 
 本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理、拆分部署、升级备份和常见问题。使用说明请参阅 [usage.md](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
-## 1. v2.9.2 架构
+## 1. v2.9.3 架构
 
 从 v2.5.0 开始，主应用镜像 `ghcr.io/marod1m/subx` 同时包含：
 
@@ -25,7 +25,7 @@ OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下�
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.9.2
+    image: ghcr.io/marod1m/subx:v2.9.3
     container_name: subx
     restart: unless-stopped
     ports:
@@ -112,7 +112,7 @@ http://<主机IP>:3000
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.9.2
+    image: ghcr.io/marod1m/subx:v2.9.3
     container_name: subx
     restart: unless-stopped
     ports:
@@ -297,11 +297,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.9.2
+# 默认拉取 v2.9.3
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.9.2
+./scripts/pull-image.sh --tag v2.9.3
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
@@ -419,7 +419,7 @@ docker compose --profile asr up -d asr
 http://subx-asr:8000
 ```
 
-独立镜像：`ghcr.io/marod1m/subx-asr:v2.9.2`。模型目录为 `./data/models/asr`。
+独立镜像：`ghcr.io/marod1m/subx-asr:v2.9.3`。模型目录为 `./data/models/asr`。
 
 ### 8.2 独立 OCR 容器
 
@@ -517,7 +517,7 @@ OCR 内部健康检查：
 
 ## 12. 升级与备份
 
-升级到 v2.9.2：
+升级到 v2.9.3：
 
 ```bash
 docker compose pull
@@ -526,19 +526,12 @@ docker compose up -d --force-recreate
 
 升级说明：
 
-- v2.9.2 为 v2.9.1 后的修复版；从 v2.9.1 升级无需修改数据库，从 v2.9.0 升级会自动执行数据库迁移 v10（新增系列记忆表），从 v2.8.6 及更早版本升级会依次执行 v9 / v10。
-- 修复 ASR 上传使用全局 FormData 导致 FastAPI 返回 422 `body.file` 缺失；本地 ASR 和云端 ASR 均已修复。
-- 修复实景预览拖动时间滑块后松开不更新预览图的问题。
-- 覆盖检查现在能识别同目录 `<视频名>.zh-CN.srt/.ass` 和内嵌字幕轨，并新增「包含内嵌字幕」开关。
-- 修复覆盖检查导航、面包屑和内置翻译风格图标缺失。
-- 修复本地 ASR 在 undici 8 下创建任务失败（`UND_ERR_INVALID_ARG`）。
-- ASR/OCR 检测现在显示设置页实际选择的模型、引擎、设备和语言。
-- ASR/OCR 状态轮询增加瞬时网络错误重试；OCR 排队任务不再被无进度超时误取消。
-- 模型下载增加 Hugging Face sha256 校验；启动时后台校验历史模型，损坏模型会标记为未安装。
-- 模型缓存默认按内存自适应，旧目录暂停任务会自动迁移并保留 `.part`。
-- 修复 whisper.cpp 引擎下载路由和模型目录名冲突处理。
-- 新增系列记忆、覆盖检查、简洁模式、低功耗 NAS 预设、备用供应商回退和核对页时间编辑。
-- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.9.2。
+- v2.9.3 新增智能增强能力；从 v2.9.2 升级会自动执行数据库迁移 v11（覆盖索引、自动补齐、翻译记忆、元数据缓存和费用表），从 v2.9.1 升级会执行 v11，从 v2.9.0 升级会执行 v10 / v11，从 v2.8.6 及更早版本升级会依次执行 v9 / v10 / v11。
+- 覆盖检查新增自动补齐策略、持久化覆盖索引、运行时段、单次上限、dry-run 预览和预算限流。
+- 翻译历史新增合并的「运行与诊断」折叠面板，首页不再展示运行概览。
+- 新增简繁双输出、字幕技术质检、翻译记忆、TMDB 元数据和成本预算。
+- 修复多 Worker 自动补齐重复执行、截断扫描覆盖完整索引、预算耗尽无法预览和 TMDB 批量超时等问题。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.9.3。
 - 建议升级前执行备份，升级后进入「设置 → 系统体检」检查服务状态。
 
 备份：
@@ -664,7 +657,7 @@ docker exec -it subx curl -fsS http://127.0.0.1:8000/health
 
 ### 镜像太大 / 拉取很慢
 
-- v2.9.2 单镜像包含 Python、FFmpeg、Tesseract 语言包、OCR 依赖和内置中文字体；不同架构和版本体积会有差异，建议至少预留 2–3 GB 磁盘。
+- v2.9.3 单镜像包含 Python、FFmpeg、Tesseract 语言包、OCR 依赖和内置中文字体；不同架构和版本体积会有差异，建议至少预留 2–3 GB 磁盘。
 - 使用 `./scripts/pull-image.sh` 查看 Docker 原生进度；Ctrl+C 暂停后重新执行可续传。
 - 配置 Docker Daemon 代理（见第 5 节）。
 - 只需要主应用时，可继续使用旧版精简镜像和独立 sidecar，但不再推荐。

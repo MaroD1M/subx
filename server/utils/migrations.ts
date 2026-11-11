@@ -198,6 +198,147 @@ function ensureAsrCheckpoints(db: any, dialect: MigrationDialect) {
   ensureIndex(db, dialect, 'asr_checkpoints', 'idx_asr_checkpoints_updated_at', 'updated_at')
 }
 
+
+function ensureIntelligenceTables(db: any, dialect: MigrationDialect) {
+  if (dialect === 'sqlite') {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS library_coverage_index (
+        root_id TEXT NOT NULL,
+        target_language TEXT NOT NULL,
+        path TEXT NOT NULL,
+        status TEXT NOT NULL,
+        task_id TEXT,
+        task_status TEXT,
+        subtitle_path TEXT,
+        subtitle_source TEXT,
+        matched_language TEXT,
+        embedded_track_title TEXT,
+        file_mtime TEXT,
+        scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (root_id, target_language, path)
+      );
+      CREATE TABLE IF NOT EXISTS coverage_auto_fill_policies (
+        root_id TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        target_language TEXT NOT NULL DEFAULT 'zh-CN',
+        schedule_type TEXT NOT NULL DEFAULT 'daily',
+        interval_hours INTEGER NOT NULL DEFAULT 24,
+        daily_time TEXT NOT NULL DEFAULT '03:00',
+        run_window_start TEXT NOT NULL DEFAULT '',
+        run_window_end TEXT NOT NULL DEFAULT '',
+        max_tasks_per_run INTEGER NOT NULL DEFAULT 10,
+        skip_recent_days INTEGER NOT NULL DEFAULT 1,
+        include_embedded INTEGER NOT NULL DEFAULT 1,
+        output_policy_json TEXT NOT NULL DEFAULT '{}',
+        last_run_at TEXT,
+        last_run_status TEXT NOT NULL DEFAULT 'idle',
+        last_run_summary TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS translation_memory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_language TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        source_text TEXT NOT NULL,
+        translated_text TEXT NOT NULL,
+        series_key TEXT NOT NULL DEFAULT '',
+        source_kind TEXT NOT NULL DEFAULT 'review',
+        confidence REAL NOT NULL DEFAULT 0.9,
+        use_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(target_language, source_hash, series_key)
+      );
+      CREATE TABLE IF NOT EXISTS media_metadata_cache (
+        cache_key TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS cost_usage (
+        task_id TEXT PRIMARY KEY,
+        model TEXT NOT NULL DEFAULT '',
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+  } else {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS library_coverage_index (
+        root_id TEXT NOT NULL,
+        target_language TEXT NOT NULL,
+        path TEXT NOT NULL,
+        status TEXT NOT NULL,
+        task_id TEXT,
+        task_status TEXT,
+        subtitle_path TEXT,
+        subtitle_source TEXT,
+        matched_language TEXT,
+        embedded_track_title TEXT,
+        file_mtime TIMESTAMPTZ,
+        scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (root_id, target_language, path)
+      );
+      CREATE TABLE IF NOT EXISTS coverage_auto_fill_policies (
+        root_id TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        target_language TEXT NOT NULL DEFAULT 'zh-CN',
+        schedule_type TEXT NOT NULL DEFAULT 'daily',
+        interval_hours INTEGER NOT NULL DEFAULT 24,
+        daily_time TEXT NOT NULL DEFAULT '03:00',
+        run_window_start TEXT NOT NULL DEFAULT '',
+        run_window_end TEXT NOT NULL DEFAULT '',
+        max_tasks_per_run INTEGER NOT NULL DEFAULT 10,
+        skip_recent_days INTEGER NOT NULL DEFAULT 1,
+        include_embedded INTEGER NOT NULL DEFAULT 1,
+        output_policy_json TEXT NOT NULL DEFAULT '{}',
+        last_run_at TIMESTAMPTZ,
+        last_run_status TEXT NOT NULL DEFAULT 'idle',
+        last_run_summary TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS translation_memory (
+        id BIGSERIAL PRIMARY KEY,
+        target_language TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        source_text TEXT NOT NULL,
+        translated_text TEXT NOT NULL,
+        series_key TEXT NOT NULL DEFAULT '',
+        source_kind TEXT NOT NULL DEFAULT 'review',
+        confidence DOUBLE PRECISION NOT NULL DEFAULT 0.9,
+        use_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(target_language, source_hash, series_key)
+      );
+      CREATE TABLE IF NOT EXISTS media_metadata_cache (
+        cache_key TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS cost_usage (
+        task_id TEXT PRIMARY KEY,
+        model TEXT NOT NULL DEFAULT '',
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `)
+  }
+  ensureIndex(db, dialect, 'library_coverage_index', 'idx_coverage_index_root_status', 'root_id, target_language, status')
+  ensureIndex(db, dialect, 'translation_memory', 'idx_translation_memory_lookup', 'target_language, source_hash')
+  ensureIndex(db, dialect, 'translation_memory', 'idx_translation_memory_series', 'target_language, series_key')
+  ensureIndex(db, dialect, 'cost_usage', 'idx_cost_usage_created', 'created_at')
+}
+
 export const MIGRATIONS: Migration[] = [
   {
     version: 3,
@@ -313,6 +454,13 @@ export const MIGRATIONS: Migration[] = [
     name: 'series-profiles',
     up(db, dialect) {
       ensureSeriesProfiles(db, dialect)
+    }
+  },
+  {
+    version: 11,
+    name: 'coverage-fill-memory-metadata-cost',
+    up(db, dialect) {
+      ensureIntelligenceTables(db, dialect)
     }
   },
 ]

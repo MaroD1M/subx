@@ -10,6 +10,8 @@ import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 import { useDb } from '../utils/db'
 import { findActiveTaskDuplicate, isActiveTaskStatus } from '../utils/taskDedupe'
 import { SeriesService, seriesKeyFromPath } from '../utils/series'
+import { MetadataService } from '../utils/metadata'
+import { CostService } from '../utils/cost'
 import type { TrackPolicy } from '~~/types'
 
 export default defineEventHandler(async (event) => {
@@ -17,6 +19,10 @@ export default defineEventHandler(async (event) => {
   const { filePath, sourceType, trackIndex, trackPolicy, dedupeEpisodes, targetLanguage, outputMode, model, stylePreset, stylePrompt, contentTitle, contentBackground, customInstructions, subtitleFormat, subtitleStylePreset, subtitleStyle, bilingualLayout, files, rootId } = body
 
   const config = await ConfigService.getConfig()
+  const budget = await CostService.checkBudget()
+  if (!budget.allowed) {
+    throw apiError(429, budget.message || '本月翻译预算已用完')
+  }
   const taskIds: string[] = []
   let reusedActive = 0
   const allStylePresets = [...STYLE_PRESETS, ...(Array.isArray(config.customStylePresets) ? config.customStylePresets : [])]
@@ -60,6 +66,17 @@ export default defineEventHandler(async (event) => {
 
     const taskId = uuidv4()
     const seriesKey = seriesKeyFromPath(path, currentRootId)
+    let resolvedTitle = contentTitle || ''
+    let resolvedBackground = contentBackground || ''
+    let metadataFound = false
+    if (!resolvedTitle && !resolvedBackground && config.metadataEnabled === true) {
+      const metadata = await MetadataService.enrich(path, config)
+      if (metadata) {
+        resolvedTitle = metadata.title
+        resolvedBackground = metadata.overview
+        metadataFound = true
+      }
+    }
     await TaskService.createTask({
       taskId,
       filePath: path,
@@ -72,8 +89,8 @@ export default defineEventHandler(async (event) => {
       outputMode: requestedOutputMode,
       stylePreset: selectedStyleId,
       stylePrompt: resolvedStylePrompt,
-      contentTitle: contentTitle || '',
-      contentBackground: contentBackground || '',
+      contentTitle: resolvedTitle,
+      contentBackground: resolvedBackground,
       customInstructions: customInstructions || '',
       translationMode: config.translationMode || 'non_stream',
       subtitleFormat: requestedFormat as any,
@@ -83,9 +100,9 @@ export default defineEventHandler(async (event) => {
       trackPolicy: policy
     })
 
-    if (persistSeriesProfile && (contentTitle || contentBackground)) {
+    if ((persistSeriesProfile || metadataFound) && (resolvedTitle || resolvedBackground)) {
       try {
-        SeriesService.updateFromTask(currentRootId, path, taskId, contentTitle, contentBackground)
+        SeriesService.updateFromTask(currentRootId, path, taskId, resolvedTitle, resolvedBackground)
       } catch (error: any) {
         console.warn('[Series] Failed to persist series profile:', error?.message || error)
       }

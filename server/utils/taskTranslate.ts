@@ -9,6 +9,7 @@ import { createProvider, normalizeProviderType } from './providers/registry'
 import type { BoundTranslationProvider } from './providers/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { resolveSeriesTranslationContext, SeriesService } from './series'
+import { TranslationMemoryService } from './translationMemory'
 import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
 
 interface TranslateSubtitlesOptions {
@@ -97,6 +98,13 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
         await updateStatus(taskId, 'translating', 30, { log: '已启用重新翻译：本次任务将跳过本地缓存。' })
     }
 
+    const memoryResults = config.translationMemoryEnabled !== false && !task.forceRetranslate
+        ? TranslationMemoryService.lookup(allEntries, task.targetLanguage, task.seriesKey || '')
+        : new Map<string, string>()
+    if (memoryResults.size > 0) {
+        await updateStatus(taskId, 'translating', 30, { log: `翻译记忆命中 ${memoryResults.size} 条，优先复用已确认译法。` })
+    }
+
     const translatedMap = new Map<string, SubtitleEntry>()
     const completedChunksPerChunk = new Map<number, number>()
     let globalCompletedChunks = 0
@@ -138,6 +146,12 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
         for (const entry of chunk) {
             if (SubtitleService.isNonVerbal(entry.text)) {
                 nonVerbalResults.set(String(entry.id), entry.text)
+                continue
+            }
+
+            const memoryText = memoryResults.get(String(entry.id))
+            if (memoryText) {
+                cachedResults.set(String(entry.id), memoryText)
                 continue
             }
 

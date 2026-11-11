@@ -42,7 +42,7 @@ test('home dark visual and accessibility', async ({ page }) => {
 test('history visual and accessibility', async ({ page }) => {
   let diagnosticsRequests = 0
   page.on('request', request => {
-    if (request.url().includes('/api/tasks/diagnostics/overview')) diagnosticsRequests += 1
+    if (request.url().includes('/api/operations/overview')) diagnosticsRequests += 1
   })
   await page.goto('/history')
   await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
@@ -58,7 +58,7 @@ test('history visual and accessibility', async ({ page }) => {
 
   expect(diagnosticsRequests).toBe(0)
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
-  const diagnosticsResponse = page.waitForResponse(item => item.url().includes('/api/tasks/diagnostics/overview') && item.status() === 200)
+  const diagnosticsResponse = page.waitForResponse(item => item.url().includes('/api/operations/overview') && item.status() === 200)
   await page.locator('summary').click()
   await diagnosticsResponse
   expect(diagnosticsRequests).toBe(1)

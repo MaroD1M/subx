@@ -105,7 +105,7 @@ function describeFetchError(error: any): string {
   return String(cause?.code || cause?.message || error?.code || error?.message || error)
 }
 
-async function outboundFetch(label: string, url: string, init: any, proxyUrl?: unknown) {
+export async function outboundFetch(label: string, url: string, init: any, proxyUrl?: unknown) {
   await assertSafeOutboundUrl(url)
   const proxy = resolveProxyUrl(proxyUrl, url)
   try {

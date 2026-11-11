@@ -48,17 +48,18 @@
         </p>
       </div>
 
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        <div v-for="card in summaryCards" :key="card.key" class="surface-card min-w-0 p-3 sm:p-4">
-          <div class="flex items-center justify-between gap-2">
-            <p class="stat-label min-w-0 truncate">{{ card.label }}</p>
-            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" :class="card.iconClass">
-              <UIcon :name="card.icon" class="h-4 w-4" />
-            </span>
-          </div>
-          <p class="stat-value mt-1" :class="card.valueClass">{{ card.value }}</p>
-        </div>
-      </div>
+      <CoverageAutoFillPanel
+        v-model:root-id="selectedRootId"
+        :roots="mediaRoots"
+        :target-language="targetLanguage"
+        @completed="loadCoverage(true)"
+      />
+
+      <CoverageHealthCard
+        :summary="summary"
+        :active-status="statusFilter"
+        @select="statusFilter = statusFilter === $event ? 'all' : $event"
+      />
 
       <div class="surface-card space-y-3 p-3 sm:p-4">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -366,56 +367,7 @@ const summary = computed<CoverageSummary>(() => coverage.value?.summary || {
   missing: 0
 })
 
-const summaryCards = computed(() => [
-  {
-    key: 'total',
-    label: '文件总数',
-    value: summary.value.total,
-    icon: 'i-lucide-files',
-    valueClass: 'text-gray-900 dark:text-white',
-    iconClass: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
-  },
-  {
-    key: 'missing',
-    label: '缺失',
-    value: summary.value.missing,
-    icon: 'i-lucide-circle-dashed',
-    valueClass: 'text-orange-600 dark:text-orange-400',
-    iconClass: 'bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400'
-  },
-  {
-    key: 'review',
-    label: '待核对',
-    value: summary.value.review,
-    icon: 'i-lucide-list-checks',
-    valueClass: 'text-amber-600 dark:text-amber-400',
-    iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400'
-  },
-  {
-    key: 'processing',
-    label: '处理中',
-    value: summary.value.processing,
-    icon: 'i-lucide-loader-2',
-    valueClass: 'text-sky-600 dark:text-sky-400',
-    iconClass: 'bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400'
-  },
-  {
-    key: 'failed',
-    label: '失败',
-    value: summary.value.failed,
-    icon: 'i-lucide-circle-x',
-    valueClass: 'text-red-600 dark:text-red-400',
-    iconClass: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
-  },
-  {
-    key: 'done',
-    label: '已完成',
-    value: summary.value.done,
-    icon: 'i-lucide-circle-check',
-    valueClass: 'text-emerald-600 dark:text-emerald-400',
-    iconClass: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
-  }
-])
+
 
 const statusTabs = computed(() => [
   { value: 'all' as const, label: '全部', count: summary.value.total },

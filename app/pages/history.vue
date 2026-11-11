@@ -2,7 +2,7 @@
   <AppContainer size="wide" class="space-y-6">
     <PageHeader
       title="翻译历史"
-      description="查看任务结果、失败原因与历史日志。"
+      description="查看任务结果、运行与诊断总览、失败原因与历史日志。"
       :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '历史', icon: 'i-lucide-history' }]"
     >
       <template #actions>
@@ -12,65 +12,7 @@
       </template>
     </PageHeader>
 
-    <details ref="diagnosticsDetails" class="group surface-card overflow-hidden p-2">
-      <summary class="list-none cursor-pointer flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 rounded-xl bg-white/85 dark:bg-gray-900/70 px-4 py-4 sm:px-5" @click="handleDiagnosticsOpen">
-        <div class="space-y-1">
-          <div class="flex items-center gap-2 text-gray-900 dark:text-white">
-            <UIcon name="i-lucide-chart-no-axes-combined" class="w-4 h-4" />
-            <span class="text-sm font-semibold">诊断总览</span>
-          </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">聚合最近任务的风险标签、响应异常、重试与回退情况，默认折叠，仅在需要排查时展开。</p>
-          <p v-if="overviewSummaryText" class="text-[11px] text-gray-600 dark:text-gray-300">{{ overviewSummaryText }}</p>
-        </div>
-        <div class="flex items-center gap-2 flex-wrap">
-          <UBadge color="neutral" variant="subtle">{{ diagnosticsOverview ? `最近 ${diagnosticsOverview.summary.totalTasks} 个任务` : '展开加载' }}</UBadge>
-          <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-400 shrink-0 transition-transform group-open:rotate-180" />
-        </div>
-      </summary>
-
-      <div class="px-4 pb-4 sm:px-5 sm:pb-5 space-y-4">
-        <div v-if="overviewPending" class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-          <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载诊断总览中...
-        </div>
-        <div v-else-if="diagnosticsOverview" class="space-y-4">
-          <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-            <div class="surface-card px-3 py-3"><p class="stat-label">完成</p><p class="stat-value text-green-600 dark:text-green-400">{{ diagnosticsOverview.summary.doneTasks }}</p></div>
-            <div class="surface-card px-3 py-3"><p class="stat-label">待核对</p><p class="stat-value text-amber-600 dark:text-amber-400">{{ diagnosticsOverview.summary.reviewTasks }}</p></div>
-            <div class="surface-card px-3 py-3"><p class="stat-label">失败</p><p class="stat-value text-red-600 dark:text-red-400">{{ diagnosticsOverview.summary.errorTasks }}</p></div>
-            <div class="surface-card px-3 py-3"><p class="stat-label">取消</p><p class="stat-value text-gray-600 dark:text-gray-400">{{ diagnosticsOverview.summary.cancelledTasks }}</p></div>
-            <div class="surface-card px-3 py-3"><p class="stat-label">缺条</p><p class="stat-value">{{ diagnosticsOverview.translation.missingIdChunks }}</p></div>
-            <div class="surface-card px-3 py-3"><p class="stat-label">重试</p><p class="stat-value">{{ diagnosticsOverview.translation.retriedChunks }}</p></div>
-            <div class="surface-card px-3 py-3"><p class="stat-label">补译</p><p class="stat-value">{{ diagnosticsOverview.translation.singleRetriedChunks }}</p></div>
-            <div class="surface-card px-3 py-3"><p class="stat-label">回退</p><p class="stat-value">{{ diagnosticsOverview.translation.fallbackChunks }}</p></div>
-          </div>
-
-          <div class="grid gap-4 xl:grid-cols-3">
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
-              <p class="text-xs font-semibold text-gray-900 dark:text-white">高风险标签</p>
-              <div class="flex flex-wrap gap-2">
-                <UBadge v-for="risk in diagnosticsOverview.riskTags.slice(0, 8)" :key="risk.tag" color="primary" variant="soft">{{ riskTagLabel(risk.tag) }} × {{ risk.count }}</UBadge>
-                <span v-if="!diagnosticsOverview.riskTags.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
-              </div>
-            </div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
-              <p class="text-xs font-semibold text-gray-900 dark:text-white">响应异常</p>
-              <div class="flex flex-wrap gap-2">
-                <UBadge v-for="issue in diagnosticsOverview.responseIssues.slice(0, 8)" :key="issue.issue" color="warning" variant="soft">{{ issueLabel(issue.issue) }} × {{ issue.count }}</UBadge>
-                <span v-if="!diagnosticsOverview.responseIssues.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
-              </div>
-            </div>
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-900/70 p-4 space-y-2">
-              <p class="text-xs font-semibold text-gray-900 dark:text-white">核对原因</p>
-              <div class="flex flex-wrap gap-2">
-                <UBadge v-for="reason in diagnosticsOverview.reviewReasons.slice(0, 8)" :key="reason.reason" color="error" variant="soft">{{ reviewReasonLabel(reason.reason) }} × {{ reason.count }}</UBadge>
-                <span v-if="!diagnosticsOverview.reviewReasons.length" class="text-xs text-gray-500 dark:text-gray-400">暂无</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-else class="text-xs text-gray-500 dark:text-gray-400">暂无诊断总览数据。</div>
-      </div>
-    </details>
+    <OperationsOverviewPanel :task-total="data?.total" />
 
     <div v-if="isDesktop" class="history-table surface-card overflow-hidden rounded-2xl p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
       <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group cursor-default transition-colors duration-150 hover:bg-primary-50/60 dark:hover:bg-primary-950/20' }">
@@ -258,7 +200,6 @@
 
 <script setup>
 import { formatDateTime } from '~~/shared/time'
-import { reviewReasonLabel } from '~~/shared/reviewLabels'
 
 useHead({
   title: '翻译历史 - SubX'
@@ -341,27 +282,6 @@ watch(page, () => {
 watch(totalPages, (total) => {
   if (page.value > total) page.value = total
 })
-const { data: diagnosticsOverview, pending: overviewPending, execute: loadDiagnostics } = useLazyFetch('/api/tasks/diagnostics/overview', { server: false, immediate: false })
-const diagnosticsDetails = ref(null)
-
-function handleDiagnosticsOpen() {
-  window.setTimeout(() => {
-    if (diagnosticsDetails.value?.open && !diagnosticsOverview.value && !overviewPending.value) {
-      void loadDiagnostics()
-    }
-  }, 0)
-}
-
-const overviewSummaryText = computed(() => {
-  const value = diagnosticsOverview.value
-  if (!value) return ''
-  return [
-    `异常响应 ${value.responseIssues.reduce((sum, item) => sum + Number(item.count || 0), 0)} 次`,
-    `缺条块 ${value.translation.missingIdChunks} 个`,
-    `重试块 ${value.translation.retriedChunks} 个`,
-    `回退块 ${value.translation.fallbackChunks} 个`
-  ].join(' · ')
-})
 const tasks = computed(() => data.value?.tasks || [])
 const hasActiveTasks = computed(() => tasks.value.some(task => isActiveStatus(task.status)))
 let liveRefreshTimer = null
@@ -402,34 +322,6 @@ onBeforeUnmount(() => {
   stopLiveRefresh()
   document.removeEventListener('visibilitychange', handleHistoryVisibilityChange)
 })
-const riskTagLabels = {
-  non_dialogue: '非对白内容',
-  lyrics: '歌词/吟唱',
-  formatting_tokens: '格式标记密集',
-  repeated_short_lines: '短句重复较多',
-  punctuation_heavy: '符号密集',
-  speaker_labels: '说话人标签',
-  mixed_language: '多语言混杂',
-  long_lines: '长句较多'
-}
-
-const issueLabels = {
-  empty: '空响应',
-  refusal: '疑似拒答',
-  filtered: '已被过滤',
-  structured: '结构化输出',
-  plain: '文本输出(正常)'
-}
-
-function riskTagLabel(tag) {
-  return riskTagLabels[tag] || tag
-}
-
-function issueLabel(issue) {
-  return issueLabels[issue] || issue
-}
-
-
 async function clearHistory() {
   isClearing.value = true
   try {

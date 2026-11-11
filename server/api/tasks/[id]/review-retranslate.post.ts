@@ -3,6 +3,7 @@ import { useDb } from '../../../utils/db'
 import { ReviewJobService } from '../../../utils/reviewJobs'
 import { runReviewRetranslate } from '../../../utils/reviewRetranslate'
 import { parseBody, reviewRetranslateSchema } from '../../../utils/validation'
+import { CostService } from '../../../utils/cost'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -10,6 +11,8 @@ export default defineEventHandler(async (event) => {
     throw apiError(400, 'Task ID is required')
   }
 
+  const budget = await CostService.checkBudget()
+  if (!budget.allowed) throw apiError(429, budget.message || '本月翻译预算已用完')
   const body = await parseBody(event, reviewRetranslateSchema)
   const subtitleIds = Array.isArray(body?.subtitleIds) ? body.subtitleIds.map((value: any) => String(value)) : []
   if (!subtitleIds.length) {
@@ -28,6 +31,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event) as { sync?: string }
   if (String(query.sync || '') === '1') {
     const result = await runReviewRetranslate({ taskId: id, subtitleIds })
+    await CostService.recordTaskCost(id)
     return { success: true, ...result }
   }
 

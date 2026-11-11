@@ -11,6 +11,9 @@ import { acquireOutputLocks } from '../../../utils/outputLock'
 import { parseBody, reviewExportSchema } from '../../../utils/validation'
 import { TaskService } from '../../../utils/task'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
+import { TranslationMemoryService } from '../../../utils/translationMemory'
+import { buildChineseVariantEntries, buildChineseVariantPaths } from '../../../utils/chineseVariant'
+import { CostService } from '../../../utils/cost'
 
 function backupExistingOutput(outputPath: string): string {
   if (!existsSync(outputPath)) return ''
@@ -92,7 +95,19 @@ export default defineEventHandler(async (event) => {
     translatedText: row.final_text || row.translated_text || row.original_text
   }))
 
-  const releaseOutputLock = acquireOutputLocks([outputPath])
+  const embyVariantPath = embyCompatible
+    ? join(dirname(inputPath), 'SubX', `${outputBaseName}.${outputSuffix}.${subtitleFormat}`)
+    : ''
+  const variantPaths = config.chineseVariantOutputEnabled === true && requestedOutputMode !== 'original'
+    ? buildChineseVariantPaths(outputPath, embyVariantPath, String(task.target_lang || ''))
+    : []
+  if (variantPaths.some(candidate => candidate === inputPath || candidate === sourceSubtitlePath)) {
+    throw apiError(400, '简繁变体输出路径与源字幕冲突，请更改输出设置')
+  }
+  if (variantPaths.some(candidate => !isPathInside(root.path, candidate))) {
+    throw apiError(400, '简繁变体输出路径超出媒体库范围')
+  }
+  const releaseOutputLock = acquireOutputLocks([outputPath, embyVariantPath, ...variantPaths].filter(Boolean))
   try {
     const backupPath = backupExistingOutput(outputPath)
     const savedPath = await SubtitleService.writeSubtitle(
@@ -105,6 +120,21 @@ export default defineEventHandler(async (event) => {
       sourceSubtitlePath,
       requestedStyle
     )
+    if (variantPaths.length) {
+      const variantEntries = buildChineseVariantEntries(entries as any, String(task.target_lang || ''))
+      for (const variantPath of variantPaths) {
+        await SubtitleService.writeSubtitle(
+          variantEntries as any,
+          variantPath,
+          requestedOutputMode as any,
+          subtitleFormat,
+          requestedStyle.presetId,
+          body.bilingualLayout || task.bilingual_layout || 'translated_first',
+          sourceSubtitlePath,
+          requestedStyle
+        )
+      }
+    }
 
     db.prepare(`
       UPDATE tasks
@@ -126,8 +156,10 @@ export default defineEventHandler(async (event) => {
       stepMessage: '核对导出完成',
       log: '字幕核对完成，已导出最终文件。'
     })
+    try { TranslationMemoryService.learnFromReviewTask(id) } catch { /* memory learning is best-effort */ }
+    await CostService.recordTaskCost(id)
 
-    return { success: true, outputPath: savedPath, backupPath }
+    return { success: true, outputPath: savedPath, backupPath, variantPaths }
   } finally {
     releaseOutputLock()
   }

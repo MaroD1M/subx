@@ -24,6 +24,7 @@ export interface CoverageFile {
   subtitleSource?: CoverageSubtitleSource
   matchedLanguage?: string
   embeddedTrackTitle?: string
+  mtime?: string
   updatedAt?: string
 }
 
@@ -287,6 +288,90 @@ export function deriveCoverageStatus(
   return subtitleExists ? 'done' : 'missing'
 }
 
+function persistCoverageIndex(result: CoverageResult) {
+  try {
+    const db = useDb()
+    if (!db?.prepare || !db?.exec) return
+    const scannedAt = new Date().toISOString()
+    db.exec('BEGIN')
+    try {
+      db.prepare('DELETE FROM library_coverage_index WHERE root_id = ? AND target_language = ?').run(result.rootId, result.targetLanguage)
+      const stmt = db.prepare(`
+        INSERT INTO library_coverage_index (
+          root_id, target_language, path, status, task_id, task_status, subtitle_path,
+          subtitle_source, matched_language, embedded_track_title, file_mtime, scanned_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(root_id, target_language, path) DO UPDATE SET
+          status=excluded.status, task_id=excluded.task_id, task_status=excluded.task_status,
+          subtitle_path=excluded.subtitle_path, subtitle_source=excluded.subtitle_source,
+          matched_language=excluded.matched_language, embedded_track_title=excluded.embedded_track_title,
+          file_mtime=excluded.file_mtime, scanned_at=excluded.scanned_at
+      `)
+      for (const file of result.files) {
+        stmt.run(
+          result.rootId,
+          result.targetLanguage,
+          file.path,
+          file.status,
+          file.taskId || null,
+          file.taskStatus || null,
+          file.subtitlePath || null,
+          file.subtitleSource || null,
+          file.matchedLanguage || null,
+          file.embeddedTrackTitle || null,
+          file.mtime || null,
+          scannedAt
+        )
+      }
+      db.exec('COMMIT')
+    } catch (error) {
+      try { db.exec('ROLLBACK') } catch { /* ignore rollback failure */ }
+      throw error
+    }
+  } catch (error) {
+    console.warn('[Coverage] Failed to persist coverage index:', (error as any)?.message || error)
+  }
+}
+
+export function updateCoverageIndexForTask(taskId: string) {
+  try {
+    const db = useDb()
+    const task = db.prepare('SELECT task_id, file_path, root_id, target_lang, status FROM tasks WHERE task_id = ?').get(taskId) as any
+    if (!task?.file_path || !task?.root_id || !task?.target_lang) return
+    const status = deriveCoverageStatus(String(task.status || ''), String(task.status || '') === 'done' || String(task.status || '') === 'review')
+    db.prepare(`
+      UPDATE library_coverage_index
+      SET status = ?, task_id = ?, task_status = ?, scanned_at = datetime('now')
+      WHERE root_id = ? AND target_language = ? AND path = ?
+    `).run(status, String(task.task_id), String(task.status || ''), String(task.root_id), String(task.target_lang), String(task.file_path))
+  } catch { /* index is optional */ }
+}
+
+export function getCoverageIndexSummary(targetLanguage?: string) {
+  try {
+    const db = useDb()
+    const params: any[] = []
+    const where = targetLanguage ? 'WHERE target_language = ?' : ''
+    if (targetLanguage) params.push(targetLanguage)
+    const rows = db.prepare(`
+      SELECT status, COUNT(*) AS count FROM library_coverage_index ${where} GROUP BY status
+    `).all(...params) as Array<{ status?: string, count?: number | string }>
+    const summary = { available: false, total: 0, done: 0, missing: 0, review: 0, processing: 0, failed: 0 }
+    const statuses = new Set<CoverageStatus>(['done', 'missing', 'review', 'processing', 'failed'])
+    for (const row of rows) {
+      const status = String(row.status || '') as CoverageStatus
+      const count = Number(row.count || 0)
+      if (!statuses.has(status)) continue
+      summary[status] += count
+      summary.total += count
+      summary.available = true
+    }
+    return summary
+  } catch {
+    return { available: false, total: 0, done: 0, missing: 0, review: 0, processing: 0, failed: 0 }
+  }
+}
+
 function taskKey(filePath: string, targetLanguage: string) {
   return `${normalizePath(filePath)}\u0000${String(targetLanguage || '').trim()}`
 }
@@ -547,6 +632,7 @@ export async function buildLibraryCoverage(
             ...(embedded.title ? { embeddedTrackTitle: embedded.title } : {})
           }
         : {}),
+      ...(video.mtimeMs ? { mtime: new Date(video.mtimeMs).toISOString() } : {}),
       ...(updatedAt ? { updatedAt } : {})
     }
   })
@@ -594,6 +680,7 @@ export async function buildLibraryCoverage(
     files
   }
 
+  if (!result.truncated) persistCoverageIndex(result)
   coverageCache.set(cacheKey, { cachedAt: Date.now(), result })
   return result
 }

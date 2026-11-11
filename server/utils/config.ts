@@ -125,7 +125,25 @@ export const ConfigService = {
             ocrJobAbsoluteTimeoutMs: Number(process.env.OCR_JOB_ABSOLUTE_TIMEOUT_MS || 6 * 60 * 60 * 1000),
             automationConcurrency: 1,
             notificationEnabled: true,
-            notificationLowConfidenceThreshold: 0.6
+            notificationLowConfidenceThreshold: 0.6,
+            chineseVariantOutputEnabled: false,
+            subtitleQualityEnabled: false,
+            subtitleQualityMaxCharsPerLine: 20,
+            subtitleQualityMaxLines: 2,
+            subtitleQualityMaxCps: 20,
+            subtitleQualityMinDurationMs: 700,
+            subtitleQualityMaxDurationMs: 8000,
+            subtitleQualityGapMs: 80,
+            subtitleQualityAutoFixEnabled: false,
+            translationMemoryEnabled: true,
+            metadataEnabled: false,
+            metadataProvider: 'tmdb',
+            metadataApiKey: '',
+            metadataLanguage: 'zh-CN',
+            costBudgetEnabled: false,
+            costBudgetMonthlyUsd: 0,
+            costPricePromptPer1M: 0,
+            costPriceCompletionPer1M: 0
         }
 
         // Override with DB values
@@ -140,11 +158,11 @@ export const ConfigService = {
             } else if (row.key === 'subtitleStyle') {
                 hasSubtitleStyleRow = true
                 config.subtitleStyle = safeJsonParse(row.value, config.subtitleStyle)
-            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs', 'asrChunkSeconds', 'asrChunkOverlapSeconds', 'asrResumeTtlHours', 'autoBackupIntervalHours', 'autoBackupKeep'].includes(row.key)) {
+            } else if (['chunkSize', 'concurrency', 'maxRetries', 'logRetentionDays', 'automationConcurrency', 'notificationLowConfidenceThreshold', 'qualityScoreThreshold', 'qualityCheckMaxEntries', 'ocrMinConfidence', 'ocrMaxSeconds', 'ocrChunkSeconds', 'ocrPgsripTimeoutSeconds', 'ocrFfmpegTimeoutSeconds', 'ocrChunkRetries', 'ocrResumeTtlHours', 'ocrJobIdleTimeoutMs', 'ocrJobAbsoluteTimeoutMs', 'asrUploadTimeoutMs', 'asrPollTimeoutMs', 'asrJobIdleTimeoutMs', 'asrJobAbsoluteTimeoutMs', 'asrChunkSeconds', 'asrChunkOverlapSeconds', 'asrResumeTtlHours', 'autoBackupIntervalHours', 'autoBackupKeep', 'subtitleQualityMaxCharsPerLine', 'subtitleQualityMaxLines', 'subtitleQualityMaxCps', 'subtitleQualityMinDurationMs', 'subtitleQualityMaxDurationMs', 'subtitleQualityGapMs', 'costBudgetMonthlyUsd', 'costPricePromptPer1M', 'costPriceCompletionPer1M'].includes(row.key)) {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'
-            } else if (['asrEnabled', 'asrVad', 'asrWordTimestamps', 'asrKeepAudio', 'asrCloudEnabled', 'asrCloudFallback', 'asrDiarization', 'ocrEnabled', 'notificationEnabled', 'embyCompatibleOutput', 'qualityCheckEnabled', 'autoBackupEnabled', 'fallbackProviderEnabled'].includes(row.key)) {
+            } else if (['asrEnabled', 'asrVad', 'asrWordTimestamps', 'asrKeepAudio', 'asrCloudEnabled', 'asrCloudFallback', 'asrDiarization', 'ocrEnabled', 'notificationEnabled', 'embyCompatibleOutput', 'qualityCheckEnabled', 'autoBackupEnabled', 'fallbackProviderEnabled', 'chineseVariantOutputEnabled', 'subtitleQualityEnabled', 'subtitleQualityAutoFixEnabled', 'translationMemoryEnabled', 'metadataEnabled', 'costBudgetEnabled'].includes(row.key)) {
                 (config as any)[row.key] = row.value === 'true' || row.value === '1'
             } else if (row.key === 'translationMode') {
                 config.translationMode = row.value === 'stream' ? 'stream' : 'non_stream'
@@ -156,6 +174,8 @@ export const ConfigService = {
                 config.asrCloudApiKey = String(row.value || '')
             } else if (row.key === 'fallbackApiKey') {
                 config.fallbackApiKey = String(row.value || '')
+            } else if (row.key === 'metadataApiKey') {
+                config.metadataApiKey = String(row.value || '')
             } else if (row.key === 'ocrApiKey') {
                 config.ocrApiKey = String(row.value || '')
             } else if (row.key === 'integrationWebhookToken') {
@@ -280,6 +300,15 @@ export const ConfigService = {
             }
         }
 
+        if (config.metadataApiKey && isEncryptedSecret(config.metadataApiKey)) {
+            try {
+                config.metadataApiKey = decryptSecret(config.metadataApiKey)
+            } catch (e) {
+                console.error('[Config] Failed to decrypt metadata API key:', e)
+                config.metadataApiKey = ''
+            }
+        }
+
         const styleOutputMode = String(config.outputMode || 'bilingual')
         if (hasSubtitleStyleRow) {
             config.subtitleStyle = normalizeSubtitleStyle(config.subtitleStyle, styleOutputMode)
@@ -308,14 +337,14 @@ export const ConfigService = {
      */
     async updateConfig(key: string, value: any) {
         const db = useDb()
-        const normalizedValue = (key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'fallbackApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken') ? encryptSecret(String(value || '')) : value
+        const normalizedValue = (key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'fallbackApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken' || key === 'metadataApiKey') ? encryptSecret(String(value || '')) : value
         const valStr = typeof normalizedValue === 'object' ? JSON.stringify(normalizedValue) : String(normalizedValue)
 
         const stmt = db.prepare('INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))')
         stmt.run(key, valStr)
         configCache = null
         configCacheAt = 0
-        console.log(`[Config] 更新配置: ${key} = ${['apiKey', 'asrApiKey', 'asrCloudApiKey', 'fallbackApiKey', 'ocrApiKey', 'integrationWebhookToken'].includes(key) ? '****' : valStr.substring(0, 40)}`)
+        console.log(`[Config] 更新配置: ${key} = ${['apiKey', 'asrApiKey', 'asrCloudApiKey', 'fallbackApiKey', 'ocrApiKey', 'integrationWebhookToken', 'metadataApiKey'].includes(key) ? '****' : valStr.substring(0, 40)}`)
     },
 
     async cleanupLogsIfNeeded() {

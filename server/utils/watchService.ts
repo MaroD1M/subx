@@ -19,9 +19,11 @@ import { ConfigService } from './config'
 import { getMediaRoot, getMediaRoots } from './mediaRoots'
 import { resolveInsideRoot } from './pathSafety'
 import { TaskService, globalTaskQueue } from './task'
-import { seriesKeyFromPath } from './series'
+import { seriesKeyFromPath, SeriesService } from './series'
 import { VideoService } from './video'
 import { NotificationService } from './notifications'
+import { CostService } from './cost'
+import { MetadataService } from './metadata'
 import {
   DEFAULT_WATCH_OUTPUT_POLICY,
   sanitizeOutputPolicy,
@@ -370,6 +372,11 @@ export const WatchService = {
       `).get(...ACTIVE_TASK_STATUSES) as { count?: number } | undefined)?.count || 0)
 
       while (active < limit) {
+        const budget = await CostService.checkBudget()
+        if (!budget.allowed) {
+          console.warn('[Watch] 本月翻译预算已用完，暂停自动任务:', budget.message)
+          break
+        }
         const candidate = db.prepare("SELECT id FROM watch_events WHERE status = 'pending' ORDER BY created_at ASC, id ASC LIMIT 1").get() as { id?: number } | undefined
         if (!candidate?.id) break
         const claimed = db.prepare("UPDATE watch_events SET status='processing', updated_at=datetime('now') WHERE id = ? AND status='pending'").run(candidate.id)
@@ -382,6 +389,15 @@ export const WatchService = {
         }
         const policy = { ...DEFAULT_WATCH_OUTPUT_POLICY, ...folder.outputPolicy }
         const taskId = randomUUID()
+        let contentTitle = ''
+        let contentBackground = ''
+        if (config.metadataEnabled === true) {
+          const metadata = await MetadataService.enrich(String(row.path), config)
+          if (metadata) {
+            contentTitle = metadata.title
+            contentBackground = metadata.overview
+          }
+        }
         db.prepare("UPDATE watch_events SET task_id=?, error=NULL, updated_at=datetime('now') WHERE id = ?").run(taskId, row.id)
         try {
           await TaskService.createTask({
@@ -401,10 +417,15 @@ export const WatchService = {
             subtitleStylePreset: policy.subtitleStyle?.presetId || policy.subtitleStylePreset,
             subtitleStyle: policy.subtitleStyle,
             bilingualLayout: policy.bilingualLayout,
+            contentTitle,
+            contentBackground,
             origin: 'automation',
             watchEventId: Number(row.id)
           })
           await globalTaskQueue.add(taskId, { apiKey: config.apiKey, baseUrl: config.apiBaseUrl })
+          if (contentTitle || contentBackground) {
+            try { SeriesService.updateFromTask(folder.rootId, String(row.path), taskId, contentTitle, contentBackground) } catch { /* best-effort */ }
+          }
           active++
         } catch (e: any) {
           const message = String(e?.message || e)

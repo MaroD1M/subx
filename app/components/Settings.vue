@@ -307,6 +307,10 @@
           />
         </div>
 
+        <div v-show="activeTab === 'intelligence'" class="space-y-4">
+          <SettingsIntelligenceSection :config="config" @update:config="applyConfigPatch" />
+        </div>
+
         <div v-show="activeTab === 'styles'" class="space-y-4">
           <SettingsSection title="自定义翻译风格" description="在默认风格之外新增自己的语气、术语和表达要求。">
             <template #actions>
@@ -411,6 +415,7 @@ import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 import { useSimpleMode } from '../composables/useSimpleMode'
 import SettingsAiSection from './SettingsAiSection.vue'
 import SettingsDefaultSection from './SettingsDefaultSection.vue'
+import SettingsIntelligenceSection from './SettingsIntelligenceSection.vue'
 import SettingsAdvancedSection from './SettingsAdvancedSection.vue'
 import SettingsBackupPanel from './SettingsBackupPanel.vue'
 import SettingsHealthPanel from './SettingsHealthPanel.vue'
@@ -420,8 +425,8 @@ const route = useRoute()
 const isGuideOpen = ref(false)
 const { simpleMode } = useSimpleMode()
 const requestedTab = String(route.query.tab || '')
-const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'styles' | 'glossary' | 'advanced' | 'storage' | 'health'>(
-  ['ai', 'asr', 'ocr', 'defaults', 'styles', 'glossary', 'advanced', 'storage', 'health'].includes(requestedTab)
+const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'intelligence' | 'styles' | 'glossary' | 'advanced' | 'storage' | 'health'>(
+  ['ai', 'asr', 'ocr', 'defaults', 'intelligence', 'styles', 'glossary', 'advanced', 'storage', 'health'].includes(requestedTab)
     ? requestedTab as any
     : 'ai'
 )
@@ -430,6 +435,7 @@ const SETTINGS_TABS = [
   { label: '语音识别', icon: 'i-lucide-mic', value: 'asr' as const },
   { label: '图像字幕 OCR', icon: 'i-lucide-scan-text', value: 'ocr' as const },
   { label: '翻译默认', icon: 'i-lucide-sliders-horizontal', value: 'defaults' as const },
+  { label: '智能增强', icon: 'i-lucide-brain-circuit', value: 'intelligence' as const },
   { label: '翻译风格', icon: 'i-lucide-wand-sparkles', value: 'styles' as const },
   { label: '术语表', icon: 'i-lucide-book-a', value: 'glossary' as const },
   { label: '高级设置', icon: 'i-lucide-settings-2', value: 'advanced' as const },
