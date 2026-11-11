@@ -2,7 +2,7 @@
 
 > 把 NAS 里的生肉视频，变成能直接看的双语字幕。
 
-当前版本：**v2.9.1** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [维护说明](docs/maintenance.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.9.2** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [维护说明](docs/maintenance.md) · [更新日志](CHANGELOG.md)
 
 [项目地址](https://github.com/MaroD1M/subx) · [问题反馈](https://github.com/MaroD1M/subx/issues)
 
@@ -12,7 +12,7 @@
 
 ## ✨ 近期亮点
 
-- 🛠️ **v2.9.1 稳定性更新**：修复本地 ASR 在 undici 8 下创建任务失败；ASR/OCR 检测显示实际配置；新增轮询重试、模型 sha256 校验、历史模型后台校验和模型缓存上限。
+- 🛠️ **v2.9.2 稳定性更新**：修复本地 ASR 在 undici 8 下创建任务失败；ASR/OCR 检测显示实际配置；新增轮询重试、模型 sha256 校验、历史模型后台校验和模型缓存上限。
 - 🏠 **家庭 NAS 友好**：新增简洁模式、低功耗 NAS 预设、系列记忆、覆盖检查和备用供应商回退。
 - 🔤 **字体与实景预览**：字体选择器可搜索并显示服务器安装状态；可从视频抽帧并按完整分辨率烧录当前 ASS 样式，便于核对字号、颜色和位置。
 - 💾 **数据安全**：任务删除和清空历史改为事务执行；导出前自动备份同名旧字幕；任务失败日志不再输出 API Key 前缀和上游响应体。
@@ -71,7 +71,7 @@
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.9.1
+    image: ghcr.io/marod1m/subx:v2.9.2
     container_name: subx
     restart: unless-stopped
     ports:
@@ -220,7 +220,7 @@ ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/a
 >
 > 需要拆分部署时仍可使用独立 CPU sidecar：`docker compose --profile asr up -d asr`，地址改为 `http://subx-asr:8000`。
 >
-> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.9.1`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
+> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.9.2`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
 
 ---
 
@@ -273,17 +273,21 @@ curl -H "Authorization: Bearer subx_xxx" \
 
 ---
 
-## ⬆️ 升级到 v2.9.1
+## ⬆️ 升级到 v2.9.2
 
 ```bash
 docker compose pull
 docker compose up -d --force-recreate
 ```
 
-本版包含稳定性修复和家庭 NAS 体验更新；从 v2.9.0 升级会自动执行数据库迁移 v10（新增系列记忆表），从 v2.8.6 及更早版本升级会依次执行 v9 / v10。
+本版为 v2.9.1 后的修复版；从 v2.9.1 升级无需修改数据库，从 v2.9.0 升级会自动执行数据库迁移 v10（新增系列记忆表），从 v2.8.6 及更早版本升级会依次执行 v9 / v10。
 
 升级说明：
 
+- 修复 ASR 上传使用全局 FormData 导致 FastAPI 返回 422 `body.file` 缺失；本地 ASR 和云端 ASR 均已修复。
+- 修复实景预览拖动时间滑块后松开不更新预览图的问题。
+- 覆盖检查现在能识别同目录 `<视频名>.zh-CN.srt/.ass` 和内嵌字幕轨，并新增「包含内嵌字幕」开关。
+- 修复覆盖检查导航、面包屑和内置翻译风格图标缺失。
 - 修复本地 ASR 在 undici 8 下创建任务失败（`UND_ERR_INVALID_ARG`）。
 - ASR/OCR 检测现在显示设置页实际选择的模型、引擎、设备和语言。
 - ASR/OCR 状态轮询遇到瞬时网络错误会自动重试；OCR 排队任务不再被无进度超时误取消。
@@ -291,7 +295,7 @@ docker compose up -d --force-recreate
 - 模型缓存默认按内存自适应（`<16GB` 保留 1 个，`>=16GB` 保留 2 个），切换模型不再无限占用内存。
 - 修复 whisper.cpp 引擎下载路由、旧目录名冲突和旧暂停任务迁移；模型目录名冲突会自动加短哈希。
 - 新增系列记忆、覆盖检查、简洁模式、低功耗 NAS 预设、备用供应商回退和核对页时间编辑。
-- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.9.1。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.9.2。
 - 建议升级前执行备份。
 
 ---

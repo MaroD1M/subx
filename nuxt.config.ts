@@ -1,4 +1,11 @@
 import { readFileSync } from 'node:fs'
+import { STYLE_PRESETS } from './shared/stylePresets'
+
+const NAV_ICONS = ['home', 'history', 'library-big', 'list-checks', 'workflow', 'settings']
+const CLIENT_BUNDLE_ICONS = Array.from(new Set([
+  ...STYLE_PRESETS.map(preset => preset.icon.replace(/^i-lucide-/, '')),
+  ...NAV_ICONS
+])).map(name => `lucide:${name}`)
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -46,7 +53,8 @@ export default defineNuxtConfig({
       collections: ['lucide']
     },
     clientBundle: {
-      scan: true
+      scan: true,
+      icons: CLIENT_BUNDLE_ICONS
     },
     fetchTimeout: 0
   },

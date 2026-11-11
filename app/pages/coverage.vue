@@ -3,7 +3,7 @@
     <PageHeader
       title="覆盖检查"
       description="检查媒体库中视频的目标语言字幕覆盖情况，并批量补齐缺失字幕。"
-      :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '覆盖检查', icon: 'i-lucide-library-check' }]"
+      :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '覆盖检查', icon: 'i-lucide-list-checks' }]"
     >
       <template #actions>
         <UButton
@@ -33,6 +33,10 @@
             <USelect v-model="selectedRootId" :items="rootItems" class="w-full" aria-label="选择媒体库" />
           </UFormField>
           <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <label class="flex items-center gap-2 rounded-lg border border-gray-200/80 bg-white/70 px-2.5 py-1.5 dark:border-gray-700/70 dark:bg-gray-950/30">
+              <span class="whitespace-nowrap text-gray-600 dark:text-gray-300">包含内嵌字幕</span>
+              <USwitch v-model="includeEmbedded" aria-label="包含内嵌字幕" />
+            </label>
             <UBadge color="neutral" variant="subtle">目标语言 {{ targetLanguageLabel(activeTargetLanguage) }}</UBadge>
             <UBadge v-if="coverage" color="neutral" variant="subtle">扫描 {{ coverage.scanned }} 个文件</UBadge>
             <UBadge v-if="coverage?.cachedAt" color="neutral" variant="subtle">缓存 {{ formatDate(coverage.cachedAt) }}</UBadge>
@@ -197,9 +201,12 @@
                       <UBadge :color="statusMeta(file.status).color" variant="subtle" size="sm">{{ statusMeta(file.status).label }}</UBadge>
                     </div>
                     <p class="break-all font-mono text-[11px] leading-5 text-gray-500 dark:text-gray-400">{{ file.path }}</p>
-                    <p v-if="file.subtitlePath" class="flex items-start gap-1.5 break-all text-[11px] leading-5 text-emerald-700 dark:text-emerald-300">
-                      <UIcon name="i-lucide-file-check-2" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      <span>字幕：{{ file.subtitlePath }}</span>
+                    <p v-if="file.subtitleSource || file.subtitlePath" class="flex min-w-0 items-start gap-1.5 text-[11px] leading-5 text-emerald-700 dark:text-emerald-300">
+                      <UIcon
+                        :name="file.subtitleSource === 'embedded' ? 'i-lucide-box' : 'i-lucide-file-check-2'"
+                        class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                      />
+                      <span class="min-w-0 break-all">{{ subtitleSourceLabel(file) }}</span>
                     </p>
                     <p v-if="file.updatedAt" class="text-[11px] text-gray-400 dark:text-gray-500">更新于 {{ formatDate(file.updatedAt) }}</p>
                   </div>
@@ -247,6 +254,9 @@ interface CoverageFile {
   taskId?: string
   taskStatus?: string
   subtitlePath?: string
+  subtitleSource?: 'sidecar' | 'embedded'
+  matchedLanguage?: string
+  embeddedTrackTitle?: string
   updatedAt?: string
 }
 
@@ -314,6 +324,7 @@ const coverage = ref<CoverageResponse | null>(null)
 const activeTargetLanguage = computed(() => coverage.value?.targetLanguage || targetLanguage.value)
 const loading = ref(false)
 const submitting = ref(false)
+const includeEmbedded = ref(true)
 const error = ref('')
 const statusFilter = ref<'all' | CoverageStatus>('all')
 const searchQuery = ref('')
@@ -334,6 +345,11 @@ watch(selectedRootId, () => {
   error.value = ''
   if (!readyForCoverage) return
   if (selectedRootId.value) void loadCoverage()
+})
+
+watch(includeEmbedded, () => {
+  if (!readyForCoverage) return
+  void loadCoverage(true)
 })
 
 onMounted(() => {
@@ -461,6 +477,17 @@ function targetLanguageLabel(value: string) {
   return LANGUAGE_OPTIONS.find(option => option.value === value)?.label || value || '自动'
 }
 
+function subtitleSourceLabel(file: CoverageFile) {
+  if (file.subtitleSource === 'embedded') {
+    const language = file.matchedLanguage || file.targetLanguage || ''
+    const title = file.embeddedTrackTitle && file.embeddedTrackTitle !== language
+      ? ` · ${file.embeddedTrackTitle}`
+      : ''
+    return `内嵌 ${language}${title}`.trim()
+  }
+  return file.subtitlePath ? `外挂 ${file.subtitlePath}` : ''
+}
+
 function formatDate(value: unknown) {
   return formatDateTime(value, timeZone)
 }
@@ -511,7 +538,8 @@ async function loadCoverage(forceRefresh = false) {
   try {
     const query: Record<string, string> = {
       rootId: selectedRootId.value,
-      targetLanguage: targetLanguage.value
+      targetLanguage: targetLanguage.value,
+      includeEmbedded: includeEmbedded.value ? '1' : '0'
     }
     if (forceRefresh) query.refresh = '1'
     const result = await $fetch<CoverageResponse>('/api/library/coverage', { query })

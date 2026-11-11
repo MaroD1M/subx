@@ -1,5 +1,5 @@
 # ============================================================
-# SubX v2.9.1 - 单镜像开箱即用
+# SubX v2.9.2 - 单镜像开箱即用
 # ============================================================
 # 默认只启动一个 subx 容器，内部包含：
 #   - Web / 翻译主应用
@@ -29,7 +29,7 @@ services:
   subx:
     # 固定版本，避免 latest 自动升级带来意外。
     # 想跟随最新版可改成 ghcr.io/marod1m/subx:latest
-    image: ghcr.io/marod1m/subx:v2.9.1
+    image: ghcr.io/marod1m/subx:v2.9.2
 
     # 容器名称，便于 docker logs / docker exec 使用。
     container_name: subx
@@ -315,7 +315,7 @@ services:
     profiles: ["asr"]
 
     # 优先使用预构建镜像；本地没有时会按 asr-service 构建。
-    image: ghcr.io/marod1m/subx-asr:v2.9.1
+    image: ghcr.io/marod1m/subx-asr:v2.9.2
     build:
       context: ./asr-service
 
@@ -446,7 +446,7 @@ services:
     profiles: ["ocr"]
 
     # 优先使用预构建镜像；本地没有时会按 ocr-service 构建。
-    image: ghcr.io/marod1m/subx-ocr:v2.9.1
+    image: ghcr.io/marod1m/subx-ocr:v2.9.2
     build:
       context: ./ocr-service
 

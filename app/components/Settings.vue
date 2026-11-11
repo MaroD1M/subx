@@ -332,7 +332,7 @@
             <div class="grid gap-3 md:grid-cols-2">
               <div v-for="preset in builtinStylePresets" :key="preset.id" class="rounded-xl border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-900/30">
                 <div class="flex items-start gap-2">
-                  <UIcon :name="preset.icon" class="mt-0.5 h-4 w-4 shrink-0 text-primary-700" />
+                  <UIcon :name="preset.icon || 'i-lucide-wand-sparkles'" class="mt-0.5 h-4 w-4 shrink-0 text-primary-700" />
                   <div class="min-w-0">
                     <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ preset.name }}</p>
                     <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ preset.description }}</p>

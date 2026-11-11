@@ -1,6 +1,6 @@
 import { existsSync, openAsBlob, readFileSync, rmSync, statSync } from 'fs'
 import { basename, dirname, join } from 'path'
-import { Agent, fetch as undiciFetch } from 'undici'
+import { Agent, fetch as undiciFetch, FormData as UndiciFormData } from 'undici'
 import type { SubtitleEntry } from '../../../types'
 import { useDb } from '../db'
 import { SubtitleService } from '../subtitle'
@@ -52,7 +52,7 @@ async function audioBlob(filePath: string): Promise<Blob> {
   }
 }
 
-function asrFetch(input: string, init: RequestInit = {}) {
+function asrFetch(input: string, init: Record<string, any> = {}) {
   // 必须使用 undici 自带的 fetch：Node 全局 fetch 使用内置的另一个 undici 版本，
   // 把外部 undici 的 Agent 传给它会在新版 undici 上抛出 UND_ERR_INVALID_ARG。
   return undiciFetch(input, { ...init, dispatcher: asrDispatcher } as any) as unknown as Promise<Response>
@@ -90,7 +90,7 @@ function nonRetryableError(message: string) {
 }
 
 function buildAsrForm(fileName: string, audio: Blob, options: AsrOptions, engine: string) {
-  const form = new FormData()
+  const form = new UndiciFormData()
   form.append('file', audio, fileName)
   form.append('model', options.model || 'small')
   form.append('language', options.language || 'auto')
@@ -424,7 +424,7 @@ async function transcribeCloud(filePath: string, options: AsrOptions, signal?: A
       throw new Error('云 ASR 单文件超过 24MB，请缩短音频或使用本地 ASR')
     }
 
-    const form = new FormData()
+    const form = new UndiciFormData()
     form.append('file', new Blob([readFileSync(uploadPath)], { type: uploadPath.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav' }), basename(uploadPath))
     form.append('model', options.cloudModel || 'whisper-1')
     form.append('response_format', 'verbose_json')

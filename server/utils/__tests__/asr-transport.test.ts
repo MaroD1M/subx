@@ -5,12 +5,16 @@ import { AsrService } from '../asr/client'
 
 let server: ReturnType<typeof createServer>
 let baseUrl = ''
+let lastContentType = ''
+let lastBody = ''
 
 beforeAll(async () => {
   server = createServer((req, res) => {
     const chunks: Buffer[] = []
     req.on('data', chunk => chunks.push(chunk))
     req.on('end', () => {
+      lastContentType = String(req.headers['content-type'] || '')
+      lastBody = Buffer.concat(chunks).toString('latin1')
       if (req.url?.endsWith('/v1/audio/transcriptions/jobs')) {
         res.writeHead(404)
         res.end()
@@ -34,8 +38,16 @@ afterAll(async () => {
   await new Promise<void>(resolve => server.close(() => resolve()))
 })
 
+function expectMultipartFileBody() {
+  expect(lastContentType).toMatch(/^multipart\/form-data; boundary=/)
+  expect(lastBody).toContain('name="file"')
+  expect(lastBody).toMatch(/filename="[^"]+"/)
+}
+
 describe('AsrService real HTTP transport', () => {
-  it('uses undici fetch with the long-timeout dispatcher', async () => {
+  it('uses undici fetch with the long-timeout dispatcher and a valid file part', async () => {
+    lastContentType = ''
+    lastBody = ''
     const result = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
       baseUrl,
       model: 'small',
@@ -43,5 +55,22 @@ describe('AsrService real HTTP transport', () => {
     })
 
     expect(result.text).toBe('Hi')
+    expectMultipartFileBody()
+  })
+
+  it('sends a valid multipart file to cloud ASR', async () => {
+    lastContentType = ''
+    lastBody = ''
+    const result = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
+      baseUrl: 'http://unused',
+      engine: 'cloud',
+      cloudEnabled: true,
+      cloudBaseUrl: baseUrl,
+      cloudApiKey: 'secret',
+      cloudModel: 'whisper-1'
+    })
+
+    expect(result.engine).toBe('cloud')
+    expectMultipartFileBody()
   })
 })

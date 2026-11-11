@@ -4,6 +4,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import {
   buildLibraryCoverage,
+  clearEmbeddedSubtitleCache,
   clearLibraryCoverageCache,
   deriveCoverageStatus,
   deriveSeriesKey,
@@ -22,7 +23,10 @@ const mockState = vi.hoisted(() => ({
     rootName: string
     size: number
   }>,
-  tasks: [] as any[]
+  tasks: [] as any[],
+  embeddedTracks: {} as Record<string, any[]>,
+  probeCalls: [] as string[],
+  probeFailures: new Set<string>()
 }))
 
 vi.mock('../fileScan', () => ({
@@ -61,6 +65,23 @@ vi.mock('../db', () => ({
   }))
 }))
 
+vi.mock('../video', () => ({
+  VideoService: {
+    probeMedia: vi.fn(async (filePath: string) => {
+      mockState.probeCalls.push(filePath)
+      if (mockState.probeFailures.has(filePath)) throw new Error('ffprobe failed')
+      return {
+        duration: 0,
+        width: 0,
+        height: 0,
+        fps: 0,
+        subtitleTracks: mockState.embeddedTracks[filePath] || [],
+        audioTracks: []
+      }
+    })
+  }
+}))
+
 let workDir = ''
 
 function videoEntry(path: string) {
@@ -83,7 +104,11 @@ beforeEach(() => {
   mockState.targetLanguage = 'zh-CN'
   mockState.files = []
   mockState.tasks = []
+  mockState.embeddedTracks = {}
+  mockState.probeCalls = []
+  mockState.probeFailures = new Set()
   clearLibraryCoverageCache()
+  clearEmbeddedSubtitleCache()
 })
 
 afterAll(() => {
@@ -257,5 +282,136 @@ describe('buildLibraryCoverage', () => {
     const result = await buildLibraryCoverage('root-lang')
     expect(result.targetLanguage).toBe('ja')
     expect(result.files[0]!.status).toBe('done')
+  })
+
+  it('detects same-directory language-tagged sidecars and prefers them over generic files', async () => {
+    const directory = join(workDir, 'Sidecar Show')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Sidecar.Show.E01.mkv'), '')
+    writeFileSync(join(directory, 'Sidecar.Show.E01.srt'), '')
+    writeFileSync(join(directory, 'Sidecar.Show.E01.zh-CN.ass'), '')
+    writeFileSync(join(directory, 'Sidecar.Show.E02.mkv'), '')
+    writeFileSync(join(directory, 'Sidecar.Show.E02.zh_CN.srt'), '')
+
+    mockState.files = [
+      videoEntry('Sidecar Show/Sidecar.Show.E01.mkv'),
+      videoEntry('Sidecar Show/Sidecar.Show.E02.mkv')
+    ]
+
+    const result = await buildLibraryCoverage('root-sidecar')
+    expect(result.files[0]!.status).toBe('done')
+    expect(result.files[0]!.subtitleSource).toBe('sidecar')
+    expect(result.files[0]!.subtitlePath).toBe('Sidecar Show/Sidecar.Show.E01.zh-CN.ass')
+    expect(result.files[0]!.matchedLanguage).toBe('zh-CN')
+    expect(result.files[1]!.status).toBe('done')
+    expect(result.files[1]!.subtitlePath).toBe('Sidecar Show/Sidecar.Show.E02.zh_CN.srt')
+    expect(mockState.probeCalls).toHaveLength(0)
+  })
+
+  it('does not count forced sidecars as full coverage', async () => {
+    const directory = join(workDir, 'Forced Sidecar')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Forced.Sidecar.E01.mkv'), '')
+    writeFileSync(join(directory, 'Forced.Sidecar.E01.zh-CN.forced.ass'), '')
+
+    mockState.files = [videoEntry('Forced Sidecar/Forced.Sidecar.E01.mkv')]
+
+    const result = await buildLibraryCoverage('root-sidecar-forced')
+    expect(result.files[0]!.status).toBe('missing')
+    expect(result.files[0]!.subtitleSource).toBeUndefined()
+    expect(mockState.probeCalls).toHaveLength(1)
+  })
+
+  it('detects language-tagged sidecars in the SubX directory', async () => {
+    const directory = join(workDir, 'SubX Show')
+    mkdirSync(join(directory, 'SubX'), { recursive: true })
+    writeFileSync(join(directory, 'SubX.Show.E01.mkv'), '')
+    writeFileSync(join(directory, 'SubX', 'SubX.Show.E01.zh-CN.ass'), '')
+
+    mockState.files = [videoEntry('SubX Show/SubX.Show.E01.mkv')]
+
+    const result = await buildLibraryCoverage('root-subx')
+    expect(result.files[0]!.status).toBe('done')
+    expect(result.files[0]!.subtitleSource).toBe('sidecar')
+    expect(result.files[0]!.subtitlePath).toBe('SubX Show/SubX/SubX.Show.E01.zh-CN.ass')
+    expect(mockState.probeCalls).toHaveLength(0)
+  })
+
+  it('detects normalized embedded Simplified Chinese tracks', async () => {
+    const directory = join(workDir, 'Embedded Show')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Embedded.Show.E01.mkv'), '')
+
+    mockState.files = [videoEntry('Embedded Show/Embedded.Show.E01.mkv')]
+    mockState.embeddedTracks['Embedded Show/Embedded.Show.E01.mkv'] = [
+      { index: 2, codec: 'subrip', language: 'chi', title: 'Simplified', isForced: false }
+    ]
+
+    const result = await buildLibraryCoverage('root-embedded-zh')
+    expect(result.files[0]!.status).toBe('done')
+    expect(result.files[0]!.subtitleSource).toBe('embedded')
+    expect(result.files[0]!.matchedLanguage).toBe('zh-CN')
+    expect(result.files[0]!.embeddedTrackTitle).toBe('Simplified')
+    expect(result.files[0]!.subtitlePath).toBeUndefined()
+    expect(mockState.probeCalls).toEqual(['Embedded Show/Embedded.Show.E01.mkv'])
+  })
+
+  it('does not count embedded Traditional Chinese tracks for a Simplified target', async () => {
+    const directory = join(workDir, 'Embedded Traditional')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Embedded.Traditional.E01.mkv'), '')
+
+    mockState.files = [videoEntry('Embedded Traditional/Embedded.Traditional.E01.mkv')]
+    mockState.embeddedTracks['Embedded Traditional/Embedded.Traditional.E01.mkv'] = [
+      { index: 3, codec: 'ass', language: 'chi', title: 'Traditional', isForced: false }
+    ]
+
+    const result = await buildLibraryCoverage('root-embedded-zh-tw')
+    expect(result.files[0]!.status).toBe('missing')
+    expect(result.files[0]!.subtitleSource).toBeUndefined()
+  })
+
+  it('does not count forced-only embedded tracks as coverage', async () => {
+    const directory = join(workDir, 'Embedded Forced')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Embedded.Forced.E01.mkv'), '')
+
+    mockState.files = [videoEntry('Embedded Forced/Embedded.Forced.E01.mkv')]
+    mockState.embeddedTracks['Embedded Forced/Embedded.Forced.E01.mkv'] = [
+      { index: 4, codec: 'subrip', language: 'chi', title: 'Simplified', isForced: true }
+    ]
+
+    const result = await buildLibraryCoverage('root-embedded-forced')
+    expect(result.files[0]!.status).toBe('missing')
+    expect(result.files[0]!.subtitleSource).toBeUndefined()
+  })
+
+  it('skips embedded probing when includeEmbedded is false', async () => {
+    const directory = join(workDir, 'Embedded Disabled')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Embedded.Disabled.E01.mkv'), '')
+
+    mockState.files = [videoEntry('Embedded Disabled/Embedded.Disabled.E01.mkv')]
+    mockState.embeddedTracks['Embedded Disabled/Embedded.Disabled.E01.mkv'] = [
+      { index: 1, codec: 'subrip', language: 'chi', title: 'Simplified', isForced: false }
+    ]
+
+    const result = await buildLibraryCoverage('root-embedded-disabled', { includeEmbedded: false })
+    expect(result.files[0]!.status).toBe('missing')
+    expect(result.files[0]!.subtitleSource).toBeUndefined()
+    expect(mockState.probeCalls).toHaveLength(0)
+  })
+
+  it('treats ffprobe failures as no embedded target', async () => {
+    const directory = join(workDir, 'Embedded Failure')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Embedded.Failure.E01.mkv'), '')
+
+    mockState.files = [videoEntry('Embedded Failure/Embedded.Failure.E01.mkv')]
+    mockState.probeFailures.add('Embedded Failure/Embedded.Failure.E01.mkv')
+
+    const result = await buildLibraryCoverage('root-embedded-failure')
+    expect(result.files[0]!.status).toBe('missing')
+    expect(result.files[0]!.subtitleSource).toBeUndefined()
   })
 })

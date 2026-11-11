@@ -14,7 +14,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     {
         id: 'default',
         name: '通用标准',
-        icon: 'i-lucide-subtitles',
+        icon: 'i-lucide-captions',
         description: '忠于原文，自然流畅的通用翻译',
         prompt: ''
     },
@@ -126,7 +126,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     {
         id: 'standup-comedy',
         name: '脱口秀 / 单口喜剧',
-        icon: 'i-lucide-mic-2',
+        icon: 'i-lucide-mic-vocal',
         description: '适用于单口喜剧、脱口秀、喜剧特辑与段子',
         prompt: '请优先传达笑点、节奏和反转，而不是逐字直译。双关、文化梗和自嘲可以在不改变原意的前提下本地化，但要保留表演者的立场和锋利度。避免解释笑话，避免使用与原文语气冲突的网络热词。'
     },

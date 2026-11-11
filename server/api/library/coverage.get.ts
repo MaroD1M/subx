@@ -6,6 +6,7 @@ export default defineEventHandler(async (event) => {
     rootId?: string
     targetLanguage?: string
     refresh?: string | string[]
+    includeEmbedded?: string | string[]
   }
   const rootId = String(query.rootId || '').trim()
   if (!rootId) throw apiError(400, '缺少媒体库 ID')
@@ -13,6 +14,13 @@ export default defineEventHandler(async (event) => {
   const targetLanguage = String(query.targetLanguage || '').trim() || undefined
   const refreshValue = Array.isArray(query.refresh) ? query.refresh[0] : query.refresh
   const refresh = refreshValue === '1' || String(refreshValue || '').toLowerCase() === 'true'
+  const includeEmbeddedValue = Array.isArray(query.includeEmbedded)
+    ? query.includeEmbedded[0]
+    : query.includeEmbedded
+  const includeEmbedded = !(
+    includeEmbeddedValue === '0'
+    || String(includeEmbeddedValue || '').toLowerCase() === 'false'
+  )
 
-  return buildLibraryCoverage(rootId, { targetLanguage, refresh })
+  return buildLibraryCoverage(rootId, { targetLanguage, refresh, includeEmbedded })
 })

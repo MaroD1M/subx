@@ -407,11 +407,7 @@ async function requestRealPreview(time?: number) {
   }
 }
 
-function onPreviewTimeCommit(event: Event) {
-  const raw = (event as any)?.target?.value
-  const value = Array.isArray(raw) ? Number(raw[0]) : Number(raw)
-  if (!Number.isFinite(value)) return
-  previewTime.value = Math.max(0, value)
+function onPreviewTimeCommit() {
   void requestRealPreview(previewTime.value)
 }
 
