@@ -11,12 +11,14 @@ export default defineEventHandler(() => {
       COALESCE(AVG(NULLIF(confidence, 0)), 0) AS avg_confidence,
       COALESCE(SUM(CASE WHEN confidence > 0 AND confidence < 0.6 THEN 1 ELSE 0 END), 0) AS low_confidence_runs
     FROM transcription_runs
+    WHERE COALESCE(engine, '') NOT LIKE 'ocr%'
   `).get() as any
   const engines = db.prepare(`
     SELECT COALESCE(NULLIF(engine, ''), 'unknown') AS engine, COUNT(*) AS runs,
       COALESCE(AVG(NULLIF(rtf, 0)), 0) AS avg_rtf,
       COALESCE(AVG(NULLIF(confidence, 0)), 0) AS avg_confidence
     FROM transcription_runs
+    WHERE COALESCE(engine, '') NOT LIKE 'ocr%'
     GROUP BY COALESCE(NULLIF(engine, ''), 'unknown')
     ORDER BY runs DESC
   `).all() as any[]
@@ -24,6 +26,7 @@ export default defineEventHandler(() => {
     SELECT tr.id, tr.task_id, tr.engine, tr.model, tr.device, tr.language, tr.duration_ms, tr.rtf, tr.confidence, tr.created_at,
       t.file_path
     FROM transcription_runs tr LEFT JOIN tasks t ON t.task_id = tr.task_id
+    WHERE COALESCE(tr.engine, '') NOT LIKE 'ocr%'
     ORDER BY tr.id DESC LIMIT 20
   `).all() as any[]
 

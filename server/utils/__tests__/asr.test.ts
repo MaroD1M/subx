@@ -3,6 +3,13 @@ import { join } from 'path'
 import { AsrService } from '../asr/client'
 import type { AsrResult } from '../asr/types'
 
+const undiciFetchMock = vi.hoisted(() => vi.fn())
+
+vi.mock('undici', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('undici')>()
+  return { ...actual, fetch: undiciFetchMock }
+})
+
 describe('AsrService', () => {
   it('converts ASR segments to subtitle entries with timestamps and confidence', () => {
     const result: AsrResult = {
@@ -49,10 +56,9 @@ describe('AsrService', () => {
   })
 
   it('passes device and compute type to the ASR service', async () => {
-    const originalFetch = globalThis.fetch
     let capturedDevice = ''
     let capturedComputeType = ''
-    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+    undiciFetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
       const body = init?.body as FormData
       capturedDevice = String(body.get('device') || '')
       capturedComputeType = String(body.get('compute_type') || '')
@@ -62,7 +68,7 @@ describe('AsrService', () => {
         text: 'Hi',
         segments: [{ id: 1, start: 0, end: 1, text: 'Hi' }]
       }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }))
+    })
 
     try {
       await AsrService.transcribe(join(process.cwd(), 'package.json'), {
@@ -73,13 +79,12 @@ describe('AsrService', () => {
       expect(capturedDevice).toBe('cpu')
       expect(capturedComputeType).toBe('float16')
     } finally {
-      vi.stubGlobal('fetch', originalFetch)
+      undiciFetchMock.mockReset()
     }
   })
 
   it('returns an empty result instead of failing when a chunk has no speech', async () => {
-    const originalFetch = globalThis.fetch
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    undiciFetchMock.mockImplementation(async (url: string) => {
       if (String(url).endsWith('/v1/audio/transcriptions/jobs')) return new Response('', { status: 404 })
       return new Response(JSON.stringify({
         language: 'und',
@@ -87,7 +92,7 @@ describe('AsrService', () => {
         text: '',
         segments: []
       }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }))
+    })
 
     try {
       const result = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
@@ -97,14 +102,13 @@ describe('AsrService', () => {
       expect(result.segments).toEqual([])
       expect(result.duration).toBe(30)
     } finally {
-      vi.stubGlobal('fetch', originalFetch)
+      undiciFetchMock.mockReset()
     }
   })
 
   it('retries once without VAD when local ASR returns no speech segments', async () => {
-    const originalFetch = globalThis.fetch
     const vadModes: string[] = []
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    undiciFetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (String(url).endsWith('/v1/audio/transcriptions/jobs')) return new Response('', { status: 404 })
       const body = init?.body as FormData
       const vad = String(body.get('vad'))
@@ -123,7 +127,7 @@ describe('AsrService', () => {
         text: 'Recovered speech',
         segments: [{ id: 1, start: 1, end: 2, text: 'Recovered speech' }]
       }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }))
+    })
 
     try {
       const result = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
@@ -134,16 +138,15 @@ describe('AsrService', () => {
       expect(result.text).toBe('Recovered speech')
       expect(result.diagnostics?.emptyVadRetry).toBe(true)
     } finally {
-      vi.stubGlobal('fetch', originalFetch)
+      undiciFetchMock.mockReset()
     }
   })
 
   it('polls ASR jobs and reports real progress', async () => {
-    const originalFetch = globalThis.fetch
     process.env.ASR_POLL_MS = '1'
     let statusCalls = 0
     const progress: number[] = []
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    undiciFetchMock.mockImplementation(async (url: string) => {
       if (String(url).endsWith('/v1/audio/transcriptions/jobs')) {
         return new Response(JSON.stringify({ jobId: 'job-1', status: 'queued' }), { status: 200 })
       }
@@ -157,7 +160,7 @@ describe('AsrService', () => {
         message: '识别完成',
         result: { language: 'en', duration: 2, text: 'Hi', segments: [{ id: 1, start: 0, end: 2, text: 'Hi' }] }
       }), { status: 200 })
-    }))
+    })
 
     try {
       const result = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
@@ -169,15 +172,14 @@ describe('AsrService', () => {
       expect(progress).toContain(100)
     } finally {
       delete process.env.ASR_POLL_MS
-      vi.stubGlobal('fetch', originalFetch)
+      undiciFetchMock.mockReset()
     }
   })
 
   it('reports the ASR service URL and network cause when connection fails', async () => {
-    const originalFetch = globalThis.fetch
-    vi.stubGlobal('fetch', vi.fn(async () => {
+    undiciFetchMock.mockImplementation(async () => {
       throw Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNREFUSED' } })
-    }))
+    })
     try {
       const error = await AsrService.transcribe(join(process.cwd(), 'package.json'), {
         baseUrl: 'http://127.0.0.1:9999'
@@ -185,7 +187,7 @@ describe('AsrService', () => {
       expect(String(error?.message)).toContain('无法连接 ASR 服务')
       expect(String(error?.message)).toContain('ECONNREFUSED')
     } finally {
-      vi.stubGlobal('fetch', originalFetch)
+      undiciFetchMock.mockReset()
     }
   })
 

@@ -33,7 +33,46 @@
           >
             AI 校对 {{ proofreadIssues.length }}
           </UBadge>
-          <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ entry.startTime }} → {{ entry.endTime }}</span>
+          <UPopover v-model:open="timeOpen" :content="{ align: 'start' }">
+            <UButton
+              icon="i-lucide-clock"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              :label="`${entry.startTime} → ${entry.endTime}`"
+              title="点击编辑此条时间"
+              aria-label="编辑字幕时间"
+            />
+            <template #content>
+              <div class="w-72 max-w-[calc(100vw-2rem)] space-y-2 p-3">
+                <p class="app-section-title">编辑时间</p>
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <UFormField label="开始时间">
+                    <UInput v-model="draftStart" size="sm" placeholder="00:00:00,000" class="w-full" />
+                  </UFormField>
+                  <UFormField label="结束时间">
+                    <UInput v-model="draftEnd" size="sm" placeholder="00:00:00,000" class="w-full" />
+                  </UFormField>
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  <UButton
+                    v-for="nudge in timeNudges"
+                    :key="nudge.delta"
+                    :label="nudge.label"
+                    size="xs"
+                    color="neutral"
+                    variant="soft"
+                    @click="nudgeTime(nudge.delta)"
+                  />
+                </div>
+                <p v-if="timeError" class="text-xs text-red-600 dark:text-red-400">{{ timeError }}</p>
+                <div class="flex justify-end gap-1">
+                  <UButton label="取消" size="xs" color="neutral" variant="ghost" @click="timeOpen = false" />
+                  <UButton label="应用" size="xs" color="primary" @click="applyTime" />
+                </div>
+              </div>
+            </template>
+          </UPopover>
         </div>
         <div class="flex flex-wrap gap-1.5">
           <UBadge v-for="reason in entry.reviewReasons" :key="reason" size="xs" color="warning" variant="subtle">{{ reviewReasonLabel(reason) }}</UBadge>
@@ -87,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   isReviewFinalDiffersFromTranslation,
   isReviewFinalSameAsSource,
@@ -116,6 +155,79 @@ const cardStyle = computed(() => props.focused
       containIntrinsicSize: 'auto 200px'
     })
 
+const timeOpen = ref(false)
+const draftStart = ref(String(props.entry?.startTime || ''))
+const draftEnd = ref(String(props.entry?.endTime || ''))
+const timeError = ref('')
+const timeNudges = [
+  { label: '-0.5s', delta: -0.5 },
+  { label: '-0.1s', delta: -0.1 },
+  { label: '+0.1s', delta: 0.1 },
+  { label: '+0.5s', delta: 0.5 }
+]
+
+function parseSrtTime(value: string): number | null {
+  const match = String(value || '').trim().match(/^(\d+):(\d{2}):(\d{2})[,.](\d{1,3})$/)
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  const seconds = Number(match[3])
+  if (minutes > 59 || seconds > 59) return null
+  const milliseconds = Number(String(match[4]).padEnd(3, '0').slice(0, 3))
+  return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000
+}
+
+function formatSrtTime(value: number): string {
+  const totalMs = Math.max(0, Math.round(Number(value || 0) * 1000))
+  const hours = Math.floor(totalMs / 3600000)
+  const minutes = Math.floor((totalMs % 3600000) / 60000)
+  const seconds = Math.floor((totalMs % 60000) / 1000)
+  const milliseconds = totalMs % 1000
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`
+}
+
+function resetTimeDraft() {
+  draftStart.value = String(props.entry?.startTime || '')
+  draftEnd.value = String(props.entry?.endTime || '')
+  timeError.value = ''
+}
+
+function nudgeTime(delta: number) {
+  const start = parseSrtTime(draftStart.value)
+  const end = parseSrtTime(draftEnd.value)
+  if (start == null || end == null) {
+    timeError.value = '时间格式应为 HH:MM:SS,mmm 或 HH:MM:SS.mmm'
+    return
+  }
+  if (start + delta < 0) {
+    timeError.value = '开始时间不能小于 0'
+    return
+  }
+  draftStart.value = formatSrtTime(start + delta)
+  draftEnd.value = formatSrtTime(end + delta)
+  timeError.value = ''
+}
+
+function applyTime() {
+  const start = parseSrtTime(draftStart.value)
+  const end = parseSrtTime(draftEnd.value)
+  if (start == null || end == null) {
+    timeError.value = '时间格式应为 HH:MM:SS,mmm 或 HH:MM:SS.mmm'
+    return
+  }
+  if (end <= start) {
+    timeError.value = '结束时间必须晚于开始时间'
+    return
+  }
+  timeError.value = ''
+  emit('update-time', props.entry, formatSrtTime(start), formatSrtTime(end))
+  timeOpen.value = false
+}
+
+watch(timeOpen, (open) => {
+  if (open) resetTimeDraft()
+})
+
 const emit = defineEmits<{
   'toggle-select': [entry: any, event: MouseEvent]
   'move-up': [entry: any]
@@ -127,5 +239,6 @@ const emit = defineEmits<{
   'restore-translated': [entry: any]
   'use-original': [entry: any]
   'update-final': [entry: any, value: string]
+  'update-time': [entry: any, startTime: string, endTime: string]
 }>()
 </script>

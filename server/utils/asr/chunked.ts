@@ -9,6 +9,8 @@ import type { AsrOptions, AsrResult, AsrSegment } from './types'
 
 const DEFAULT_CHUNK_SECONDS = Math.max(60, Number(process.env.ASR_CHUNK_SECONDS || 300))
 const DEFAULT_OVERLAP_SECONDS = Math.max(0, Number(process.env.ASR_CHUNK_OVERLAP_SECONDS || 2))
+const parsedMaxChunks = Number(process.env.ASR_MAX_CHUNKS || 500)
+const MAX_CHUNKS = Number.isFinite(parsedMaxChunks) && parsedMaxChunks > 0 ? Math.floor(parsedMaxChunks) : 500
 
 interface ChunkPlan {
   index: number
@@ -54,17 +56,20 @@ export function buildAsrChunkPlan(durationSeconds: number, chunkSeconds = DEFAUL
   let startMs = 0
   let index = 0
   while (startMs < durationMs) {
+    if (plan.length >= MAX_CHUNKS) {
+      throw new Error(`音频过长：分段数量超过上限 ${MAX_CHUNKS}，请缩短音频或调大 ASR_MAX_CHUNKS`)
+    }
     const endMs = Math.min(durationMs, startMs + chunkMs + (index > 0 ? overlapMs : 0))
     plan.push({ index, startMs, endMs })
     startMs += chunkMs
     index++
-    if (plan.length > 500) break
   }
   return plan
 }
 
 export async function buildAsrCheckpointKey(task: TranslationTask, options: AsrOptions, audioPath: string, sourcePath?: string, chunkSeconds = DEFAULT_CHUNK_SECONDS, overlapSeconds = DEFAULT_OVERLAP_SECONDS) {
   const info = statSync(sourcePath || audioPath)
+  const cloudEnabled = options.cloudEnabled === true
   const payload = JSON.stringify({
     filePath: task.filePath,
     rootId: task.rootId || '',
@@ -74,7 +79,15 @@ export async function buildAsrCheckpointKey(task: TranslationTask, options: AsrO
     model: options.model || '',
     language: options.language || 'auto',
     engine: options.engine || 'auto',
+    device: options.device || 'auto',
+    computeType: options.computeType || '',
+    vad: options.vad !== false,
+    wordTimestamps: options.wordTimestamps !== false,
+    diarize: options.diarize === true,
     preprocess: options.preprocess || 'off',
+    cloudEnabled,
+    ...(cloudEnabled ? { cloudBaseUrl: options.cloudBaseUrl || '', cloudModel: options.cloudModel || '' } : {}),
+    cloudFallback: options.cloudFallback !== false,
     chunkSeconds,
     overlapSeconds
   })
@@ -283,12 +296,4 @@ export async function transcribeChunked(options: {
 
   const merged = mergeChunkResults(results)
   return { result: merged, checkpointKey, reusedChunks: reusable, totalChunks: plan.length }
-}
-
-export function cleanupAsrCheckpoints(retentionHours = 168) {
-  try {
-    return useDb().prepare("DELETE FROM asr_checkpoints WHERE updated_at < datetime('now', ?)").run(`-${Math.max(1, retentionHours)} hours`).changes
-  } catch {
-    return 0
-  }
 }

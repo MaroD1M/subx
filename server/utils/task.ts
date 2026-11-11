@@ -26,6 +26,7 @@ import { resolveTaskLogCategory, writeTaskLog } from './taskLog'
 import { finalizeTaskOutput } from './taskFinalize'
 import { prepareTaskSource } from './taskSource'
 import { translateSubtitles } from './taskTranslate'
+import { SeriesService } from './series'
 import type { TranslationTask, TaskStatus } from '~~/types'
 import { deriveOutputBaseName, isSafeOutputSuffix } from './outputNaming'
 import { isPathInside } from './pathSafety'
@@ -57,8 +58,8 @@ export const TaskService = {
         const subtitleStyle = task.subtitleStyle ? normalizeSubtitleStyle(task.subtitleStyle, task.outputMode) : undefined
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, subtitle_style_json, bilingual_layout, force_retranslate, status, progress, track_policy_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, subtitle_style_json, bilingual_layout, force_retranslate, status, progress, track_policy_json, series_key, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
             task.taskId,
@@ -89,9 +90,17 @@ export const TaskService = {
             task.forceRetranslate ? 1 : 0,
             'queued',
             0,
-            JSON.stringify(task.trackPolicy || {})
+            JSON.stringify(task.trackPolicy || {}),
+            task.seriesKey || null
         )
         writeTaskLog(task.taskId!, 'queued', 'info', '任务已创建，等待执行')
+        if (task.seriesKey && task.filePath) {
+            try {
+                SeriesService.ensureProfile(task.rootId, task.filePath)
+            } catch (error: any) {
+                console.warn('[Series] Failed to ensure series profile:', error?.message || error)
+            }
+        }
         console.log(`[Task] 创建任务: ${task.taskId} 文件: ${task.filePath}`)
         return this.getTask(task.taskId!)
     },
@@ -109,6 +118,7 @@ export const TaskService = {
             taskId: task.task_id,
             filePath: task.file_path,
             rootId: task.root_id,
+            seriesKey: task.series_key || undefined,
             sourceType: task.source_type,
             trackIndex: task.track_index,
             targetLanguage: task.target_lang,

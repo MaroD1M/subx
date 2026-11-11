@@ -8,6 +8,7 @@ import { writeTaskLog } from './taskLog'
 import { createProvider, normalizeProviderType } from './providers/registry'
 import type { BoundTranslationProvider } from './providers/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import { resolveSeriesTranslationContext, SeriesService } from './series'
 import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
 
 interface TranslateSubtitlesOptions {
@@ -46,19 +47,45 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
         baseUrl: runtimeConfig.baseUrl,
         model: task.model
     })
+    const fallbackModel = String(config.fallbackModel || '').trim()
+    let fallbackProvider: BoundTranslationProvider | null = null
+    if (config.fallbackProviderEnabled === true && fallbackModel) {
+        try {
+            fallbackProvider = createProvider({
+                type: normalizeProviderType((config as any).fallbackProviderType),
+                apiKey: String(config.fallbackApiKey || '').trim() || 'not-needed',
+                baseUrl: String(config.fallbackApiBaseUrl || '').trim() || undefined,
+                model: fallbackModel
+            })
+        } catch (error: any) {
+            console.warn('[Fallback] Failed to initialize fallback provider:', error?.message || error)
+        }
+    }
     // Chunks execute serially so the rolling context always comes from the previous chunk.
     const limit = pLimit(1)
     const maxRetries = config.maxRetries || 3
 
-    const glossary = config.glossary || {}
+    let seriesProfile = null
+    if (task.seriesKey) {
+        try {
+            seriesProfile = SeriesService.getProfileByKey(task.seriesKey)
+        } catch (error: any) {
+            console.warn('[Series] Failed to load series profile:', error?.message || error)
+        }
+    }
+    const resolvedContext = resolveSeriesTranslationContext(task, config.glossary || {}, seriesProfile)
+    const glossary = resolvedContext.glossary
 
     const allStylePresets = [...STYLE_PRESETS, ...(Array.isArray(config.customStylePresets) ? config.customStylePresets : [])]
     const stylePresetConfig = allStylePresets.find(s => s.id === task.stylePreset)
     const stylePrompt = String(task.stylePrompt || stylePresetConfig?.prompt || '')
     const translationContext: TranslationContext = {
-        title: task.contentTitle,
-        background: task.contentBackground,
-        instructions: task.customInstructions
+        title: resolvedContext.title,
+        background: resolvedContext.background,
+        instructions: resolvedContext.instructions
+    }
+    if (seriesProfile) {
+        await updateStatus(taskId, 'translating', 30, { log: `已加载系列记忆: ${seriesProfile.title || task.seriesKey}` })
     }
     if (stylePrompt) {
         await updateStatus(taskId, 'translating', 30, { log: `使用翻译风格: ${stylePresetConfig?.name || task.stylePreset}` })
@@ -107,7 +134,7 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
         const chunkRisk = analyzeChunkRisk(chunk)
         const effectiveStylePrompt = [stylePrompt, chunkRisk.stylePromptSuffix].filter(Boolean).join('\n\n')
         const contextWindowKey = [...previousContext, ...nextContext].map(entry => String(entry.text || '')).join('\u0001')
-        const contextCacheKey = JSON.stringify({ title: task.contentTitle, background: task.contentBackground, instructions: task.customInstructions, contextWindowKey })
+        const contextCacheKey = JSON.stringify({ title: translationContext.title, background: translationContext.background, instructions: translationContext.instructions, contextWindowKey })
         for (const entry of chunk) {
             if (SubtitleService.isNonVerbal(entry.text)) {
                 nonVerbalResults.set(String(entry.id), entry.text)
@@ -168,6 +195,68 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
                 nextContext
             )
 
+            const fallbackRecoveredIds = new Set<string>()
+            if (fallbackProvider && chunkResult.diagnostics.fallbackCount > 0) {
+                const resultById = new Map(chunkResult.entries.map(entry => [String(entry.id), entry]))
+                const fallbackEntries = remappedChunk.filter((entry) => {
+                    const translated = String(resultById.get(String(entry.id))?.translatedText || '')
+                    return !translated || translated === String(entry.text || '')
+                })
+                if (fallbackEntries.length > 0) {
+                    try {
+                        const fallbackResult = await translateChunkWithRetry(
+                            fallbackProvider,
+                            fallbackEntries,
+                            task.targetLanguage,
+                            glossary,
+                            previousContext,
+                            fallbackModel,
+                            taskId,
+                            index,
+                            effectiveStylePrompt,
+                            Math.min(2, Math.max(1, maxRetries)),
+                            undefined,
+                            false,
+                            false,
+                            '块 #' + (index + 1) + ' 备用供应商',
+                            signal,
+                            translationContext,
+                            nextContext
+                        )
+                        const fallbackById = new Map(fallbackResult.entries.map(entry => [String(entry.id), entry]))
+                        const recoveredIds = new Set<string>()
+                        chunkResult.entries = chunkResult.entries.map((entry) => {
+                            const candidate = fallbackById.get(String(entry.id))
+                            const candidateText = String(candidate?.translatedText || '')
+                            if (candidateText && candidateText !== String(entry.text || '')) {
+                                recoveredIds.add(String(entry.id))
+                                fallbackRecoveredIds.add(String(entry.id))
+                                return { ...entry, translatedText: candidateText }
+                            }
+                            return entry
+                        })
+                        if (recoveredIds.size > 0) {
+                            chunkResult.diagnostics.fallbackCount = Math.max(0, chunkResult.diagnostics.fallbackCount - recoveredIds.size)
+                            chunkResult.diagnostics.missingIds = chunkResult.diagnostics.missingIds.filter(id => !recoveredIds.has(String(id)))
+                            chunkResult.diagnostics.finalStatus = chunkResult.diagnostics.fallbackCount > 0 ? 'partial' : 'ok'
+                            writeTaskLog(
+                                taskId,
+                                'translating',
+                                'info',
+                                `[回退] 块 #${index + 1} 使用备用供应商补译 ${fallbackEntries.length} 条，成功 ${recoveredIds.size} 条`
+                            )
+                        }
+                    } catch (error: any) {
+                        if (error instanceof TaskCancelledError) throw error
+                        writeTaskLog(
+                            taskId,
+                            'translating',
+                            'warn',
+                            `[回退] 块 #${index + 1} 备用供应商失败：${error?.message || error}`
+                        )
+                    }
+                }
+            }
             diagnosticsCollection.push(chunkResult.diagnostics)
             const allowCache = chunkResult.diagnostics.validationFailures === 0
                 && chunkResult.diagnostics.singleRetryAttempts === 0
@@ -191,6 +280,7 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
                 const normalizedOriginal = SubtitleService.normalizeComparisonText(originalEntry.text)
                 if (allowCache && entry.translatedText && normalizedTranslated !== normalizedOriginal
                     && !SubtitleService.isNonVerbal(originalEntry.text)
+                    && !fallbackRecoveredIds.has(String(entry.id))
                 ) {
                     const cacheHash = SubtitleService.computeCacheHash(originalEntry.text, task.model, task.targetLanguage, { glossary, stylePrompt: effectiveStylePrompt, promptVersion: TRANSLATION_PROMPT_VERSION, outputMode: task.outputMode, context: contextCacheKey })
                     SubtitleService.setCachedTranslation(cacheHash, originalEntry.text, entry.translatedText, task.model, task.targetLanguage)

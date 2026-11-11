@@ -1,10 +1,10 @@
 # SubX 部署文档
 
-> 适用版本：v2.9.0
+> 适用版本：v2.9.1
 
 本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理、拆分部署、升级备份和常见问题。使用说明请参阅 [usage.md](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
-## 1. v2.9.0 架构
+## 1. v2.9.1 架构
 
 从 v2.5.0 开始，主应用镜像 `ghcr.io/marod1m/subx` 同时包含：
 
@@ -25,7 +25,7 @@ OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下�
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.9.0
+    image: ghcr.io/marod1m/subx:v2.9.1
     container_name: subx
     restart: unless-stopped
     ports:
@@ -112,7 +112,7 @@ http://<主机IP>:3000
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.9.0
+    image: ghcr.io/marod1m/subx:v2.9.1
     container_name: subx
     restart: unless-stopped
     ports:
@@ -204,8 +204,10 @@ volumes:
 | `OCR_INTERNAL_PORT` | `8001` | 内置 OCR 监听端口（仅回环）；启动脚本自动生成 URL |
 | `ASR_INTERNAL_URL` | `http://127.0.0.1:8000` | 显式覆盖主应用默认 ASR 地址；一般不需要 |
 | `OCR_INTERNAL_URL` | `http://127.0.0.1:8001` | 显式覆盖主应用默认 OCR 地址；一般不需要 |
-| `ASR_API_KEY` / `OCR_API_KEY` | 空 | 内置服务可选鉴权；设置后需在设置页填写相同 Key，通常仅回环无需开启 |
-| `OCR_POLL_MS` | `1500` | 主应用轮询 OCR 任务状态的间隔（毫秒）；高级参数 |
+| `ASR_API_KEY` / `OCR_API_KEY` | 空 | 内置服务可选鉴权；单镜像下环境变量优先于设置页保存值，拆分部署时设置页保存值优先 |
+| `ASR_MAX_CHUNKS` | `500` | 单次音频最多分段数；超过后明确报错，不再静默截断 |
+| `ASR_POLL_RETRIES` / `OCR_POLL_RETRIES` | `3` | 状态轮询遇到瞬时网络错误时的连续重试次数 |
+| `ASR_POLL_MS` / `OCR_POLL_MS` | `1500` | 主应用轮询 ASR / OCR 任务状态的间隔（毫秒）；高级参数 |
 | `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` | 空 | 通知出站和模型下载的默认代理；渠道里单独填的代理优先 |
 | `NO_PROXY` | 空 | 不走代理的地址，逗号分隔，例如 `localhost,127.0.0.1` |
 
@@ -228,6 +230,11 @@ volumes:
 | `ASR_AVAILABLE_MODELS` | `tiny,base,small,medium,large-v3,large-v3-turbo` | 设置页可下载模型列表 |
 | `ASR_WHISPER_CPP_MODELS` | 同 `ASR_AVAILABLE_MODELS` | whisper.cpp 可选模型列表 |
 | `ASR_THREADS` | `0` | whisper.cpp 推理线程数；0 表示使用 CPU 核心数 |
+| `ASR_MODEL_CACHE_SIZE` | 内存自适应：`<16GB` 为 `1`，`>=16GB` 为 `2` | 同时驻留内存的模型数量上限；切换模型时自动淘汰旧模型 |
+| `ASR_MAX_JOBS` | `100` | 内存中保留的识别任务数量上限；长时间音频较多时可调小 |
+| `ASR_JOB_RETENTION_SECONDS` | `86400` | 已完成任务在内存中的保留时间（秒） |
+| `ASR_VERIFY_MODEL_CHECKSUMS` | `true` | 启动时后台校验已有模型文件 sha256；结果缓存到 manifest，不阻塞启动 |
+| `ASR_CHECKSUM_METADATA_RETRY_SECONDS` | `86400` | 后台补取 sha256 元数据失败后的重试间隔（秒），避免反复请求 HF |
 | `ASR_AUDIO_CACHE_DAYS` | `14` | 提取音频缓存保留天数（最小 7 天）；缓存位于 `/app/temp/asr-audio` |
 | `ASR_POLL_MS` | `1500` | 主应用轮询 ASR 任务进度的间隔（毫秒），高级参数 |
 | `ASR_UPLOAD_TIMEOUT_MS` | `1800000` | 音频上传/任务创建超时（毫秒），默认 30 分钟 |
@@ -254,6 +261,7 @@ volumes:
 | `OCR_CHUNK_RETRIES` | `1` | 单段失败重试次数；设置页可覆盖 |
 | `OCR_RESUME_TTL_HOURS` | `24` | OCR 分段断点保留时间；设置页可覆盖 |
 | `OCR_MAX_CONCURRENT_JOBS` | `2` | 同时运行的 OCR 任务上限；低配 NAS 建议 `1` |
+| `OCR_JOB_RETENTION_SECONDS` | `3600` | 已完成 OCR 任务在内存中的保留时间（秒） |
 | `OCR_JOB_IDLE_TIMEOUT_MS` | `3600000` | 主应用 OCR 无进度超时；设置页可覆盖 |
 | `OCR_JOB_ABSOLUTE_TIMEOUT_MS` | `21600000` | 主应用 OCR 总任务上限；设置页可覆盖 |
 | `OCR_TEMP_DIR` | `/app/temp/ocr` | OCR 抽帧临时目录；默认位于主应用 `./data/temp/ocr` 下 |
@@ -289,11 +297,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.9.0
+# 默认拉取 v2.9.1
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.9.0
+./scripts/pull-image.sh --tag v2.9.1
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
@@ -364,6 +372,8 @@ environment:
 - 如果希望恢复旧 sidecar 的自动下载行为，可设置 `ASR_AUTO_DOWNLOAD=true`。
 - OCR 模型已内置，不需要手动下载。
 - 下载任务元数据保存在 `/models/.subx-download-jobs.json`，容器重启后显示为「已暂停」，可继续下载。
+- 模型下载与启动时后台校验支持 Hugging Face LFS sha256；仅旧 manifest 缺元数据且当前离线时会跳过校验并记录退避时间。
+- 自动目录改名前的暂停下载任务会在 ASR 服务启动时迁移到新目录，已下载部分和 `.part` 会保留；迁移失败则保留旧路径并告警。
 
 ## 7. 反向代理
 
@@ -409,7 +419,7 @@ docker compose --profile asr up -d asr
 http://subx-asr:8000
 ```
 
-独立镜像：`ghcr.io/marod1m/subx-asr:v2.9.0`。模型目录为 `./data/models/asr`。
+独立镜像：`ghcr.io/marod1m/subx-asr:v2.9.1`。模型目录为 `./data/models/asr`。
 
 ### 8.2 独立 OCR 容器
 
@@ -507,7 +517,7 @@ OCR 内部健康检查：
 
 ## 12. 升级与备份
 
-升级到 v2.9.0：
+升级到 v2.9.1：
 
 ```bash
 docker compose pull
@@ -516,13 +526,15 @@ docker compose up -d --force-recreate
 
 升级说明：
 
-- v2.9.0 重点是本地可靠性、备份、系统体检和依赖安全；从 v2.8.6 升级会自动执行数据库迁移 v9，无需手动改库。
-- 核对页批量重译改为后台任务，支持进度轮询、离开页面继续执行和返回页面自动恢复。
-- 新增应用内定时备份和“立即备份”；Compose 新增 `./data/backups:/app/backups` 卷，请一并更新。
-- 新增「设置 → 系统体检」，检查数据库、媒体库、FFmpeg、字体、临时目录、磁盘、AI 配置和备份状态。
-- 新增首次配置清单、设置页未保存提示、导出同名备份、实景预览缓存清理和任务删除事务化。
-- 依赖升级：Nuxt 4.6.4 安全补丁、ESLint 10、undici 8、uuid 14、p-limit 7、FastAPI / faster-whisper / pywhispercpp 新版本。
-- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.9.0。
+- v2.9.1 包含稳定性修复和家庭 NAS 体验更新；从 v2.9.0 升级会自动执行数据库迁移 v10（新增系列记忆表），从 v2.8.6 及更早版本升级会依次执行 v9 / v10。
+- 修复本地 ASR 在 undici 8 下创建任务失败（`UND_ERR_INVALID_ARG`）。
+- ASR/OCR 检测现在显示设置页实际选择的模型、引擎、设备和语言。
+- ASR/OCR 状态轮询增加瞬时网络错误重试；OCR 排队任务不再被无进度超时误取消。
+- 模型下载增加 Hugging Face sha256 校验；启动时后台校验历史模型，损坏模型会标记为未安装。
+- 模型缓存默认按内存自适应，旧目录暂停任务会自动迁移并保留 `.part`。
+- 修复 whisper.cpp 引擎下载路由和模型目录名冲突处理。
+- 新增系列记忆、覆盖检查、简洁模式、低功耗 NAS 预设、备用供应商回退和核对页时间编辑。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.9.1。
 - 建议升级前执行备份，升级后进入「设置 → 系统体检」检查服务状态。
 
 备份：
@@ -648,7 +660,7 @@ docker exec -it subx curl -fsS http://127.0.0.1:8000/health
 
 ### 镜像太大 / 拉取很慢
 
-- v2.9.0 单镜像包含 Python、FFmpeg、Tesseract 语言包、OCR 依赖和内置中文字体；不同架构和版本体积会有差异，建议至少预留 2–3 GB 磁盘。
+- v2.9.1 单镜像包含 Python、FFmpeg、Tesseract 语言包、OCR 依赖和内置中文字体；不同架构和版本体积会有差异，建议至少预留 2–3 GB 磁盘。
 - 使用 `./scripts/pull-image.sh` 查看 Docker 原生进度；Ctrl+C 暂停后重新执行可续传。
 - 配置 Docker Daemon 代理（见第 5 节）。
 - 只需要主应用时，可继续使用旧版精简镜像和独立 sidecar，但不再推荐。

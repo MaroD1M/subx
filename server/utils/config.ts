@@ -15,6 +15,8 @@ const LOCAL_ASR_URL = String(process.env.ASR_INTERNAL_URL || 'http://127.0.0.1:8
 const LOCAL_OCR_URL = String(process.env.OCR_INTERNAL_URL || 'http://127.0.0.1:8001')
 const LOCAL_SERVICE_MIGRATION_KEY = 'subxLocalServiceMigration'
 let localServiceMigrationChecked = false
+let asrEnvOverrideWarned = false
+let ocrEnvOverrideWarned = false
 
 function safeJsonParse<T>(value: unknown, fallback: T): T {
     try {
@@ -58,6 +60,11 @@ export const ConfigService = {
             apiBaseUrl: 'https://api.openai.com/v1',
             providerType: 'openai-compatible',
             defaultModel: 'gpt-3.5-turbo',
+            fallbackProviderEnabled: false,
+            fallbackProviderType: 'openai-compatible',
+            fallbackApiBaseUrl: 'https://api.openai.com/v1',
+            fallbackApiKey: '',
+            fallbackModel: '',
             targetLanguage: 'zh-CN',
             chunkSize: 2000,
             concurrency: 3,
@@ -137,7 +144,7 @@ export const ConfigService = {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'
-            } else if (['asrEnabled', 'asrVad', 'asrWordTimestamps', 'asrKeepAudio', 'asrCloudEnabled', 'asrCloudFallback', 'asrDiarization', 'ocrEnabled', 'notificationEnabled', 'embyCompatibleOutput', 'qualityCheckEnabled', 'autoBackupEnabled'].includes(row.key)) {
+            } else if (['asrEnabled', 'asrVad', 'asrWordTimestamps', 'asrKeepAudio', 'asrCloudEnabled', 'asrCloudFallback', 'asrDiarization', 'ocrEnabled', 'notificationEnabled', 'embyCompatibleOutput', 'qualityCheckEnabled', 'autoBackupEnabled', 'fallbackProviderEnabled'].includes(row.key)) {
                 (config as any)[row.key] = row.value === 'true' || row.value === '1'
             } else if (row.key === 'translationMode') {
                 config.translationMode = row.value === 'stream' ? 'stream' : 'non_stream'
@@ -147,6 +154,8 @@ export const ConfigService = {
                 config.asrApiKey = String(row.value || '')
             } else if (row.key === 'asrCloudApiKey') {
                 config.asrCloudApiKey = String(row.value || '')
+            } else if (row.key === 'fallbackApiKey') {
+                config.fallbackApiKey = String(row.value || '')
             } else if (row.key === 'ocrApiKey') {
                 config.ocrApiKey = String(row.value || '')
             } else if (row.key === 'integrationWebhookToken') {
@@ -205,6 +214,8 @@ export const ConfigService = {
             }
         }
 
+        const allInOne = process.env.SUBX_ALL_IN_ONE === 'true'
+        const envAsrApiKey = String(process.env.ASR_API_KEY || '')
         if (config.asrApiKey && isEncryptedSecret(config.asrApiKey)) {
             try {
                 config.asrApiKey = decryptSecret(config.asrApiKey)
@@ -213,7 +224,17 @@ export const ConfigService = {
                 config.asrApiKey = ''
             }
         }
+        if (allInOne && envAsrApiKey) {
+            if (config.asrApiKey && config.asrApiKey !== envAsrApiKey && !asrEnvOverrideWarned) {
+                asrEnvOverrideWarned = true
+                console.warn('[Config] ASR_API_KEY env var takes precedence over the saved ASR API key in all-in-one mode')
+            }
+            config.asrApiKey = envAsrApiKey
+        } else if (!config.asrApiKey && envAsrApiKey) {
+            config.asrApiKey = envAsrApiKey
+        }
 
+        const envOcrApiKey = String(process.env.OCR_API_KEY || '')
         if (config.ocrApiKey && isEncryptedSecret(config.ocrApiKey)) {
             try {
                 config.ocrApiKey = decryptSecret(config.ocrApiKey)
@@ -221,6 +242,15 @@ export const ConfigService = {
                 console.error('[Config] Failed to decrypt OCR API key:', e)
                 config.ocrApiKey = ''
             }
+        }
+        if (allInOne && envOcrApiKey) {
+            if (config.ocrApiKey && config.ocrApiKey !== envOcrApiKey && !ocrEnvOverrideWarned) {
+                ocrEnvOverrideWarned = true
+                console.warn('[Config] OCR_API_KEY env var takes precedence over the saved OCR API key in all-in-one mode')
+            }
+            config.ocrApiKey = envOcrApiKey
+        } else if (!config.ocrApiKey && envOcrApiKey) {
+            config.ocrApiKey = envOcrApiKey
         }
 
         if (config.integrationWebhookToken && isEncryptedSecret(config.integrationWebhookToken)) {
@@ -238,6 +268,15 @@ export const ConfigService = {
             } catch (e) {
                 console.error('[Config] Failed to decrypt cloud ASR API key:', e)
                 config.asrCloudApiKey = ''
+            }
+        }
+
+        if (config.fallbackApiKey && isEncryptedSecret(config.fallbackApiKey)) {
+            try {
+                config.fallbackApiKey = decryptSecret(config.fallbackApiKey)
+            } catch (e) {
+                console.error('[Config] Failed to decrypt fallback translation API key:', e)
+                config.fallbackApiKey = ''
             }
         }
 
@@ -269,14 +308,14 @@ export const ConfigService = {
      */
     async updateConfig(key: string, value: any) {
         const db = useDb()
-        const normalizedValue = (key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken') ? encryptSecret(String(value || '')) : value
+        const normalizedValue = (key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'fallbackApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken') ? encryptSecret(String(value || '')) : value
         const valStr = typeof normalizedValue === 'object' ? JSON.stringify(normalizedValue) : String(normalizedValue)
 
         const stmt = db.prepare('INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))')
         stmt.run(key, valStr)
         configCache = null
         configCacheAt = 0
-        console.log(`[Config] 更新配置: ${key} = ${['apiKey', 'asrApiKey', 'asrCloudApiKey'].includes(key) ? '****' : valStr.substring(0, 40)}`)
+        console.log(`[Config] 更新配置: ${key} = ${['apiKey', 'asrApiKey', 'asrCloudApiKey', 'fallbackApiKey', 'ocrApiKey', 'integrationWebhookToken'].includes(key) ? '****' : valStr.substring(0, 40)}`)
     },
 
     async cleanupLogsIfNeeded() {

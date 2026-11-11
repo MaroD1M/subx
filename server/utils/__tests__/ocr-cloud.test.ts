@@ -5,6 +5,13 @@ import { tmpdir } from 'os'
 import { AsrService } from '../asr/client'
 import { OcrService } from '../ocr/client'
 
+const undiciFetchMock = vi.hoisted(() => vi.fn())
+
+vi.mock('undici', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('undici')>()
+  return { ...actual, fetch: undiciFetchMock }
+})
+
 const dirs: string[] = []
 function sampleFile() {
   const dir = mkdtempSync(join(tmpdir(), 'subx-v16-'))
@@ -15,7 +22,7 @@ function sampleFile() {
 }
 
 afterEach(() => {
-  vi.unstubAllGlobals()
+  undiciFetchMock.mockReset()
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
@@ -32,7 +39,7 @@ describe('cloud ASR and OCR clients', () => {
         { word: 'world.', start: 2, end: 3, probability: 0.7 }
       ]
     }), { status: 200, headers: { 'content-type': 'application/json' } }))
-    vi.stubGlobal('fetch', fetchMock)
+    undiciFetchMock.mockImplementation(fetchMock)
     const result = await AsrService.transcribe(sampleFile(), {
       baseUrl: 'http://unused',
       engine: 'cloud',
@@ -58,7 +65,7 @@ describe('cloud ASR and OCR clients', () => {
       }
       return new Response('local unavailable', { status: 500 })
     })
-    vi.stubGlobal('fetch', fetchMock)
+    undiciFetchMock.mockImplementation(fetchMock)
     const result = await AsrService.transcribe(sampleFile(), {
       baseUrl: 'http://local-asr:8000',
       engine: 'faster-whisper',
@@ -83,7 +90,7 @@ describe('cloud ASR and OCR clients', () => {
         segments: [{ start: 0, end: 5, text: 'OCR 字幕' }]
       }), { status: 200 })
     })
-    vi.stubGlobal('fetch', fetchMock)
+    undiciFetchMock.mockImplementation(fetchMock)
     const result = await OcrService.transcribe('/media/Movie.mkv', {
       baseUrl: 'http://subx-ocr:8000',
       language: 'zh-CN',
@@ -134,7 +141,7 @@ describe('cloud ASR and OCR clients', () => {
         result: { engine: 'ocr:ffmpeg-tesseract', language: 'zh-CN', duration: 4, text: 'OCR JOB', segments: [{ start: 0, end: 4, text: 'OCR JOB' }] }
       }), { status: 200 })
     })
-    vi.stubGlobal('fetch', fetchMock)
+    undiciFetchMock.mockImplementation(fetchMock)
     const result = await OcrService.transcribe('/media/Movie.mkv', {
       baseUrl: 'http://subx-ocr:8000',
       language: 'zh-CN',

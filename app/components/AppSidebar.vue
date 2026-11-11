@@ -47,6 +47,18 @@
       </div>
       <div class="space-y-1">
         <UButton
+          icon="i-lucide-wand-sparkles"
+          :label="collapsed ? undefined : (simpleMode ? '完整模式' : '简洁模式')"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          class="w-full"
+          :class="collapsed ? 'justify-center' : 'justify-start'"
+          :title="simpleMode ? '切换到完整模式' : '切换到简洁模式'"
+          :aria-label="simpleMode ? '切换到完整模式' : '切换到简洁模式'"
+          @click="toggleSimpleMode"
+        />
+        <UButton
           :icon="collapsed ? 'i-lucide-panel-left-open' : 'i-lucide-sun-moon'"
           :label="collapsed ? undefined : (colorMode.value === 'dark' ? '浅色模式' : '深色模式')"
           variant="ghost"
@@ -100,6 +112,8 @@
 </template>
 
 <script setup lang="ts">
+import { useSimpleMode } from '../composables/useSimpleMode'
+
 const props = defineProps<{
   collapsed: boolean
   appVersion: string
@@ -112,6 +126,7 @@ const emit = defineEmits<{
 
 const colorMode = useColorMode()
 const { navItems, isActive } = useNavigation()
+const { simpleMode, toggleSimpleMode } = useSimpleMode()
 const { authenticated, logout } = useAuth()
 
 const versionTitle = computed(() => {

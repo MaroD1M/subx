@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.9.1 - 2026-11-10
+
+### Fixed
+
+- 修复本地 ASR 在 undici 8 下创建任务失败（`UND_ERR_INVALID_ARG`）；ASR、云端 ASR 和 OCR 统一使用 undici fetch 与长超时 dispatcher。
+- 修复 ASR/OCR 检测显示服务端默认值而非设置页实际配置的问题，覆盖模型、引擎、设备和语言。
+- 修复 whisper.cpp 下载引擎归一化错误，避免模型误写入 faster-whisper 目录。
+- 修复 OCR 排队任务被无进度超时误取消的问题。
+- 修复模型部分下载被误判为已安装、模型目录名冲突和旧 manifest 校验缺失。
+- 修复 ASR job 轮询、`/health` 并发读取和同步接口绕过推理锁等稳定性问题。
+- 修复首页单文件任务未提交片名/剧情背景/额外要求的问题；自动化与外部集成任务现在也会继承系列记忆。
+
+### Added
+
+- ASR/OCR 状态轮询瞬时网络错误重试：`ASR_POLL_RETRIES`、`OCR_POLL_RETRIES`。
+- 模型下载与启动后台校验 sha256，覆盖 faster-whisper 和 whisper.cpp；新增 `ASR_VERIFY_MODEL_CHECKSUMS`、`ASR_CHECKSUM_METADATA_RETRY_SECONDS`。
+- ASR 模型缓存按内存自适应（`ASR_MODEL_CACHE_SIZE`），任务保留数量/时间可配置（`ASR_MAX_JOBS`、`ASR_JOB_RETENTION_SECONDS`）。
+- OCR 任务保留时间可配置：`OCR_JOB_RETENTION_SECONDS`。
+- 旧目录暂停下载任务自动迁移到新目录，保留 `.part` 文件。
+- 超长音频分段上限 `ASR_MAX_CHUNKS`，超过时明确报错而不是静默截断。
+- Anthropic、Gemini 和 OpenAI 模型列表请求超时；ASR 说话人分离与推理串行化。
+- 单镜像下 `ASR_API_KEY` / `OCR_API_KEY` 环境变量优先于设置页保存值。
+- 系列记忆：按剧集自动推导系列，保存标题、剧情背景、摘要和系列术语表；后续集数自动复用，任务创建时自动建立系列档案。
+- 覆盖检查：扫描媒体库视频，汇总缺失、待核对、处理中、失败和已完成字幕，支持按系列分组和批量补齐；相关 API 已纳入 OpenAPI 与 API Token scope。
+- 文件浏览器新增“系列记忆”入口，可按当前视频编辑系列背景、摘要和术语表。
+- 设置页新增“低功耗 NAS”快速预设：并发限制为 1，使用 small/int8，关闭说话人分离和预处理。
+- 核对页支持单条字幕时间编辑和整体时间偏移，导出时使用调整后的时间。
+- 新增备用翻译供应商：主供应商重试后仍缺译时，可用本地 Ollama 或低价模型补译。
+- 新增简洁模式：隐藏自动化和高级设置，只保留媒体库、覆盖检查、任务历史和基础翻译流程。
+
+### Changed
+
+- ASR 指标不再统计 OCR 运行记录。
+- 任务错误分类补充“模型未下载”和 ASR/OCR API Key 无效等中文提示。
+- 模型目录名冲突改用短哈希自动改名，旧目录继续兼容。
+
 ## v2.9.0 - 2026-11-10
 
 ### Added

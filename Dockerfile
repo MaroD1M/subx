@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ============================================================
-# SubX v2.9.0 all-in-one image
+# SubX v2.9.1 all-in-one image
 # 主应用 + ASR + OCR 运行在同一个容器内。
 # Whisper 模型不打进镜像，首次在设置页手动下载。
 # ============================================================
@@ -144,7 +144,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/subx-start
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \
-    CMD curl -fsS http://127.0.0.1:3000/api/health >/dev/null || exit 1
+    CMD curl -fsS 'http://127.0.0.1:3000/api/health?deep=1' >/dev/null || exit 1
 
 # 默认时区设为亚洲/上海，用户可以通过 -e TZ=... 覆盖
 ENV TZ=Asia/Shanghai \

@@ -2,9 +2,17 @@ import { EMPTY_USAGE, type BoundTranslationProvider, type ProviderRequest, type 
 
 const DEFAULT_BASE_URL = 'https://api.anthropic.com/v1'
 const ANTHROPIC_VERSION = '2023-06-01'
+const REQUEST_TIMEOUT_MS = 5 * 60 * 1000
+const LIST_TIMEOUT_MS = 30 * 1000
 
 function baseUrl(config: ProviderRuntimeConfig) {
   return (config.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, '')
+}
+
+function combineSignals(signal: AbortSignal | undefined, timeout: AbortSignal): AbortSignal {
+  if (!signal) return timeout
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([signal, timeout])
+  return timeout
 }
 
 function usageFrom(raw: any): ProviderUsage {
@@ -32,7 +40,8 @@ export function createAnthropicProvider(config: ProviderRuntimeConfig): BoundTra
         headers: {
           'x-api-key': config.apiKey,
           'anthropic-version': ANTHROPIC_VERSION
-        }
+        },
+        signal: AbortSignal.timeout(LIST_TIMEOUT_MS)
       })
       if (!response.ok) return []
       const data = await response.json() as any
@@ -56,7 +65,7 @@ export function createAnthropicProvider(config: ProviderRuntimeConfig): BoundTra
           system: request.system,
           messages: [{ role: 'user', content: request.prompt }]
         }),
-        signal: request.signal
+        signal: combineSignals(request.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS))
       })
       if (!response.ok) await parseError(response)
       const data = await response.json() as any

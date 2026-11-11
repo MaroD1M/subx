@@ -266,26 +266,33 @@
           </div>
 
           <div v-show="rightTab === 'settings'" class="mt-2 flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 dark:border-gray-700/80 dark:bg-gray-900/30">
+            <p v-if="simpleMode" class="mb-2 flex items-center gap-1.5 rounded-xl border border-primary-100 bg-primary-50/60 px-3 py-2 text-[11px] leading-5 text-primary-700 dark:border-primary-900/40 dark:bg-primary-500/5 dark:text-primary-300">
+              <UIcon name="i-lucide-wand-sparkles" class="h-3.5 w-3.5 shrink-0" />
+              简洁模式已开启，高级选项已隐藏
+            </p>
             <div class="relative flex-1 min-h-0">
               <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
                 <div class="space-y-3 p-0.5">
 
-                  <UFormField label="翻译风格">
-                    <USelect v-model="options.stylePreset" :items="styleOptions" class="w-full" :disabled="options.outputMode === 'original'" />
-                  </UFormField>
-                  <div v-if="currentStyle" class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 transition-all">
-                    <UIcon :name="currentStyle.icon || 'i-lucide-wand-sparkles'" class="w-5 h-5 text-primary-700 shrink-0 mt-0.5" />
-                    <div class="space-y-0.5 min-w-0">
-                      <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ currentStyle.name }}</p>
-                      <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ currentStyle.description }}</p>
+                  <template v-if="!simpleMode">
+                    <UFormField label="翻译风格">
+                      <USelect v-model="options.stylePreset" :items="styleOptions" class="w-full" :disabled="options.outputMode === 'original'" />
+                    </UFormField>
+                    <div v-if="currentStyle" class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 transition-all">
+                      <UIcon :name="currentStyle.icon || 'i-lucide-wand-sparkles'" class="w-5 h-5 text-primary-700 shrink-0 mt-0.5" />
+                      <div class="space-y-0.5 min-w-0">
+                        <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ currentStyle.name }}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ currentStyle.description }}</p>
+                      </div>
                     </div>
-                  </div>
+                  </template>
                   <UFormField label="目标语言">
                     <USelect v-model="options.targetLanguage" :items="LANGUAGE_OPTIONS" class="w-full" :disabled="options.outputMode === 'original'" />
                   </UFormField>
                   <p v-if="options.outputMode === 'original'" class="text-[11px] text-amber-600 dark:text-amber-400">已选择仅导出原字幕：将跳过 AI 翻译，仅导出所选字幕轨道。可在「字幕输出」调整格式与样式。</p>
 
                   <button
+                    v-if="!simpleMode"
                     type="button"
                     class="flex w-full items-center justify-between rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-2 text-left text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:bg-gray-900"
                     @click="showAdvancedOptions = !showAdvancedOptions"
@@ -295,7 +302,18 @@
                   </button>
                 </div>
 
-                <div v-show="showAdvancedOptions" class="space-y-3 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
+                <div v-if="!simpleMode && showAdvancedOptions" class="space-y-3 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
+                  <div v-if="showSeriesMemory" class="flex flex-wrap items-center gap-2 rounded-xl border border-primary-100 bg-primary-50/60 px-3 py-2 dark:border-primary-900/40 dark:bg-primary-500/5">
+                    <UIcon name="i-lucide-brain" class="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" />
+                    <span class="text-xs font-semibold text-primary-800 dark:text-primary-200">系列记忆</span>
+                    <UBadge v-if="seriesProfileLoading" color="neutral" variant="subtle" size="sm">加载中</UBadge>
+                    <UBadge v-else-if="seriesProfile" color="primary" variant="subtle" size="sm">已应用</UBadge>
+                    <UBadge v-else color="neutral" variant="subtle" size="sm">暂无</UBadge>
+                    <span v-if="seriesProfile?.title || seriesInferredTitle" class="min-w-0 flex-1 truncate text-[11px] text-primary-700/80 dark:text-primary-300/80" :title="seriesProfile?.title || seriesInferredTitle">
+                      {{ seriesProfile?.title || seriesInferredTitle }}
+                    </span>
+                    <UButton label="编辑系列记忆" icon="i-lucide-pencil" color="primary" variant="soft" size="xs" class="ml-auto shrink-0" @click="openSeriesMemoryDialog" />
+                  </div>
                   <div class="grid grid-cols-1 gap-3">
                     <UFormField label="片名 / 剧集名">
                       <UInput v-model="options.contentTitle" placeholder="例如：权力的游戏 S01E01" class="w-full" :disabled="options.outputMode === 'original'" />
@@ -329,6 +347,7 @@
                   <USelect v-model="options.bilingualLayout" :items="bilingualLayoutItems" :disabled="options.outputMode !== 'bilingual'" class="w-full" />
                 </UFormField>
                 <SubtitleStyleEditor
+                  v-if="!simpleMode"
                   :model-value="options.subtitleStyle"
                   :output-mode="options.outputMode"
                   :subtitle-format="options.subtitleFormat"
@@ -402,6 +421,42 @@
         </div>
       </template>
     </UModal>
+    <UModal v-model:open="seriesMemoryOpen" title="编辑系列记忆" description="为当前系列保存标题、背景、摘要与术语表，后续剧集可自动复用。">
+      <template #content>
+        <div class="space-y-4 p-5">
+          <div class="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs text-gray-500 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-400 break-all">
+            {{ seriesProfile?.title || seriesInferredTitle || selectedFile?.name || '当前视频' }}
+          </div>
+          <UFormField label="系列标题">
+            <UInput v-model="seriesForm.title" placeholder="例如：权力的游戏" class="w-full" />
+          </UFormField>
+          <UFormField label="剧情背景 / 人物关系">
+            <UTextarea v-model="seriesForm.background" :rows="3" autoresize :maxrows="8" placeholder="例如：故事发生在维斯特洛大陆，主要家族之间争夺铁王座。" class="w-full" />
+          </UFormField>
+          <UFormField label="系列摘要">
+            <UTextarea v-model="seriesForm.summary" :rows="2" autoresize :maxrows="6" placeholder="例如：前几集的关键剧情、人物关系变化或翻译约定。" class="w-full" />
+          </UFormField>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-medium text-gray-700 dark:text-gray-300">系列术语表</span>
+              <UButton label="添加术语" icon="i-lucide-plus" size="xs" color="primary" variant="soft" @click="addSeriesGlossaryRow" />
+            </div>
+            <div v-if="seriesGlossaryRows.length" class="space-y-2">
+              <div v-for="(row, index) in seriesGlossaryRows" :key="index" class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
+                <UInput v-model="row.key" placeholder="原文/人名" />
+                <UInput v-model="row.value" placeholder="译文" />
+                <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="sm" aria-label="删除术语" @click="removeSeriesGlossaryRow(index)" />
+              </div>
+            </div>
+            <p v-else class="text-xs text-gray-500 dark:text-gray-400">暂无术语，点击“添加术语”开始配置。</p>
+          </div>
+          <div class="flex items-center justify-end gap-3">
+            <UButton label="取消" color="neutral" variant="ghost" @click="seriesMemoryOpen = false" />
+            <UButton label="保存系列记忆" color="primary" :loading="seriesSaving" @click="saveSeriesMemory" />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -412,9 +467,12 @@ import { createSubtitleStyle, normalizeSubtitleStyle, normalizeSubtitleStylePres
 import type { FileNode, SubtitleOutputStyle } from '~~/types'
 import FileSearchResults from './FileSearchResults.vue'
 import SubtitleStyleEditor from './SubtitleStyleEditor.vue'
+import { useSeriesProfile, type SeriesProfile } from '../composables/useSeriesProfile'
+import { useSimpleMode } from '../composables/useSimpleMode'
 
 const toast = useToast()
 const { data: appConfig } = await useAppConfigData()
+const { simpleMode } = useSimpleMode()
 const activeRootId = ref<string>('')
 const searchQuery = ref('')
 const debouncedSearchQuery = ref('')
@@ -462,6 +520,9 @@ const trackLanguageOptions = [
   { label: '韩文优先', value: 'ko' }
 ]
 const showAdvancedOptions = ref(false)
+watch(simpleMode, (enabled) => {
+  if (enabled) showAdvancedOptions.value = false
+})
 const selectedNode = ref<FileNode | null>(null)
 const layoutRef = ref<HTMLElement | null>(null)
 const rightPaneRef = ref<HTMLElement | null>(null)
@@ -609,6 +670,7 @@ onBeforeUnmount(() => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   if (serverSearchTimer) clearTimeout(serverSearchTimer)
   abortServerSearch()
+  resetSeriesProfile()
 })
 
 const displayNodes = computed<FileNode[]>(() => filterNodes(files.value || [], debouncedSearchQuery.value))
@@ -775,6 +837,7 @@ async function handleRootChange() {
   clearFileSelection()
   selectedNode.value = null
   selectedFile.value = null
+  resetSeriesMemory()
   tracks.value = []
   audioTracks.value = []
   useAsr.value = false
@@ -947,6 +1010,112 @@ const subtitlePreviewSource = computed(() => {
   return { filePath: file.path, rootId: file.rootId || activeRootId.value }
 })
 
+const {
+  profile: seriesProfile,
+  inferredTitle: seriesInferredTitle,
+  loading: seriesProfileLoading,
+  load: loadSeriesProfile,
+  save: saveSeriesProfile,
+  reset: resetSeriesProfile
+} = useSeriesProfile()
+
+const seriesMemoryOpen = ref(false)
+const seriesSaving = ref(false)
+const seriesForm = reactive({ title: '', background: '', summary: '' })
+const seriesGlossaryRows = ref<Array<{ key: string, value: string }>>([])
+const autoFilledTitle = ref('')
+const autoFilledBackground = ref('')
+
+const showSeriesMemory = computed(() => !!selectedFile.value && !isSubtitleFile.value && !batchMode.value)
+
+function applySeriesAutofill(profile: SeriesProfile | null) {
+  if (!profile) {
+    if (autoFilledTitle.value && options.value.contentTitle === autoFilledTitle.value) {
+      options.value.contentTitle = ''
+      autoFilledTitle.value = ''
+    }
+    if (autoFilledBackground.value && options.value.contentBackground === autoFilledBackground.value) {
+      options.value.contentBackground = ''
+      autoFilledBackground.value = ''
+    }
+    return
+  }
+
+  const nextTitle = profile.title || ''
+  if (!options.value.contentTitle.trim() || options.value.contentTitle === autoFilledTitle.value) {
+    options.value.contentTitle = nextTitle
+    autoFilledTitle.value = nextTitle
+  }
+
+  const nextBackground = profile.background || ''
+  if (!options.value.contentBackground.trim() || options.value.contentBackground === autoFilledBackground.value) {
+    options.value.contentBackground = nextBackground
+    autoFilledBackground.value = nextBackground
+  }
+}
+
+function resetSeriesMemory() {
+  resetSeriesProfile()
+  applySeriesAutofill(null)
+}
+
+async function loadSeriesMemory(node: FileNode) {
+  if (node.isDir || batchMode.value) {
+    resetSeriesProfile()
+    return
+  }
+  const result = await loadSeriesProfile(node.rootId || activeRootId.value, node.path)
+  if (!result) return
+  applySeriesAutofill(result.profile)
+}
+
+function openSeriesMemoryDialog() {
+  if (!selectedFile.value || isSubtitleFile.value) return
+  seriesForm.title = seriesProfile.value?.title || seriesInferredTitle.value || options.value.contentTitle || ''
+  seriesForm.background = seriesProfile.value?.background || options.value.contentBackground || ''
+  seriesForm.summary = seriesProfile.value?.summary || ''
+  const glossary = seriesProfile.value?.glossary || {}
+  seriesGlossaryRows.value = Object.entries(glossary).map(([key, value]) => ({ key, value: String(value) }))
+  seriesMemoryOpen.value = true
+}
+
+function addSeriesGlossaryRow() {
+  seriesGlossaryRows.value.push({ key: '', value: '' })
+}
+
+function removeSeriesGlossaryRow(index: number) {
+  seriesGlossaryRows.value.splice(index, 1)
+}
+
+async function saveSeriesMemory() {
+  const file = selectedFile.value
+  if (!file || isSubtitleFile.value) return
+  const glossary: Record<string, string> = {}
+  for (const row of seriesGlossaryRows.value) {
+    const key = row.key.trim()
+    if (key) glossary[key] = row.value
+  }
+  const rootId = file.rootId || activeRootId.value
+  seriesSaving.value = true
+  try {
+    const next = await saveSeriesProfile({
+      rootId,
+      filePath: file.path,
+      title: seriesForm.title.trim(),
+      background: seriesForm.background.trim(),
+      summary: seriesForm.summary.trim(),
+      glossary
+    })
+    if (next && selectedFile.value?.path === file.path) applySeriesAutofill(next)
+    seriesMemoryOpen.value = false
+    toast.add({ title: toastText.success, description: '系列记忆已保存', color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: toastText.error, description: e?.data?.message || e?.message || '无法保存系列记忆', color: 'error' })
+  } finally {
+    seriesSaving.value = false
+  }
+}
+
 let selectionSeq = 0
 
 async function onSelect(node: FileNode) {
@@ -959,6 +1128,7 @@ async function onSelect(node: FileNode) {
     useAsr.value = false
     rightTab.value = 'tracks'
     subtitlePreview.value = []
+    resetSeriesMemory()
     return
   }
 
@@ -979,6 +1149,7 @@ async function onSelect(node: FileNode) {
   subtitlePreview.value = []
 
   if (isSubtitleFile.value) {
+    resetSeriesMemory()
     selectedTrackIndex.value = 0
     pendingSubtitle.value = true
     try {
@@ -992,6 +1163,12 @@ async function onSelect(node: FileNode) {
       if (seq === selectionSeq) pendingSubtitle.value = false
     }
     return
+  }
+
+  if (!batchMode.value) {
+    void loadSeriesMemory(node)
+  } else {
+    resetSeriesMemory()
   }
 
   pendingTracks.value = true
@@ -1064,6 +1241,7 @@ async function submitFolderDialog() {
       toast.add({ title: '重命名成功', description: '名称已更新', color: 'success' })
       selectedNode.value = null
       selectedFile.value = null
+      resetSeriesMemory()
       tracks.value = []
       subtitlePreview.value = []
     }
@@ -1085,6 +1263,7 @@ async function confirmDeleteNode() {
     deleteDialogOpen.value = false
     selectedNode.value = null
     selectedFile.value = null
+    resetSeriesMemory()
     tracks.value = []
     subtitlePreview.value = []
     await loadRootNodes()
@@ -1256,7 +1435,12 @@ async function startBatchTasks() {
 
 function toggleBatchMode() {
   batchMode.value = !batchMode.value
-  if (!batchMode.value) clearFileSelection()
+  if (!batchMode.value) {
+    clearFileSelection()
+    if (selectedFile.value && !isSubtitleFile.value) void loadSeriesMemory(selectedFile.value)
+  } else {
+    resetSeriesMemory()
+  }
 }
 
 async function startTask(silent = false) {
@@ -1279,7 +1463,7 @@ async function startTask(silent = false) {
         rootId: selectedFile.value.rootId || activeRootId.value,
         sourceType: isSubtitleFile.value ? 'external' : useAsr.value ? 'asr' : selectedIsOcr ? 'ocr' : 'embedded',
         trackIndex: isSubtitleFile.value ? 0 : useAsr.value ? selectedAudioTrackIndex.value : selectedTrackIndex.value,
-        ...Object.fromEntries(Object.entries(options.value).filter(([key]) => !['contentTitle', 'contentBackground', 'customInstructions'].includes(key)))
+        ...options.value
       }
     })
     const reused = Number((res as any).reusedActive || 0) > 0

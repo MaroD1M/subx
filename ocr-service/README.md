@@ -45,8 +45,10 @@ docker compose --profile ocr up -d ocr
 | `OCR_CHUNK_RETRIES` | `1` | 单段失败重试次数 |
 | `OCR_RESUME_TTL_HOURS` | `24` | 分段断点保留时间 |
 | `OCR_MAX_CONCURRENT_JOBS` | `2` | 同时运行的 OCR 任务上限 |
+| `OCR_MAX_JOBS` | `50` | 内存中保留的 OCR 任务数量上限；超过时优先清理已结束任务 |
+| `OCR_JOB_RETENTION_SECONDS` | `3600` | 已完成 OCR 任务在内存中的保留时间（秒） |
 | `OCR_TEMP_DIR` | `/app/temp/ocr` | 抽帧与断点临时目录；默认与主应用 `./data/temp/ocr` 一致 |
-| `OCR_API_KEY` | 空 | 可选服务鉴权；主镜像设置后会自动作为默认 Key 使用 |
+| `OCR_API_KEY` | 空 | 可选服务鉴权；单镜像下优先于设置页保存的 Key，拆分部署时设置页保存值优先 |
 
 > 主应用会在请求中传入设置页的“长视频与超时”参数；环境变量主要用于服务默认值和未传参数时的兜底。
 

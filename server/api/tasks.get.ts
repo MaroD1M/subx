@@ -62,6 +62,7 @@ export default defineEventHandler(async (event) => {
       reviewAvailable: terminalStatus && (reviewEntryCount > 0 || isSubtitlePath(task.output_path) || isSubtitlePath(task.source_subtitle_path) || isSubtitlePath(task.file_path)),
       filePath: task.file_path,
       rootId: task.root_id,
+      seriesKey: task.series_key || undefined,
       rootName,
       sourceType: task.source_type,
       trackIndex: task.track_index,

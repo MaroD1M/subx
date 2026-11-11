@@ -19,6 +19,7 @@ import { ConfigService } from './config'
 import { getMediaRoot, getMediaRoots } from './mediaRoots'
 import { resolveInsideRoot } from './pathSafety'
 import { TaskService, globalTaskQueue } from './task'
+import { seriesKeyFromPath } from './series'
 import { VideoService } from './video'
 import { NotificationService } from './notifications'
 import {
@@ -387,6 +388,7 @@ export const WatchService = {
             taskId,
             filePath: String(row.path),
             rootId: folder.rootId,
+            seriesKey: seriesKeyFromPath(String(row.path), folder.rootId),
             sourceType: policy.sourceType,
             trackIndex: 0,
             model: policy.model || config.defaultModel,

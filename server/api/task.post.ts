@@ -9,6 +9,7 @@ import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 import { useDb } from '../utils/db'
 import { findActiveTaskDuplicate, isActiveTaskStatus } from '../utils/taskDedupe'
+import { SeriesService, seriesKeyFromPath } from '../utils/series'
 import type { TrackPolicy } from '~~/types'
 
 export default defineEventHandler(async (event) => {
@@ -38,7 +39,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const processFile = async (path: string, type: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr', track: number, currentRootId?: string, policy?: TrackPolicy) => {
+  const processFile = async (path: string, type: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr', track: number, currentRootId?: string, policy?: TrackPolicy, persistSeriesProfile = false) => {
     const requestedTarget = targetLanguage || config.targetLanguage
     const requestedOutputMode = outputMode || 'translated'
     const requestedFormat = subtitleFormat || config.subtitleFormat || 'srt'
@@ -58,10 +59,12 @@ export default defineEventHandler(async (event) => {
     }
 
     const taskId = uuidv4()
+    const seriesKey = seriesKeyFromPath(path, currentRootId)
     await TaskService.createTask({
       taskId,
       filePath: path,
       rootId: currentRootId,
+      seriesKey,
       sourceType: type,
       trackIndex: track,
       model: model || config.defaultModel,
@@ -79,6 +82,14 @@ export default defineEventHandler(async (event) => {
       bilingualLayout: requestedLayout,
       trackPolicy: policy
     })
+
+    if (persistSeriesProfile && (contentTitle || contentBackground)) {
+      try {
+        SeriesService.updateFromTask(currentRootId, path, taskId, contentTitle, contentBackground)
+      } catch (error: any) {
+        console.warn('[Series] Failed to persist series profile:', error?.message || error)
+      }
+    }
 
     await enqueueTask(taskId)
 
@@ -100,6 +111,7 @@ export default defineEventHandler(async (event) => {
       taskId: newTaskId,
       filePath: oldTask.filePath,
       rootId: oldTask.rootId,
+      seriesKey: oldTask.seriesKey || seriesKeyFromPath(oldTask.filePath, oldTask.rootId),
       sourceType: oldTask.sourceType as 'embedded' | 'external' | 'asr' | 'ocr',
       trackIndex: oldTask.trackIndex || 0,
       model: oldTask.model || config.defaultModel,
@@ -167,6 +179,6 @@ export default defineEventHandler(async (event) => {
     throw apiError(400, 'File path or files array is required')
   }
 
-  const result = await processFile(filePath, sourceType || 'embedded', trackIndex || 0, rootId, trackPolicy)
+  const result = await processFile(filePath, sourceType || 'embedded', trackIndex || 0, rootId, trackPolicy, true)
   return { taskId: result.taskId, taskIds: [result.taskId], reusedActive: result.reused ? 1 : 0 }
 })

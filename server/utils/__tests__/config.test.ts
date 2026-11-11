@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -84,5 +84,62 @@ describe('ConfigService local service migration', () => {
     expect(saved.ocrMaxSeconds).toBe(21600)
     expect(saved.ocrChunkSeconds).toBe(3600)
     expect(saved.ocrChunkRetries).toBe(2)
+  })
+})
+
+describe('ConfigService API key env fallback', () => {
+  const originalAsrApiKey = process.env.ASR_API_KEY
+  const originalOcrApiKey = process.env.OCR_API_KEY
+  const originalAllInOne = process.env.SUBX_ALL_IN_ONE
+
+  afterEach(() => {
+    if (originalAsrApiKey === undefined) delete process.env.ASR_API_KEY
+    else process.env.ASR_API_KEY = originalAsrApiKey
+    if (originalOcrApiKey === undefined) delete process.env.OCR_API_KEY
+    else process.env.OCR_API_KEY = originalOcrApiKey
+    if (originalAllInOne === undefined) delete process.env.SUBX_ALL_IN_ONE
+    else process.env.SUBX_ALL_IN_ONE = originalAllInOne
+  })
+
+  it('falls back to ASR_API_KEY when the saved key is empty', async () => {
+    process.env.ASR_API_KEY = 'env-asr-key'
+    await ConfigService.updateConfig('asrApiKey', '')
+
+    const config = await ConfigService.getConfig(true)
+    expect(config.asrApiKey).toBe('env-asr-key')
+  })
+
+  it('falls back to OCR_API_KEY when the saved key is empty', async () => {
+    process.env.OCR_API_KEY = 'env-ocr-key'
+    await ConfigService.updateConfig('ocrApiKey', '')
+
+    const config = await ConfigService.getConfig(true)
+    expect(config.ocrApiKey).toBe('env-ocr-key')
+  })
+
+  it('prefers ASR_API_KEY over a different saved key in all-in-one mode', async () => {
+    process.env.SUBX_ALL_IN_ONE = 'true'
+    process.env.ASR_API_KEY = 'env-asr-key'
+    await ConfigService.updateConfig('asrApiKey', 'saved-asr-key')
+
+    const config = await ConfigService.getConfig(true)
+    expect(config.asrApiKey).toBe('env-asr-key')
+  })
+
+  it('encrypts and decrypts the fallback provider API key', async () => {
+    await ConfigService.updateConfig('fallbackApiKey', 'fallback-secret-key')
+    const saved = await ConfigService.getConfig(true)
+    expect(saved.fallbackApiKey).toBe('fallback-secret-key')
+    expect(saved.fallbackProviderType).toBe('openai-compatible')
+    expect(saved.fallbackProviderEnabled).toBe(false)
+  })
+
+  it('keeps the saved ASR key over ASR_API_KEY in split mode', async () => {
+    process.env.SUBX_ALL_IN_ONE = 'false'
+    process.env.ASR_API_KEY = 'env-asr-key'
+    await ConfigService.updateConfig('asrApiKey', 'saved-asr-key')
+
+    const config = await ConfigService.getConfig(true)
+    expect(config.asrApiKey).toBe('saved-asr-key')
   })
 })

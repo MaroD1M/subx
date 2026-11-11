@@ -1,9 +1,17 @@
 import { EMPTY_USAGE, type BoundTranslationProvider, type ProviderRequest, type ProviderRuntimeConfig, type ProviderUsage } from './types'
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
+const REQUEST_TIMEOUT_MS = 5 * 60 * 1000
+const LIST_TIMEOUT_MS = 30 * 1000
 
 function baseUrl(config: ProviderRuntimeConfig) {
   return (config.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, '')
+}
+
+function combineSignals(signal: AbortSignal | undefined, timeout: AbortSignal): AbortSignal {
+  if (!signal) return timeout
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([signal, timeout])
+  return timeout
 }
 
 function modelName(model: string) {
@@ -33,7 +41,9 @@ export function createGeminiProvider(config: ProviderRuntimeConfig): BoundTransl
     supportsStreaming: false,
 
     async listModels() {
-      const response = await fetch(`${root}/models?key=${encodeURIComponent(config.apiKey)}`)
+      const response = await fetch(`${root}/models?key=${encodeURIComponent(config.apiKey)}`, {
+        signal: AbortSignal.timeout(LIST_TIMEOUT_MS)
+      })
       if (!response.ok) return []
       const data = await response.json() as any
       return Array.isArray(data?.models)
@@ -56,7 +66,7 @@ export function createGeminiProvider(config: ProviderRuntimeConfig): BoundTransl
             maxOutputTokens: request.maxOutputTokens ?? config.maxOutputTokens
           }
         }),
-        signal: request.signal
+        signal: combineSignals(request.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS))
       })
       if (!response.ok) await parseError(response)
       const data = await response.json() as any

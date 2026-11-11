@@ -57,6 +57,7 @@ function ensureLegacyColumns(db: any, dialect: MigrationDialect) {
     ['tasks', 'content_background', 'TEXT'],
     ['tasks', 'custom_instructions', 'TEXT'],
     ['tasks', 'root_id', 'TEXT'],
+    ['tasks', 'series_key', 'TEXT'],
     ['tasks', 'bilingual_layout', "TEXT NOT NULL DEFAULT 'translated_first'"],
     ['tasks', 'subtitle_style_preset', "TEXT NOT NULL DEFAULT 'bilingual_simple'"],
     ['tasks', 'subtitle_style_json', 'TEXT'],
@@ -119,6 +120,39 @@ function ensureProofreadCache(db: any, dialect: MigrationDialect) {
       PRIMARY KEY (task_id, kind)
     )
   `)
+}
+
+function ensureSeriesProfiles(db: any, dialect: MigrationDialect) {
+  ensureColumn(db, dialect, 'tasks', 'series_key', 'TEXT')
+  if (dialect === 'sqlite') {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS series_profiles (
+        series_key TEXT PRIMARY KEY,
+        root_id TEXT,
+        title TEXT NOT NULL DEFAULT '',
+        background TEXT NOT NULL DEFAULT '',
+        glossary_json TEXT NOT NULL DEFAULT '{}',
+        summary TEXT NOT NULL DEFAULT '',
+        last_task_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `)
+  } else {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS series_profiles (
+        series_key TEXT PRIMARY KEY,
+        root_id TEXT,
+        title TEXT NOT NULL DEFAULT '',
+        background TEXT NOT NULL DEFAULT '',
+        glossary_json TEXT NOT NULL DEFAULT '{}',
+        summary TEXT NOT NULL DEFAULT '',
+        last_task_id TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `)
+  }
 }
 
 function ensureAsrCheckpoints(db: any, dialect: MigrationDialect) {
@@ -272,6 +306,13 @@ export const MIGRATIONS: Migration[] = [
       }
       db.exec('CREATE INDEX IF NOT EXISTS idx_review_jobs_status ON review_jobs(status, created_at)')
       db.exec('CREATE INDEX IF NOT EXISTS idx_review_jobs_task ON review_jobs(task_id, created_at DESC)')
+    }
+  },
+  {
+    version: 10,
+    name: 'series-profiles',
+    up(db, dialect) {
+      ensureSeriesProfiles(db, dialect)
     }
   },
 ]

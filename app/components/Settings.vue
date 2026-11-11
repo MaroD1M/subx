@@ -408,6 +408,7 @@
 import { LANGUAGE_OPTIONS } from '~~/shared/languages'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
+import { useSimpleMode } from '../composables/useSimpleMode'
 import SettingsAiSection from './SettingsAiSection.vue'
 import SettingsDefaultSection from './SettingsDefaultSection.vue'
 import SettingsAdvancedSection from './SettingsAdvancedSection.vue'
@@ -417,13 +418,14 @@ import SettingsHealthPanel from './SettingsHealthPanel.vue'
 const emit = defineEmits(['close', 'saved', 'dirty'])
 const route = useRoute()
 const isGuideOpen = ref(false)
+const { simpleMode } = useSimpleMode()
 const requestedTab = String(route.query.tab || '')
 const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'styles' | 'glossary' | 'advanced' | 'storage' | 'health'>(
   ['ai', 'asr', 'ocr', 'defaults', 'styles', 'glossary', 'advanced', 'storage', 'health'].includes(requestedTab)
     ? requestedTab as any
     : 'ai'
 )
-const settingsTabs = [
+const SETTINGS_TABS = [
   { label: 'AI 连接', icon: 'i-lucide-plug', value: 'ai' as const },
   { label: '语音识别', icon: 'i-lucide-mic', value: 'asr' as const },
   { label: '图像字幕 OCR', icon: 'i-lucide-scan-text', value: 'ocr' as const },
@@ -434,6 +436,16 @@ const settingsTabs = [
   { label: '存储与缓存', icon: 'i-lucide-hard-drive', value: 'storage' as const },
   { label: '系统体检', icon: 'i-lucide-stethoscope', value: 'health' as const }
 ]
+const SIMPLE_MODE_HIDDEN_TABS = new Set(['advanced', 'storage', 'health'])
+const settingsTabs = computed(() => (
+  simpleMode.value
+    ? SETTINGS_TABS.filter(tab => !SIMPLE_MODE_HIDDEN_TABS.has(tab.value))
+    : SETTINGS_TABS
+))
+
+watch(settingsTabs, (tabs) => {
+  if (!tabs.some(tab => tab.value === activeTab.value)) activeTab.value = 'ai'
+}, { immediate: true })
 const builtinStylePresets = STYLE_PRESETS
 const { data } = await useAppConfigData()
 function cloneConfig(value: any) {
@@ -468,6 +480,7 @@ const outputModeItems = [
   { label: '仅导出原字幕', value: 'original' }
 ]
 const asrPresets = [
+  { id: 'nas-low', label: '低功耗 NAS', model: 'small', device: 'cpu', computeType: 'int8', concurrency: 1, vad: true, wordTimestamps: true, diarization: false, preprocess: 'off', chunkSeconds: 300, chunkOverlapSeconds: 2 },
   { id: 'low', label: '低配 J1900/J4125', model: 'small', device: 'cpu', computeType: 'int8' },
   { id: 'mainstream', label: '主流 N5105/N100', model: 'medium', device: 'cpu', computeType: 'int8' },
   { id: 'advanced', label: '进阶 i5/GPU', model: 'large-v3-turbo', device: 'cuda', computeType: 'float16' }
@@ -697,6 +710,11 @@ function buildConfigSnapshot(value: any) {
     apiKey: String(value?.apiKey || ''),
     apiBaseUrl: String(value?.apiBaseUrl || ''),
     providerType: String(value?.providerType || 'openai-compatible'),
+    fallbackProviderEnabled: !!value?.fallbackProviderEnabled,
+    fallbackProviderType: String(value?.fallbackProviderType || 'openai-compatible'),
+    fallbackApiBaseUrl: String(value?.fallbackApiBaseUrl || ''),
+    fallbackApiKey: String(value?.fallbackApiKey || ''),
+    fallbackModel: String(value?.fallbackModel || ''),
     asrEnabled: !!value?.asrEnabled,
     asrBaseUrl: String(value?.asrBaseUrl || ''),
     asrApiKey: String(value?.asrApiKey || ''),
@@ -874,12 +892,35 @@ function applyProviderGuide(payload: { apiBaseUrl?: string, defaultModel?: strin
   }
 }
 
-function applyAsrPreset(preset: { label: string, model: string, device: string, computeType: string }) {
+function applyAsrPreset(preset: {
+  label: string
+  model: string
+  device: string
+  computeType: string
+  concurrency?: number
+  vad?: boolean
+  wordTimestamps?: boolean
+  diarization?: boolean
+  preprocess?: string
+  chunkSeconds?: number
+  chunkOverlapSeconds?: number
+}) {
   config.value.asrEnabled = true
   config.value.asrModel = preset.model
   config.value.asrDevice = preset.device
   config.value.asrComputeType = preset.computeType
-  toast.add({ title: '已应用 ASR 预设', description: `${preset.label} · ${preset.model} / ${preset.device} / ${preset.computeType}`, color: 'success' })
+  if (preset.concurrency !== undefined) config.value.concurrency = preset.concurrency
+  if (preset.vad !== undefined) config.value.asrVad = preset.vad
+  if (preset.wordTimestamps !== undefined) config.value.asrWordTimestamps = preset.wordTimestamps
+  if (preset.diarization !== undefined) config.value.asrDiarization = preset.diarization
+  if (preset.preprocess !== undefined) config.value.asrPreprocess = preset.preprocess
+  if (preset.chunkSeconds !== undefined) config.value.asrChunkSeconds = preset.chunkSeconds
+  if (preset.chunkOverlapSeconds !== undefined) config.value.asrChunkOverlapSeconds = preset.chunkOverlapSeconds
+  toast.add({
+    title: '已应用 ASR 预设',
+    description: `${preset.label} · ${preset.model} / ${preset.device} / ${preset.computeType}${preset.concurrency ? ` · 并发 ${preset.concurrency}` : ''}`,
+    color: 'success'
+  })
 }
 
 async function loadAsrMetrics() {

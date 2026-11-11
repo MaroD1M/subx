@@ -4,7 +4,18 @@
       title="设置"
       description="配置 AI 连接、语音识别、图像字幕 OCR、模型下载、翻译默认行为和术语表。"
       :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '设置', icon: 'i-lucide-settings' }]"
-    />
+    >
+      <template #actions>
+        <UButton
+          icon="i-lucide-wand-sparkles"
+          :label="simpleMode ? '完整模式' : '简洁模式'"
+          color="neutral"
+          variant="soft"
+          :title="simpleMode ? '切换到完整模式' : '切换到简洁模式'"
+          @click="toggleSimpleMode"
+        />
+      </template>
+    </PageHeader>
     <Settings @close="closeSettings" @dirty="settingsDirty = $event" />
   </AppContainer>
 </template>
@@ -12,10 +23,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
+import { useSimpleMode } from '../composables/useSimpleMode'
 
 useHead({ title: '设置 - SubX' })
 
 const { confirm } = useConfirm()
+const { simpleMode, toggleSimpleMode } = useSimpleMode()
 const settingsDirty = ref(false)
 let bypassLeaveGuard = false
 

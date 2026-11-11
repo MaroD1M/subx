@@ -6,11 +6,15 @@ export interface TaskErrorInfo {
 export function classifyTaskError(message: string): TaskErrorInfo {
   const text = (message || '').toLowerCase()
 
-  if (text.includes('401') || text.includes('unauthorized') || text.includes('invalid api key') || text.includes('authentication')) {
+  if (text.includes('401') || text.includes('unauthorized') || text.includes('invalid api key') || text.includes('authentication')
+    || text.includes('asr api key 无效') || text.includes('ocr api key 无效')) {
     return { type: 'auth', summary: '鉴权失败：请检查 API Key 或供应商鉴权配置' }
   }
   if (text.includes('429') || text.includes('rate limit') || text.includes('quota')) {
     return { type: 'rate_limit', summary: '请求受限：触发速率/配额限制，请稍后重试' }
+  }
+  if (text.includes('模型未下载') || text.includes('模型尚未下载') || text.includes('model not downloaded')) {
+    return { type: 'model', summary: '本地模型缺失：请前往“设置 → 语音识别 → 本地模型管理”下载所需模型后重试' }
   }
   if (text.includes('model') && (text.includes('not found') || text.includes('does not exist') || text.includes('invalid'))) {
     return { type: 'model', summary: '模型不可用：请检查模型名称或供应商支持情况' }
@@ -26,6 +30,9 @@ export function classifyTaskError(message: string): TaskErrorInfo {
   }
   if (text.includes('etimedout') || text.includes('timeout') || text.includes('timed out')) {
     return { type: 'timeout', summary: '请求超时：请检查网络或稍后重试' }
+  }
+  if (text.includes('und_err_invalid_arg') || text.includes('invalid onrequeststart')) {
+    return { type: 'network', summary: 'HTTP 客户端兼容性异常：请升级到最新版本，或检查 undici 依赖是否一致' }
   }
   if (text.includes('econnreset') || text.includes('enotfound') || text.includes('network') || text.includes('fetch failed')) {
     return { type: 'network', summary: '网络异常：无法连接模型服务，请检查网络/代理设置' }

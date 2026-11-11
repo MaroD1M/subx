@@ -31,7 +31,14 @@ const stubs = {
     props: ['modelValue'],
     emits: ['update:model-value'],
     template: '<textarea :value="modelValue" @input="$emit(\'update:model-value\', $event.target.value)" />'
-  }
+  },
+  UPopover: { template: '<div><slot /><slot name="content" /></div>' },
+  UInput: {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+  },
+  UFormField: { props: ['label'], template: '<label>{{ label }}<slot /></label>' }
 }
 
 describe('ReviewEntryCard', () => {
@@ -61,6 +68,24 @@ describe('ReviewEntryCard', () => {
     expect(useOriginal).toBeTruthy()
     await useOriginal!.trigger('click')
     expect(wrapper.emitted('use-original')?.[0]).toEqual([entry])
+  })
+
+  it('emits update-time after applying valid time edits', async () => {
+    const wrapper = mount(ReviewEntryCard, {
+      props: { entry, focused: false, proofreadIssues: [], qualityThreshold: 0.7, retranslating: false },
+      global: { stubs }
+    })
+
+    const timeInputs = wrapper.findAll('input[placeholder="00:00:00,000"]')
+    expect(timeInputs).toHaveLength(2)
+    await timeInputs[0]!.setValue('00:00:01,500')
+    await timeInputs[1]!.setValue('00:00:02,500')
+
+    const apply = wrapper.findAll('button').find(button => button.text() === '应用')
+    expect(apply).toBeTruthy()
+    await apply!.trigger('click')
+
+    expect(wrapper.emitted('update-time')?.at(-1)).toEqual([entry, '00:00:01,500', '00:00:02,500'])
   })
 
   it('skips off-screen rendering with content-visibility while keeping focused cards visible', () => {

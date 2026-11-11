@@ -23,6 +23,11 @@ export default defineEventHandler(async () => {
         ? `${ocrKey.slice(0, 4)}****${ocrKey.slice(-4)}`
         : ocrKey.replace(/./g, '*')
 
+    const fallbackKey = String(config.fallbackApiKey || '')
+    const maskedFallbackKey = fallbackKey.length > 8
+        ? `${fallbackKey.slice(0, 4)}****${fallbackKey.slice(-4)}`
+        : fallbackKey.replace(/./g, '*')
+
     const integrationToken = String(config.integrationWebhookToken || '')
     const maskedIntegrationToken = integrationToken.length > 8
         ? `${integrationToken.slice(0, 4)}****${integrationToken.slice(-4)}`
@@ -33,6 +38,7 @@ export default defineEventHandler(async () => {
         apiKey: maskedKey,
         asrApiKey: maskedAsrKey,
         asrCloudApiKey: maskedAsrCloudKey,
+        fallbackApiKey: maskedFallbackKey,
         integrationWebhookToken: maskedIntegrationToken,
         ocrApiKey: maskedOcrKey
     }

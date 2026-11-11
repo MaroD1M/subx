@@ -1,6 +1,6 @@
 import { existsSync, openAsBlob, readFileSync, rmSync, statSync } from 'fs'
 import { basename, dirname, join } from 'path'
-import { Agent } from 'undici'
+import { Agent, fetch as undiciFetch } from 'undici'
 import type { SubtitleEntry } from '../../../types'
 import { useDb } from '../db'
 import { SubtitleService } from '../subtitle'
@@ -12,15 +12,23 @@ function envDuration(name: string, fallback: number) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
 }
 
+function envNonNegativeInt(name: string, fallback: number) {
+  const raw = String(process.env[name] ?? '').trim()
+  if (!raw) return fallback
+  const value = Number(raw)
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback
+}
+
 const DEFAULT_UPLOAD_TIMEOUT_MS = envDuration('ASR_UPLOAD_TIMEOUT_MS', 30 * 60 * 1000)
 const DEFAULT_POLL_TIMEOUT_MS = envDuration('ASR_POLL_TIMEOUT_MS', 30 * 1000)
 const DEFAULT_JOB_IDLE_TIMEOUT_MS = envDuration('ASR_JOB_IDLE_TIMEOUT_MS', 30 * 60 * 1000)
 const DEFAULT_JOB_ABSOLUTE_TIMEOUT_MS = envDuration('ASR_JOB_ABSOLUTE_TIMEOUT_MS', 6 * 60 * 60 * 1000)
+const DEFAULT_POLL_RETRIES = envNonNegativeInt('ASR_POLL_RETRIES', 3)
 const CLOUD_TIMEOUT_MS = 30 * 60 * 1000
 const CLOUD_MAX_BYTES = 24 * 1024 * 1024
 const JOB_POLL_MS = 1500
 const MAX_DISPATCH_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000
-// Node 内置 fetch 默认 headersTimeout 只有 300 秒，长音频同步转写会在 5 分钟时被
+// undici fetch 默认 headersTimeout 只有 300 秒，长音频同步转写会在 5 分钟时被
 // 误判为网络超时。状态轮询另有更短的 per-request 超时，不依赖这个全局 dispatcher。
 const asrDispatcher = new Agent({
   headersTimeout: MAX_DISPATCH_TIMEOUT_MS,
@@ -45,7 +53,9 @@ async function audioBlob(filePath: string): Promise<Blob> {
 }
 
 function asrFetch(input: string, init: RequestInit = {}) {
-  return fetch(input, { ...init, dispatcher: asrDispatcher } as any)
+  // 必须使用 undici 自带的 fetch：Node 全局 fetch 使用内置的另一个 undici 版本，
+  // 把外部 undici 的 Agent 传给它会在新版 undici 上抛出 UND_ERR_INVALID_ARG。
+  return undiciFetch(input, { ...init, dispatcher: asrDispatcher } as any) as unknown as Promise<Response>
 }
 
 function combineSignal(signal: AbortSignal | undefined, timeout: AbortController): AbortSignal {
@@ -197,6 +207,7 @@ async function transcribeLocalJob(
   let lastActivityAt = startedAt
   let lastProgress = -1
   let lastMessage = ''
+  let pollFailures = 0
 
   const failAndCancel = async (message: string): Promise<never> => {
     await cancelRemoteJob(baseUrl, jobId, headers)
@@ -232,10 +243,16 @@ async function transcribeLocalJob(
           headers,
           signal: combineSignal(signal, pollTimeout)
         })
+        pollFailures = 0
       } catch (error: any) {
         if (signal?.aborted) {
           await cancelRemoteJob(baseUrl, jobId, headers)
           throw new Error('任务已取消')
+        }
+        pollFailures++
+        if (pollFailures <= DEFAULT_POLL_RETRIES) {
+          await sleep(Math.min(5000, 500 * 2 ** (pollFailures - 1)))
+          continue
         }
         await cancelRemoteJob(baseUrl, jobId, headers)
         throw nonRetryableError(`ASR 任务状态获取失败：${describeAsrError(error)}`)
@@ -419,7 +436,7 @@ async function transcribeCloud(filePath: string, options: AsrOptions, signal?: A
     if (options.cloudApiKey) headers.Authorization = `Bearer ${options.cloudApiKey}`
     const started = Date.now()
     try {
-      const response = await fetch(`${baseUrl}/audio/transcriptions`, {
+      const response = await asrFetch(`${baseUrl}/audio/transcriptions`, {
         method: 'POST',
         headers,
         body: form,

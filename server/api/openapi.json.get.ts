@@ -13,7 +13,7 @@ export default defineEventHandler(() => {
     openapi: '3.1.0',
     info: {
       title: 'SubX API',
-      version: '2.9.0',
+      version: '2.9.1',
       description: 'SubX 任务、目录监控、通知与 API Token 接口。使用 Authorization: Bearer <token> 或 X-API-Token。'
     },
     servers: [{ url: '/' }],
@@ -169,6 +169,12 @@ export default defineEventHandler(() => {
       '/api/asr/models-download-resume': { post: { summary: '继续 ASR 模型下载', responses: { '200': { description: 'OK' } } } },
       '/api/asr/models-download-cancel': { post: { summary: '取消 ASR 模型下载并清理部分文件', responses: { '200': { description: 'OK' } } } },
       '/api/asr/models-delete': { post: { summary: '卸载 ASR 模型', responses: { '200': { description: 'OK' } } } },
+      '/api/library/coverage': { get: { summary: '媒体库字幕覆盖检查', parameters: [{ name: 'rootId', in: 'query', required: true, schema: { type: 'string' } }, { name: 'targetLanguage', in: 'query', schema: { type: 'string' } }, { name: 'refresh', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/series/profile': {
+        get: { summary: '查询系列记忆', parameters: [{ name: 'rootId', in: 'query', schema: { type: 'string' } }, { name: 'filePath', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } },
+        put: { summary: '保存系列记忆', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['filePath'], properties: { rootId: { type: 'string' }, filePath: { type: 'string' }, seriesKey: { type: 'string' }, title: { type: 'string' }, background: { type: 'string' }, summary: { type: 'string' }, glossary: { type: 'object' } } } } } }, responses: { '200': { description: 'OK' } } }
+      },
+      '/api/series/profiles': { get: { summary: '系列记忆列表', responses: { '200': { description: 'OK' } } } },
       '/api/integrations/{source}': { post: { summary: '下载器/媒体服务器 Webhook', parameters: [{ name: 'source', in: 'path', required: true, schema: { type: 'string', enum: ['sonarr', 'radarr', 'jellyfin', 'plex', 'emby', 'bazarr'] } }], security: [], responses: { '200': { description: 'OK' } } } },
       '/api/integrations/events': { get: { summary: '外部集成事件', responses: { '200': { description: 'OK' } } } },
       '/api/api-tokens': {

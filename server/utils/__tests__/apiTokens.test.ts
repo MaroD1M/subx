@@ -39,6 +39,13 @@ describe('API tokens', () => {
     expect(resolveApiTokenScope('POST', '/api/asr/models-delete')).toBe('system:admin')
   })
 
+  it('maps coverage and series memory endpoints to task scopes', () => {
+    expect(resolveApiTokenScope('GET', '/api/library/coverage')).toBe('tasks:read')
+    expect(resolveApiTokenScope('GET', '/api/series/profile')).toBe('tasks:read')
+    expect(resolveApiTokenScope('PUT', '/api/series/profile')).toBe('tasks:write')
+    expect(resolveApiTokenScope('GET', '/api/series/profiles')).toBe('tasks:read')
+  })
+
   it('keeps health and OpenAPI public', () => {
     expect(resolveApiTokenScope('GET', '/api/health')).toBe('public')
     expect(resolveApiTokenScope('GET', '/api/openapi.json')).toBe('public')

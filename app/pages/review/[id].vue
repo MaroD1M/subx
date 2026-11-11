@@ -173,7 +173,7 @@
           <UPopover :content="{ align: 'end' }">
             <UButton label="更多" icon="i-lucide-ellipsis" size="xs" color="neutral" variant="ghost" title="顺序与错位修正" />
             <template #content>
-              <div class="w-64 space-y-1 p-2">
+              <div class="w-64 max-w-[calc(100vw-2rem)] space-y-1 p-2">
                 <p class="section-title px-2 py-1">顺序调整</p>
                 <UButton label="所选上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="moveSelectedUp" />
                 <UButton label="所选下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="moveSelectedDown" />
@@ -186,6 +186,16 @@
                 <UButton label="恢复译文" icon="i-lucide-rotate-ccw" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="batchRestoreTranslated" />
                 <UButton label="导出文本下移" icon="i-lucide-arrow-down" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="shiftAllCol('finalText', 1)" />
                 <UButton label="导出文本上移" icon="i-lucide-arrow-up" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="shiftAllCol('finalText', -1)" />
+                <p class="section-title px-2 pb-1 pt-2">整体时间偏移</p>
+                <div class="flex items-center gap-1 px-2">
+                  <UInput v-model.number="timeOffsetSeconds" type="number" step="0.1" size="xs" class="min-w-0 flex-1" aria-label="时间偏移秒数" placeholder="秒" />
+                  <UButton label="应用偏移" size="xs" color="primary" variant="soft" @click="applyTimeOffset(timeOffsetSeconds)" />
+                </div>
+                <div class="flex gap-1 px-2">
+                  <UButton label="-0.5s" size="xs" color="neutral" variant="ghost" @click="applyTimeOffset(-0.5)" />
+                  <UButton label="+0.5s" size="xs" color="neutral" variant="ghost" @click="applyTimeOffset(0.5)" />
+                </div>
+                <p class="app-caption px-2">作用于全部已加载条目，保存后生效。</p>
               </div>
             </template>
           </UPopover>
@@ -210,7 +220,7 @@
             <ReviewEntryCard
               v-for="entry in pagedEntries"
               :key="entry.subtitleId"
-              v-memo="[entry.finalText, entry.translatedText, entry.originalText, entry.reviewStatus, entry.reviewReasons?.join(','), entry.selected, entry.edited, entry.asrConfidence, entry.qualityScore, entry.qualityIssues?.join(','), focusedSubtitleId === String(entry.subtitleId), proofreadRevision]"
+              v-memo="[entry.finalText, entry.translatedText, entry.originalText, entry.reviewStatus, entry.reviewReasons?.join(','), entry.selected, entry.edited, entry.asrConfidence, entry.qualityScore, entry.qualityIssues?.join(','), entry.startTime, entry.endTime, focusedSubtitleId === String(entry.subtitleId), proofreadRevision]"
               :id="`review-entry-${entry.subtitleId}`"
               tabindex="-1"
               :entry="entry"
@@ -228,6 +238,7 @@
               @restore-translated="restoreTranslated"
               @use-original="useOriginal"
               @update-final="updateFinalText"
+              @update-time="updateEntryTime"
             />
 
             <div v-if="reviewLoading && !entries.length" class="flex items-center justify-center gap-2 p-8 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -470,12 +481,32 @@ const summary = reactive({ total: 0, needsReview: 0, edited: 0 })
 const entries = ref<any[]>([])
 const taskMeta = reactive({ outputMode: 'translated', bilingualLayout: 'translated_first' as 'translated_first' | 'original_first' })
 const lastClickedIndex = ref(-1)
-const entrySnapshots = ref<Record<string, { translatedText: string, finalText: string, reviewStatus: string, edited: boolean }>>({})
+const entrySnapshots = ref<Record<string, { translatedText: string, finalText: string, reviewStatus: string, edited: boolean, startTime: string, endTime: string }>>({})
+const timeOffsetSeconds = ref(0)
 
 function srtTimeToSeconds(value: string) {
   const match = String(value || '').match(/(\d+):(\d+):(\d+)[,.](\d+)/)
   if (!match) return 0
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) + Number(match[4]) / 1000
+}
+
+function parseSrtTimeInput(value: string): number | null {
+  const match = String(value || '').trim().match(/^(\d+):(\d{2}):(\d{2})[,.](\d{1,3})$/)
+  if (!match) return null
+  const minutes = Number(match[2])
+  const seconds = Number(match[3])
+  if (minutes > 59 || seconds > 59) return null
+  const milliseconds = Number(String(match[4]).padEnd(3, '0').slice(0, 3))
+  return Number(match[1]) * 3600 + minutes * 60 + seconds + milliseconds / 1000
+}
+
+function formatSecondsToSrtTime(value: number) {
+  const totalMs = Math.max(0, Math.round(Number(value || 0) * 1000))
+  const hours = Math.floor(totalMs / 3600000)
+  const minutes = Math.floor((totalMs % 3600000) / 60000)
+  const seconds = Math.floor((totalMs % 60000) / 1000)
+  const milliseconds = totalMs % 1000
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`
 }
 
 function playClip(entry: any) {
@@ -1180,7 +1211,9 @@ function makeSnapshot(entry: any) {
     translatedText: String(entry.translatedText || ''),
     finalText: String(entry.finalText || ''),
     reviewStatus: String(entry.reviewStatus || ''),
-    edited: !!entry.edited
+    edited: !!entry.edited,
+    startTime: String(entry.startTime || ''),
+    endTime: String(entry.endTime || '')
   }
 }
 
@@ -1197,6 +1230,8 @@ function isEntryDirty(entry: any) {
     || snapshot.finalText !== String(entry.finalText || '')
     || snapshot.reviewStatus !== String(entry.reviewStatus || '')
     || snapshot.edited !== !!entry.edited
+    || snapshot.startTime !== String(entry.startTime || '')
+    || snapshot.endTime !== String(entry.endTime || '')
 }
 
 async function confirmLeaveIfDirty() {
@@ -1223,6 +1258,60 @@ function markEdited(entry: any) {
 function updateFinalText(entry: any, value: string) {
   entry.finalText = value
   markEdited(entry)
+}
+
+function updateEntryTime(entry: any, startTime: string, endTime: string) {
+  const start = parseSrtTimeInput(startTime)
+  const end = parseSrtTimeInput(endTime)
+  if (start == null || end == null) {
+    toast.add({ title: '时间格式无效', description: '请使用 HH:MM:SS,mmm 或 HH:MM:SS.mmm 格式。', color: 'error' })
+    return
+  }
+  if (end <= start) {
+    toast.add({ title: '时间范围无效', description: '结束时间必须晚于开始时间。', color: 'error' })
+    return
+  }
+  entry.startTime = startTime
+  entry.endTime = endTime
+  markEdited(entry)
+}
+
+function applyTimeOffset(offset: number) {
+  const numericOffset = Number(offset)
+  if (!Number.isFinite(numericOffset) || numericOffset === 0) {
+    toast.add({ title: '请输入有效偏移', description: '偏移量需为非 0 数字，可使用负数向前移动。', color: 'warning' })
+    return
+  }
+  if (!entries.value.length) {
+    toast.add({ title: '没有可调整的字幕', color: 'warning' })
+    return
+  }
+
+  const changes = entries.value.map((entry) => {
+    const start = srtTimeToSeconds(entry.startTime)
+    const end = srtTimeToSeconds(entry.endTime)
+    return {
+      entry,
+      start: start + numericOffset,
+      end: end + numericOffset
+    }
+  })
+
+  if (changes.some(item => item.start < 0 || item.end <= item.start)) {
+    toast.add({ title: '偏移后时间无效', description: '存在开始时间小于 0 或结束时间不晚于开始时间的字幕，未做修改。', color: 'error' })
+    return
+  }
+
+  for (const item of changes) {
+    item.entry.startTime = formatSecondsToSrtTime(item.start)
+    item.entry.endTime = formatSecondsToSrtTime(item.end)
+    markEdited(item.entry)
+  }
+  toast.add({
+    title: `已偏移 ${changes.length} 条字幕`,
+    description: `全部时间${numericOffset > 0 ? '后移' : '前移'} ${Math.abs(numericOffset).toFixed(1)} 秒，记得保存。`,
+    color: 'success'
+  })
 }
 
 function useOriginal(entry: any) {
@@ -1582,6 +1671,8 @@ async function saveChanges(showToast = true) {
     translatedText: entry.translatedText,
     finalText: entry.finalText,
     reviewStatus: entry.reviewStatus,
+    startTime: entry.startTime,
+    endTime: entry.endTime,
     sortOrder: entries.value.indexOf(entry),
     edited: entry.edited
   }))
@@ -1602,7 +1693,9 @@ async function saveChanges(showToast = true) {
         translatedText: entry.translatedText,
         finalText: entry.finalText,
         reviewStatus: entry.reviewStatus,
-        edited: entry.edited
+        edited: entry.edited,
+        startTime: entry.startTime,
+        endTime: entry.endTime
       }
     }
     if (showToast) toast.add({ title: `已保存 ${changedEntries.length} 条修改`, description: '尚未生成字幕文件；需要时再点「导出结果」。', color: 'success' })

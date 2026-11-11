@@ -42,8 +42,12 @@ wait_for_service() {
 }
 
 # 等内置服务真正可用再启动 Web，避免首个任务撞上服务初始化。
-wait_for_service "ASR" "http://127.0.0.1:${ASR_PORT}/health" "$ASR_PID" 30 || true
-wait_for_service "OCR" "http://127.0.0.1:${OCR_PORT}/health" "$OCR_PID" 30 || true
+if ! wait_for_service "ASR" "http://127.0.0.1:${ASR_PORT}/health" "$ASR_PID" 30; then
+  echo "[subx] WARNING: ASR service is not ready; starting web app anyway" >&2
+fi
+if ! wait_for_service "OCR" "http://127.0.0.1:${OCR_PORT}/health" "$OCR_PID" 30; then
+  echo "[subx] WARNING: OCR service is not ready; starting web app anyway" >&2
+fi
 
 cd /app || exit 1
 echo "[subx] starting web app on 0.0.0.0:3000" >&2

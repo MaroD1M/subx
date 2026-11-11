@@ -24,6 +24,25 @@ describe('classifyTaskError', () => {
     expect(classifyTaskError('[疑似拒答] 无法翻译').type).toBe('content')
   })
 
+  it('classifies missing local models with an actionable summary', () => {
+    const downloaded = classifyTaskError('ASR 任务失败：模型未下载')
+    expect(downloaded.type).toBe('model')
+    expect(downloaded.summary).toContain('本地模型管理')
+    expect(classifyTaskError('模型尚未下载，请先下载模型').type).toBe('model')
+    expect(classifyTaskError('model not downloaded').type).toBe('model')
+  })
+
+  it('classifies invalid ASR and OCR API keys as auth failures', () => {
+    expect(classifyTaskError('ASR API key 无效').type).toBe('auth')
+    expect(classifyTaskError('OCR API key 无效').type).toBe('auth')
+  })
+
+  it('classifies undici client compatibility failures', () => {
+    const error = classifyTaskError('ASR 任务创建失败：UND_ERR_INVALID_ARG')
+    expect(error.type).toBe('network')
+    expect(error.summary).toContain('undici')
+  })
+
   it('falls back to unknown', () => {
     expect(classifyTaskError('something unexpected').type).toBe('unknown')
   })

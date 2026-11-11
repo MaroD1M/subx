@@ -68,12 +68,25 @@ export interface MediaRoot {
   isDefault?: boolean
 }
 
+export interface SeriesProfile {
+  seriesKey: string
+  rootId?: string
+  title: string
+  background: string
+  glossary: Record<string, string>
+  summary: string
+  lastTaskId?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 /** 翻译任务 */
 export interface TranslationTask {
   taskId: string
   filePath: string             // 源文件路径
   rootId?: string              // 媒体库 ID
   rootName?: string            // 媒体库名称
+  seriesKey?: string           // 系列记忆 key
   sourceType: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr'  // 自动 / 内嵌字幕 / 外挂字幕 / 语音识别 / 图像字幕 OCR
   trackIndex?: number          // 内嵌字幕轨道或音频轨道索引
   sourceLanguage?: string      // ASR 检测或指定的源语言
@@ -138,6 +151,11 @@ export interface AppConfig {
   apiBaseUrl: string           // 支持自定义 Base URL
   providerType?: 'openai-compatible' | 'anthropic' | 'gemini' // Provider 协议类型
   defaultModel: string         // 默认模型
+  fallbackProviderEnabled?: boolean // 主供应商失败后是否使用备用供应商
+  fallbackProviderType?: 'openai-compatible' | 'anthropic' | 'gemini'
+  fallbackApiBaseUrl?: string
+  fallbackApiKey?: string
+  fallbackModel?: string
   targetLanguage: string       // 默认目标语言
   chunkSize: number            // 分块大小（Token或行数）
   concurrency: number          // 并发数

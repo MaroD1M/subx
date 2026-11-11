@@ -7,6 +7,7 @@ optional pyannote speaker labels. It is intended to stay on an internal Docker
 network unless an auth key and reverse proxy are configured.
 """
 
+import gc
 import json
 import math
 import os
@@ -18,6 +19,7 @@ import threading
 import time
 import uuid
 import wave
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +51,15 @@ AVAILABLE_MODELS = [m.strip() for m in os.getenv("ASR_AVAILABLE_MODELS", "tiny,b
 WHISPER_CPP_MODELS = [m.strip() for m in os.getenv("ASR_WHISPER_CPP_MODELS", "tiny,base,small,medium,large-v3,large-v3-turbo").split(",") if m.strip()]
 
 app = FastAPI(title="SubX ASR Service", version="0.3.0")
+
+
+@app.on_event("startup")
+def _start_background_checksum_verification() -> None:
+    starter = getattr(model_manager, "start_background_checksum_verification", None)
+    if callable(starter):
+        starter()
+
+
 ASR_API_KEY = os.getenv("ASR_API_KEY", "")
 
 
@@ -58,15 +69,48 @@ def require_api_key(authorization: str | None = Header(None), x_api_key: str | N
     provided = authorization.replace("Bearer ", "", 1) if authorization and authorization.startswith("Bearer ") else (x_api_key or "")
     if provided != ASR_API_KEY:
         raise HTTPException(status_code=401, detail="ASR API key 无效")
-_model_cache: dict[tuple[str, str, str], WhisperModel] = {}
-_whisper_cpp_cache: dict[str, Any] = {}
+
+
+def _memory_limit_bytes() -> int:
+    limits: list[int] = []
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                raw = handle.read().strip()
+        except (OSError, ValueError):
+            continue
+        if not raw or raw.lower() == "max":
+            continue
+        try:
+            value = int(raw)
+        except ValueError:
+            continue
+        if 0 < value < (1 << 60):
+            limits.append(value)
+    try:
+        value = int(os.sysconf("SC_PAGE_SIZE")) * int(os.sysconf("SC_PHYS_PAGES"))
+        if 0 < value < (1 << 60):
+            limits.append(value)
+    except (OSError, ValueError, TypeError):
+        pass
+    return min(limits) if limits else 0
+
+
+def _default_model_cache_size() -> int:
+    return 2 if _memory_limit_bytes() >= 16 * 1024 * 1024 * 1024 else 1
+
+
+_model_cache: OrderedDict[tuple[str, str, str], WhisperModel] = OrderedDict()
+_whisper_cpp_cache: OrderedDict[str, Any] = OrderedDict()
+MAX_CACHED_MODELS = max(1, int(os.getenv("ASR_MODEL_CACHE_SIZE", str(_default_model_cache_size()))))
 _diarization_pipeline = None
 _model_lock = threading.Lock()
 _inference_lock = threading.Lock()
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
-JOB_RETENTION_SECONDS = 24 * 60 * 60
-MAX_JOBS = 100
+
+JOB_RETENTION_SECONDS = max(60, int(os.getenv("ASR_JOB_RETENTION_SECONDS", str(24 * 60 * 60))))
+MAX_JOBS = max(1, int(os.getenv("ASR_MAX_JOBS", "100")))
 
 
 class JobCancelled(Exception):
@@ -156,7 +200,9 @@ def get_model(model_name: str, device: str | None = None, compute_type: str | No
     compute_type = str(compute_type or DEFAULT_COMPUTE_TYPE or "int8").strip().lower()
     key = (model_name, device, compute_type)
     with _model_lock:
-        if key not in _model_cache:
+        if key in _model_cache:
+            _model_cache.move_to_end(key)
+        else:
             local_path = model_manager.local_model_path(model_name, model_manager.DownloadKind.FASTER_WHISPER)
             if local_path:
                 _model_cache[key] = WhisperModel(
@@ -186,7 +232,12 @@ def get_model(model_name: str, device: str | None = None, compute_type: str | No
                         "模型未下载。请在 SubX 设置 → 语音识别 → 模型管理中手动下载，"
                         "或设置 ASR_AUTO_DOWNLOAD=true 允许首次识别时自动下载。"
                     ) from exc
-    return _model_cache[key], device, compute_type
+            _whisper_cpp_cache.clear()
+            while len(_model_cache) > MAX_CACHED_MODELS:
+                _model_cache.popitem(last=False)
+            gc.collect()
+        model = _model_cache[key]
+    return model, device, compute_type
 
 
 def get_whisper_cpp_model(model_name: str):
@@ -201,7 +252,9 @@ def get_whisper_cpp_model(model_name: str):
                 "或设置 ASR_AUTO_DOWNLOAD=true 允许首次识别时自动下载。"
             )
     with _model_lock:
-        if model_name not in _whisper_cpp_cache:
+        if model_name in _whisper_cpp_cache:
+            _whisper_cpp_cache.move_to_end(model_name)
+        else:
             model_path = model_manager.target_path(model_name, model_manager.DownloadKind.WHISPER_CPP)
             source = str(model_path) if model_path.is_file() else model_name
             _whisper_cpp_cache[model_name] = WhisperCppModel(
@@ -210,7 +263,12 @@ def get_whisper_cpp_model(model_name: str):
                 n_threads=max(1, int(os.getenv("ASR_THREADS", "0") or 0) or (os.cpu_count() or 2)),
                 redirect_whispercpp_logs_to=False,
             )
-    return _whisper_cpp_cache[model_name]
+            _model_cache.clear()
+            while len(_whisper_cpp_cache) > MAX_CACHED_MODELS:
+                _whisper_cpp_cache.popitem(last=False)
+            gc.collect()
+        model = _whisper_cpp_cache[model_name]
+    return model
 
 
 def bool_value(value: str | bool | None, default: bool = True) -> bool:
@@ -305,6 +363,8 @@ def preprocess_audio(audio_path: str, mode: str) -> tuple[str, str | None, str |
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    with _jobs_lock:
+        active_jobs = sum(1 for job in _jobs.values() if job.get("status") in {"queued", "running"})
     return {
         "ok": True,
         "engine": resolve_engine(),
@@ -315,7 +375,7 @@ def health() -> dict[str, Any]:
         "modelsDir": MODEL_DIR,
         "whisperCppModelsDir": WHISPER_CPP_MODEL_DIR,
         "loadedModels": len(_model_cache) + len(_whisper_cpp_cache),
-        "activeJobs": sum(1 for job in list(_jobs.values()) if job.get("status") in {"queued", "running"}),
+        "activeJobs": active_jobs,
         "autoDownload": auto_download_enabled(),
         "preprocess": {
             "default": DEFAULT_PREPROCESS,
@@ -330,7 +390,7 @@ def health() -> dict[str, Any]:
     }
 
 
-@app.get("/models")
+@app.get("/models", dependencies=[Depends(require_api_key)])
 def models() -> dict[str, Any]:
     engines = {
         "faster-whisper": AVAILABLE_MODELS,
@@ -380,7 +440,7 @@ async def download_model(
     return {"ok": True, **job}
 
 
-@app.get("/models/download/{job_id}")
+@app.get("/models/download/{job_id}", dependencies=[Depends(require_api_key)])
 def download_status(job_id: str) -> dict[str, Any]:
     try:
         return model_manager.get_job(job_id)
@@ -640,7 +700,8 @@ def _run_transcription_job(
             result["preprocessWarning"] = preprocess_warning
         if bool_value(diarize, False):
             _job_update(job_id, stage="diarizing", progress=99, message="正在分离说话人...")
-            warning = apply_diarization(processed_path, result.get("segments") or [])
+            with _inference_lock:
+                warning = apply_diarization(processed_path, result.get("segments") or [])
             if warning:
                 result["diarizationWarning"] = warning
         _job_update(
@@ -819,26 +880,31 @@ async def transcribe(
         processed_path, preprocess_dir, preprocess_warning = await run_in_threadpool(
             preprocess_audio, temp_path, preprocess or DEFAULT_PREPROCESS
         )
-        if resolved_engine == "whisper-cpp":
-            result = await run_in_threadpool(
-                transcribe_whisper_cpp, processed_path, model_name, language_value
-            )
-        else:
-            result = await run_in_threadpool(
-                transcribe_faster_whisper,
-                processed_path,
-                model_name,
-                language_value,
-                vad,
-                word_timestamps,
-                device,
-                compute_type,
-            )
+
+        def run_inference() -> dict[str, Any]:
+            with _inference_lock:
+                if resolved_engine == "whisper-cpp":
+                    return transcribe_whisper_cpp(processed_path, model_name, language_value)
+                return transcribe_faster_whisper(
+                    processed_path,
+                    model_name,
+                    language_value,
+                    vad,
+                    word_timestamps,
+                    device=device,
+                    compute_type=compute_type,
+                )
+
+        result = await run_in_threadpool(run_inference)
         result["preprocess"] = preprocess or DEFAULT_PREPROCESS
         if preprocess_warning:
             result["preprocessWarning"] = preprocess_warning
         if bool_value(diarize, False):
-            warning = apply_diarization(processed_path, result.get("segments") or [])
+            def run_diarization() -> str | None:
+                with _inference_lock:
+                    return apply_diarization(processed_path, result.get("segments") or [])
+
+            warning = await run_in_threadpool(run_diarization)
             if warning:
                 result["diarizationWarning"] = warning
         return result

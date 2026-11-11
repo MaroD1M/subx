@@ -8,6 +8,7 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       task_id TEXT PRIMARY KEY,
       file_path TEXT NOT NULL,
       root_id TEXT,
+      series_key TEXT,
       source_type TEXT NOT NULL DEFAULT 'embedded',
       track_index INTEGER,
       model TEXT NOT NULL,
@@ -45,6 +46,18 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       finished_at TEXT,
       paused_at TEXT,
       paused_total_ms INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS series_profiles (
+      series_key TEXT PRIMARY KEY,
+      root_id TEXT,
+      title TEXT NOT NULL DEFAULT '',
+      background TEXT NOT NULL DEFAULT '',
+      glossary_json TEXT NOT NULL DEFAULT '{}',
+      summary TEXT NOT NULL DEFAULT '',
+      last_task_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

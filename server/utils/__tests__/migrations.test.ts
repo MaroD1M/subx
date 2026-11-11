@@ -28,8 +28,10 @@ describe('database migrations', () => {
     expect(columnNames(db, 'task_review_entries')).toEqual(expect.arrayContaining(['sort_order', 'quality_score', 'quality_issues']))
     expect(columnNames(db, 'task_proofread_cache')).toEqual(expect.arrayContaining(['fingerprint', 'result_json']))
     expect(db.prepare("SELECT sort_order FROM task_review_entries WHERE subtitle_id = '12'").get()).toEqual({ sort_order: 12 })
-    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }, { version: 9 }])
+    expect(db.prepare('SELECT version FROM schema_migrations ORDER BY version').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }, { version: 9 }, { version: 10 }])
     expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
+    expect(columnNames(db, 'tasks')).toContain('series_key')
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='series_profiles'").get()).toBeTruthy()
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='asr_checkpoints'").get()).toBeTruthy()
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_task_logs_task_id'").get()).toBeTruthy()
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_task_responses_task_chunk'").get()).toBeTruthy()
@@ -43,6 +45,7 @@ describe('database migrations', () => {
     expect(MIGRATIONS.some(migration => migration.version === 7)).toBe(true)
     expect(MIGRATIONS.some(migration => migration.version === 8)).toBe(true)
     expect(MIGRATIONS.some(migration => migration.version === 9)).toBe(true)
+    expect(MIGRATIONS.some(migration => migration.version === 10)).toBe(true)
     expect(columnNames(db, 'tasks')).toContain('subtitle_style_json')
     expect(columnNames(db, 'tasks')).toEqual(expect.arrayContaining(['started_at', 'step_started_at', 'finished_at', 'paused_at', 'paused_total_ms']))
     db.close()
@@ -63,7 +66,7 @@ describe('database migrations', () => {
 
     expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='asr_checkpoints'").get()).toBeTruthy()
-    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 9 })
+    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 10 })
     db.close()
   })
   it('repairs a database already marked as version 5 without the checkpoint column', () => {
@@ -80,7 +83,7 @@ describe('database migrations', () => {
     runMigrations(db, 'sqlite')
 
     expect(columnNames(db, 'tasks')).toContain('asr_checkpoint_key')
-    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 9 })
+    expect(db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 10 })
     db.close()
   })
 

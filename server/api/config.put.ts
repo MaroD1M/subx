@@ -10,6 +10,11 @@ const ALLOWED_KEYS = new Set([
   'apiBaseUrl',
   'providerType',
   'defaultModel',
+  'fallbackProviderEnabled',
+  'fallbackProviderType',
+  'fallbackApiBaseUrl',
+  'fallbackApiKey',
+  'fallbackModel',
   'targetLanguage',
   'outputMode',
   'stylePreset',
@@ -86,7 +91,7 @@ export default defineEventHandler(async (event) => {
 
   for (const [key, value] of Object.entries(body)) {
     if (!ALLOWED_KEYS.has(key)) continue
-    if ((key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken') && String(value).includes('*')) continue
+    if ((key === 'apiKey' || key === 'asrApiKey' || key === 'asrCloudApiKey' || key === 'fallbackApiKey' || key === 'ocrApiKey' || key === 'integrationWebhookToken') && String(value).includes('*')) continue
     if (key === 'integrationWebhookToken' && !String(value).trim()) continue
     if (key === 'targetLanguage' && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,34}$/.test(String(value || '').trim())) {
       throw apiError(400, '目标语言格式不合法')
@@ -118,6 +123,14 @@ export default defineEventHandler(async (event) => {
           if (!root) {
             db.prepare('DELETE FROM watch_events WHERE folder_id = ?').run(folder.id)
             db.prepare('DELETE FROM watch_folders WHERE id = ?').run(folder.id)
+          }
+        }
+        const rootIds = new Set(roots.map(root => String(root.id)))
+        const profileRoots = db.prepare('SELECT DISTINCT root_id FROM series_profiles WHERE root_id IS NOT NULL').all() as Array<{ root_id?: string }>
+        for (const row of profileRoots) {
+          const rootId = String(row.root_id || '')
+          if (rootId && !rootIds.has(rootId)) {
+            db.prepare('DELETE FROM series_profiles WHERE root_id = ?').run(rootId)
           }
         }
       } catch (error) {

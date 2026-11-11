@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { EMPTY_USAGE, type BoundTranslationProvider, type ProviderRequest, type ProviderRuntimeConfig, type ProviderUsage } from './types'
 
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000
+const LIST_TIMEOUT_MS = 30 * 1000
 const IDLE_TIMEOUT_MS = 45 * 1000
 
 function usageFrom(raw: any): ProviderUsage {
@@ -29,7 +30,7 @@ export function createOpenAIProvider(config: ProviderRuntimeConfig): BoundTransl
     supportsStreaming: true,
 
     async listModels() {
-      const list = await client.models.list()
+      const list = await client.models.list({ timeout: LIST_TIMEOUT_MS })
       const models: Array<{ id: string, owned_by?: string }> = []
       for await (const model of list) {
         models.push({ id: model.id, owned_by: model.owned_by || '' })

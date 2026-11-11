@@ -69,12 +69,21 @@ export const taskCreateSchema = z.object({
 
 export const configUpdateSchema = z.record(z.string(), z.unknown())
 
+const reviewTimeSchema = z.string()
+  .regex(/^\d{1,3}:\d{2}:\d{2}[,.]\d{1,3}$/, '时间格式应为 HH:MM:SS,mmm')
+  .refine((value) => {
+    const match = value.match(/^\d{1,3}:(\d{2}):(\d{2})[,.]\d{1,3}$/)
+    return Boolean(match && Number(match[1]) <= 59 && Number(match[2]) <= 59)
+  }, '时间范围不合法')
+
 export const reviewPatchSchema = z.object({
   entries: z.array(z.object({
     subtitleId: z.union([z.string(), z.number()]),
     translatedText: z.string().optional(),
     finalText: z.string().optional(),
     reviewStatus: z.string().optional(),
+    startTime: reviewTimeSchema.optional(),
+    endTime: reviewTimeSchema.optional(),
     sortOrder: z.number().optional(),
     selected: z.boolean().optional(),
     edited: z.boolean().optional()

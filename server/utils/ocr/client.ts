@@ -1,4 +1,16 @@
+import { Agent, fetch as undiciFetch } from 'undici'
 import type { AsrResult } from '../asr/types'
+
+const MAX_DISPATCH_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000
+const ocrDispatcher = new Agent({
+  headersTimeout: MAX_DISPATCH_TIMEOUT_MS,
+  bodyTimeout: MAX_DISPATCH_TIMEOUT_MS
+})
+
+function ocrFetch(input: string, init: RequestInit = {}) {
+  // 与 ASR 相同：必须使用 undici 自带的 fetch，避免外部 Agent 与 Node 内置 fetch 版本不匹配。
+  return undiciFetch(input, { ...init, dispatcher: ocrDispatcher } as any) as unknown as Promise<Response>
+}
 
 const OCR_POLL_MS = 1500
 const OCR_POLL_TIMEOUT_MS = 30_000
@@ -27,6 +39,20 @@ export interface OcrOptions {
 function finiteNumber(value: unknown, fallback: number) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function envNonNegativeInt(name: string, fallback: number) {
+  const raw = String(process.env[name] ?? '').trim()
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback
+}
+
+const OCR_POLL_RETRIES = envNonNegativeInt('OCR_POLL_RETRIES', 3)
+
+function describeOcrError(error: any) {
+  const cause = error?.cause
+  return String(cause?.code || cause?.message || error?.message || error || '未知错误')
 }
 
 export function resolveOcrTimeouts(options: Pick<OcrOptions, 'idleTimeoutMs' | 'absoluteTimeoutMs'> = {}) {
@@ -105,10 +131,11 @@ export const OcrService = {
     let lastMessage = ''
     let jobId = ''
     let jobFinished = false
+    let pollFailures = 0
 
     const cancelJob = async () => {
       if (!jobId) return
-      await fetch(`${baseUrl}/v1/subtitles/ocr/jobs/${jobId}/cancel`, {
+      await ocrFetch(`${baseUrl}/v1/subtitles/ocr/jobs/${jobId}/cancel`, {
         method: 'POST',
         headers,
         signal: AbortSignal.timeout(10_000)
@@ -116,7 +143,7 @@ export const OcrService = {
     }
 
     try {
-      const create = await fetch(`${baseUrl}/v1/subtitles/ocr/jobs`, {
+      const create = await ocrFetch(`${baseUrl}/v1/subtitles/ocr/jobs`, {
         method: 'POST',
         headers,
         body,
@@ -154,10 +181,22 @@ export const OcrService = {
           )
         }
         await sleep(Number(process.env.OCR_POLL_MS || OCR_POLL_MS))
-        const response = await fetch(`${baseUrl}/v1/subtitles/ocr/jobs/${jobId}`, {
-          headers,
-          signal: combineSignals([signal, AbortSignal.timeout(OCR_POLL_TIMEOUT_MS)])
-        })
+        let response: Response
+        try {
+          response = await ocrFetch(`${baseUrl}/v1/subtitles/ocr/jobs/${jobId}`, {
+            headers,
+            signal: combineSignals([signal, AbortSignal.timeout(OCR_POLL_TIMEOUT_MS)])
+          })
+          pollFailures = 0
+        } catch (error: any) {
+          if (signal?.aborted) throw error
+          pollFailures++
+          if (pollFailures <= OCR_POLL_RETRIES) {
+            await sleep(Math.min(5000, 500 * 2 ** (pollFailures - 1)))
+            continue
+          }
+          throw new Error(`OCR 任务状态获取失败：${describeOcrError(error)}`)
+        }
         if (!response.ok) {
           const detail = await response.text().catch(() => '')
           throw new Error(`OCR 任务状态获取失败 (${response.status}): ${detail.slice(0, 300)}`)
@@ -165,7 +204,11 @@ export const OcrService = {
         const job = await response.json() as any
         const progress = Number(job.progress || 0)
         const message = String(job.message || '正在 OCR 识别')
-        if (progress !== lastProgress || message !== lastMessage) {
+        if (job.status === 'queued') {
+          // 多个任务会在 OCR 服务内占用并发槽位；排队等待不应触发“无进度”超时。
+          lastProgressAt = Date.now()
+          lastMessage = message
+        } else if (progress !== lastProgress || message !== lastMessage) {
           lastProgressAt = Date.now()
         }
         lastProgress = progress
@@ -202,7 +245,7 @@ export const OcrService = {
     signal?: AbortSignal,
     timeoutMs = OCR_DEFAULT_ABSOLUTE_TIMEOUT_MS
   ): Promise<AsrResult> {
-    const response = await fetch(`${baseUrl}/v1/subtitles/ocr`, {
+    const response = await ocrFetch(`${baseUrl}/v1/subtitles/ocr`, {
       method: 'POST',
       headers,
       body,

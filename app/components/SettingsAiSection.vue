@@ -51,6 +51,45 @@
       </div>
     </SettingsSection>
 
+    <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800">
+      <div class="flex items-start justify-between gap-3">
+        <button type="button" class="flex min-w-0 flex-1 items-start gap-2 text-left" :aria-expanded="fallbackExpanded" @click="fallbackExpanded = !fallbackExpanded">
+          <UIcon :name="fallbackExpanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+          <div class="min-w-0 space-y-1">
+            <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">失败回退</p>
+            <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">主供应商重试后仍缺译或失败时，用备用供应商补译。建议填写本地 Ollama 或低价模型，避免主服务不可用时整块回退原文。</p>
+          </div>
+        </button>
+        <div class="flex shrink-0 items-center gap-2 pt-0.5">
+          <span class="text-xs text-gray-600 dark:text-gray-400">启用备用供应商</span>
+          <USwitch :model-value="config.fallbackProviderEnabled" aria-label="启用备用供应商" @update:model-value="patch('fallbackProviderEnabled', $event)" />
+        </div>
+      </div>
+
+      <div v-if="fallbackExpanded" class="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <div v-if="config.fallbackProviderEnabled" class="space-y-4">
+          <UFormField label="Provider 类型">
+            <USelect :model-value="config.fallbackProviderType" :items="providerTypeItems" class="w-full" @update:model-value="patch('fallbackProviderType', $event)" />
+          </UFormField>
+
+          <UFormField label="接口基础地址">
+            <UInput :model-value="config.fallbackApiBaseUrl" placeholder="http://127.0.0.1:11434/v1" icon="i-lucide-globe" class="w-full" @update:model-value="patch('fallbackApiBaseUrl', $event)" />
+          </UFormField>
+
+          <UFormField label="API Key">
+            <UInput :model-value="config.fallbackApiKey" type="password" placeholder="sk-..." icon="i-lucide-key" class="w-full" @update:model-value="patch('fallbackApiKey', $event)" />
+          </UFormField>
+
+          <UFormField label="备用模型" required>
+            <UInput :model-value="config.fallbackModel" placeholder="例如 qwen2.5:7b" class="w-full" @update:model-value="patch('fallbackModel', $event)" />
+          </UFormField>
+
+          <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">API Key 会加密保存，且备用供应商只在主供应商失败后使用。</p>
+        </div>
+        <p v-else class="text-xs leading-5 text-gray-500 dark:text-gray-400">开启后可填写备用供应商配置。</p>
+      </div>
+    </div>
+
     <div class="rounded-2xl border border-primary-100 bg-primary-50/60 p-4 dark:border-primary-900/40 dark:bg-primary-500/5">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="space-y-1">
@@ -64,6 +103,8 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+
 interface Props {
   config: Record<string, any>
   providerTypeItems: Array<{ label: string, value: string }>
@@ -75,6 +116,8 @@ interface Props {
 }
 
 defineProps<Props>()
+
+const fallbackExpanded = ref(true)
 
 const emit = defineEmits<{
   'update:config': [patch: Record<string, any>]

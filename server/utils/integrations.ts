@@ -16,6 +16,7 @@ import { ConfigService } from './config'
 import { getMediaRoots } from './mediaRoots'
 import { isPathInside, resolveInsideRoot } from './pathSafety'
 import { TaskService, globalTaskQueue } from './task'
+import { seriesKeyFromPath } from './series'
 import { STYLE_PRESETS } from '../../shared/stylePresets'
 import { normalizeSubtitleStyle } from '../../shared/subtitleStyles'
 
@@ -121,6 +122,8 @@ export const IntegrationService = {
       taskId,
       filePath: resolved.relativePath,
       rootId: resolved.rootId,
+      seriesKey: seriesKeyFromPath(resolved.relativePath, resolved.rootId),
+      contentTitle: payload.title || '',
       sourceType: 'auto',
       trackIndex: 0,
       model: config.defaultModel,

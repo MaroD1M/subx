@@ -52,6 +52,7 @@ OCR_WORKERS = max(1, int(os.getenv("OCR_WORKERS", "4")))
 OCR_ENGINE = os.getenv("OCR_ENGINE", "auto")
 MAX_JOBS = max(1, int(os.getenv("OCR_MAX_JOBS", "50")))
 MAX_CONCURRENT_JOBS = max(1, int(os.getenv("OCR_MAX_CONCURRENT_JOBS", "2")))
+JOB_RETENTION_SECONDS = max(60, int(os.getenv("OCR_JOB_RETENTION_SECONDS", "3600")))
 JOB_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
 RESUME_PREFIX = "subx-ocr-job-"
 ALGORITHM_VERSION = 2
@@ -1052,7 +1053,7 @@ ocr_jobs_lock = threading.Lock()
 
 
 def prune_jobs() -> None:
-    cutoff = time.time() - 3600
+    cutoff = time.time() - JOB_RETENTION_SECONDS
     with ocr_jobs_lock:
         for job_id in list(ocr_jobs.keys()):
             job = ocr_jobs[job_id]
@@ -1139,7 +1140,8 @@ def health() -> dict[str, Any]:
 @app.post("/v1/subtitles/ocr", dependencies=[Depends(require_api_key)])
 def ocr(request: OcrRequest) -> dict[str, Any]:
     try:
-        return perform_ocr(request)
+        with JOB_SLOTS:
+            return perform_ocr(request)
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or str(exc))[-1200:]
         raise HTTPException(status_code=500, detail=f"OCR 命令失败：{detail}") from exc
