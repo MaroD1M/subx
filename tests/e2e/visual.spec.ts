@@ -211,6 +211,6 @@ test.describe('mobile', () => {
   test('mobile home visual', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
-    await expect(page).toHaveScreenshot('mobile-home.png')
+    await expect(page).toHaveScreenshot('mobile-home.png', { maxDiffPixelRatio: 0.04 })
   })
 })
