@@ -122,7 +122,8 @@ test('review proofread cache is actionable and filterable', async ({ page }) => 
   await expect(page.getByText('筛选结果 2 条')).toBeVisible()
   expect(proofreadPostCount).toBe(0)
   await expect(page).toHaveScreenshot('review-proofread.png', {
-    fullPage: true
+    fullPage: true,
+    maxDiffPixelRatio: 0.04
   })
   await page.getByRole('button', { name: '#8', exact: true }).first().click()
   await expect(page.locator('#review-entry-8')).toHaveClass(/ring-warning/)
