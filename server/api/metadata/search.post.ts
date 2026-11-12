@@ -8,6 +8,9 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const filePath = String(body?.filePath || '').trim()
   if (!filePath) throw apiError(400, '缺少视频文件路径')
+  if (filePath.length > 4096) throw apiError(400, '视频路径过长')
+  const query = String(body?.query || '').trim()
+  if (query.length > 200) throw apiError(400, '搜索关键词过长')
   const config = await ConfigService.getConfig()
   if (config.metadataEnabled !== true) throw apiError(400, '请先在「设置 → 智能增强 → 媒体元数据」启用 TMDB 元数据')
   const apiKey = String(config.metadataApiKey || '').trim()
@@ -15,7 +18,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const metadata = await MetadataService.enrich(filePath, config, {
-      query: String(body?.query || '').trim() || undefined,
+      query: query || undefined,
       manual: true
     })
     if (!metadata) throw apiError(404, '未匹配到 TMDB 结果，请调整关键词后重试')

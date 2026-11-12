@@ -1178,6 +1178,7 @@ async function clearMetadataFields() {
     autoFilledBackground.value = ''
     seriesAutofillSuppressed.value = true
 
+    let seriesCleared = false
     if (file && hadSeriesProfile) {
       try {
         await saveSeriesProfile({
@@ -1187,6 +1188,7 @@ async function clearMetadataFields() {
           background: '',
           summary: ''
         })
+        seriesCleared = true
       } catch (error) {
         console.warn('[Series] Failed to clear series metadata:', error)
       }
@@ -1194,8 +1196,10 @@ async function clearMetadataFields() {
 
     toast.add({
       title: '已清空片名与剧情背景',
-      description: hadSeriesProfile ? '同时清空了该系列已保存的标题、背景和摘要。' : '当前任务不会再自动填充，切换文件后恢复系列记忆。',
-      color: 'success'
+      description: hadSeriesProfile
+        ? (seriesCleared ? '同时清空了该系列已保存的标题、背景和摘要。' : '当前字段已清空，但系列记忆清理失败，请稍后重试或在“编辑系列记忆”中处理。')
+        : '当前任务不会再自动填充，切换文件后恢复系列记忆。',
+      color: hadSeriesProfile && !seriesCleared ? 'warning' : 'success'
     })
   } finally {
     metadataClearing.value = false

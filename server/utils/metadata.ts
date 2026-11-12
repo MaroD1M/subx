@@ -108,11 +108,23 @@ export const MetadataService = {
     if (!options.manual && config?.metadataEnabled !== true) return null
     const apiKey = String(config?.metadataApiKey || '').trim()
     if (!apiKey) return null
-    if (Date.now() < circuitOpenUntil) return null
+    if (!options.manual && Date.now() < circuitOpenUntil) return null
+    if (options.manual) circuitOpenUntil = 0
     const language = String(config?.metadataLanguage || 'zh-CN')
     const hint = parseMediaHint(filePath)
-    const manualQuery = cleanTitle(String(options.query || ''))
-    if (manualQuery) hint.title = manualQuery
+    const manualQuery = cleanTitle(String(options.query || '')).slice(0, 200)
+    if (manualQuery) {
+      const queryHint = parseMediaHint(`${manualQuery}.mkv`)
+      hint.title = queryHint.title || manualQuery
+      if (queryHint.year) hint.year = queryHint.year
+      if (queryHint.season !== undefined && queryHint.episode !== undefined) {
+        hint.mediaType = 'tv'
+        hint.season = queryHint.season
+        hint.episode = queryHint.episode
+      } else if (queryHint.mediaType === 'tv' && hint.mediaType !== 'tv') {
+        hint.mediaType = 'tv'
+      }
+    }
     if (!hint.title) return null
     const cacheKey = `tmdb:${hint.mediaType}:${hint.title.toLowerCase()}:${hint.year || ''}:${hint.season ?? ''}:${hint.episode ?? ''}:${language}`
     const cached = cacheGet(cacheKey)

@@ -518,10 +518,12 @@ const previewInnerClass = computed(() => previewAlignment.value === 'top' ? 'jus
 const previewTextClasses = 'block max-w-full text-center leading-snug'
 
 function hexToRgba(hex: string, opacity: number) {
-  const value = String(hex || '#000000').replace('#', '')
-  const r = parseInt(value.slice(0, 2), 16)
-  const g = parseInt(value.slice(2, 4), 16)
-  const b = parseInt(value.slice(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, opacity / 100))})`
+  const raw = String(hex || '#000000').replace('#', '').trim()
+  const value = raw.length === 3 ? raw.split('').map(char => char + char).join('') : raw
+  const r = Number.parseInt(value.slice(0, 2), 16)
+  const g = Number.parseInt(value.slice(2, 4), 16)
+  const b = Number.parseInt(value.slice(4, 6), 16)
+  const safe = [r, g, b].map(channel => Number.isFinite(channel) ? channel : 0)
+  return `rgba(${safe[0]}, ${safe[1]}, ${safe[2]}, ${Math.min(1, Math.max(0, opacity / 100))})`
 }
 </script>
