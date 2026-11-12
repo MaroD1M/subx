@@ -1,12 +1,12 @@
 <template>
   <aside
-    class="sticky top-0 z-40 hidden h-screen shrink-0 flex-col border-r border-gray-200/80 bg-white/85 backdrop-blur-xl transition-[width] duration-200 dark:border-gray-800/80 dark:bg-gray-950/80 xl:flex"
+    class="sticky top-0 z-40 hidden h-screen shrink-0 flex-col border-r border-gray-200/80 bg-[var(--surface-strong)] transition-[width] duration-200 dark:border-gray-800/80 xl:flex"
     :class="collapsed ? 'w-16' : 'w-[248px]'"
   >
-    <div class="flex h-16 shrink-0 items-center border-b border-gray-100/90 px-3 dark:border-gray-800/80">
-      <NuxtLink to="/" class="flex min-w-0 items-center gap-2.5" aria-label="SubX 首页">
-        <img src="/logo.svg" alt="" class="h-9 w-9 shrink-0 rounded-xl shadow-sm" />
-        <span v-if="!collapsed" class="truncate text-xl font-black text-primary-700 dark:text-primary-400">SubX</span>
+    <div class="flex h-14 shrink-0 items-center border-b border-gray-100/90 px-3 dark:border-gray-800/80">
+      <NuxtLink to="/" class="flex min-w-0 items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50" aria-label="SubX 首页">
+        <img src="/logo.svg" alt="" class="h-8 w-8 shrink-0 rounded-lg" />
+        <span v-if="!collapsed" class="truncate text-lg font-bold text-gray-900 dark:text-white">SubX</span>
       </NuxtLink>
       <UButton
         v-if="!collapsed"
@@ -21,28 +21,33 @@
       />
     </div>
 
-    <nav class="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2 py-3" aria-label="主导航">
-      <NuxtLink
-        v-for="item in navItems"
-        :key="item.to"
-        :to="item.to"
-        prefetch-on="interaction"
-        :title="collapsed ? item.label : undefined"
-        :aria-label="item.label"
-        class="group relative flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-medium leading-[22px] transition-colors"
-        :class="isActive(item.to)
-          ? 'bg-primary-50 text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white'"
-        :aria-current="isActive(item.to) ? 'page' : undefined"
-      >
-        <span v-if="isActive(item.to)" class="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-primary-500" />
-        <UIcon :name="item.icon" class="h-5 w-5 shrink-0" />
-        <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
-      </NuxtLink>
+    <nav class="min-h-0 flex-1 overflow-y-auto px-2 py-3" aria-label="主导航">
+      <div class="space-y-1">
+        <NuxtLink
+          v-for="item in navItems"
+          :key="item.to"
+          :to="item.to"
+          prefetch-on="interaction"
+          :title="collapsed ? item.label : undefined"
+          :aria-label="item.label"
+          class="group relative flex items-center rounded-lg text-sm leading-6 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50"
+          :class="[
+            collapsed ? 'justify-center py-2.5' : 'gap-3 px-3 py-2.5',
+            isActive(item.to)
+              ? 'bg-primary-50 font-semibold text-primary-700 dark:bg-primary-500/10 dark:text-primary-300'
+              : 'font-medium text-gray-600 hover:bg-gray-100/70 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800/60 dark:hover:text-white'
+          ]"
+          :aria-current="isActive(item.to) ? 'page' : undefined"
+        >
+          <span v-if="isActive(item.to)" class="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary-600 dark:bg-primary-400" />
+          <UIcon :name="item.icon" class="h-[18px] w-[18px] shrink-0" />
+          <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
+        </NuxtLink>
+      </div>
     </nav>
 
     <div class="shrink-0 border-t border-gray-100/90 p-2 dark:border-gray-800/80">
-      <div v-if="!collapsed" class="mb-2 flex items-center rounded-xl bg-gray-50/80 px-2.5 py-2 dark:bg-gray-900/50">
+      <div v-if="!collapsed" class="mb-2 flex items-center rounded-lg border border-gray-100 bg-gray-50/70 px-2.5 py-1.5 dark:border-gray-800 dark:bg-gray-900/40">
         <span class="version-badge version-ok" :title="versionTitle">v{{ appVersion }}</span>
       </div>
       <div class="space-y-1">
@@ -59,7 +64,7 @@
           @click="toggleSimpleMode"
         />
         <UButton
-          :icon="collapsed ? 'i-lucide-panel-left-open' : 'i-lucide-sun-moon'"
+          :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
           :label="collapsed ? undefined : (colorMode.value === 'dark' ? '浅色模式' : '深色模式')"
           variant="ghost"
           color="neutral"
@@ -80,6 +85,7 @@
           :class="collapsed ? 'justify-center' : 'justify-start'"
           to="https://github.com/MaroD1M/subx"
           target="_blank"
+          title="打开 GitHub 项目页"
           aria-label="打开 GitHub 项目页"
         />
         <UButton

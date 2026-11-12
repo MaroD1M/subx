@@ -8,40 +8,39 @@
       <p v-if="task.filePath" class="text-xs text-gray-500 break-all dark:text-gray-400">{{ task.rootName || '默认媒体库' }} · {{ task.filePath }}</p>
       <p v-if="task.contentTitle" class="text-xs text-primary-700 break-all">作品：{{ task.contentTitle }}</p>
       <template #actions>
-        <AppStatusBadge :status="task.step" />
+        <AppStatusBadge :status="statusBadgeStatus" :label="statusBadgeLabel" />
         <UButton label="返回历史" icon="i-lucide-arrow-left" variant="soft" color="neutral" to="/history" />
       </template>
     </PageHeader>
 
-    <div class="surface-card overflow-hidden mb-6 p-2">
-      <div class="p-6 space-y-6">
-        <div class="space-y-4">
-          <div class="flex justify-between items-end mb-2">
-            <div class="flex flex-col">
-              <span class="mb-1 text-xs font-semibold tracking-wider text-primary-700">当前阶段</span>
-              <h3 class="text-lg font-bold text-gray-800 dark:text-gray-200" aria-live="polite">
-                <UIcon :name="stepIcon" class="mr-2 text-emerald-500" v-if="task.step === 'done'" />
-                <UIcon :name="stepIcon" class="mr-2 text-red-500" v-else-if="task.step === 'error'" />
-                <UIcon :name="stepIcon" class="mr-2 animate-pulse text-primary-700" v-else />
-                {{ statusLabel }}
+    <div class="app-section space-y-5">
+      <section class="space-y-4" aria-label="任务进度">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div class="min-w-0 space-y-1.5">
+              <p class="app-meta font-medium">当前阶段</p>
+              <h3 class="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white" aria-live="polite">
+                <UIcon :name="stepIcon" class="h-5 w-5 shrink-0" :class="task.step === 'done' ? 'text-emerald-500' : task.step === 'error' ? 'text-red-500' : 'animate-pulse text-primary-700'" />
+                <span>{{ statusLabel }}</span>
               </h3>
+              <p v-if="task.stepMessage" class="app-caption line-clamp-2">{{ task.stepMessage }}</p>
             </div>
             <div class="text-right">
-              <span class="text-3xl font-black text-gray-900 dark:text-white tracking-tighter">{{ task.step === 'done' ? 100 : task.progress }}%</span>
+              <p class="app-meta font-medium">总进度</p>
+              <p class="text-3xl font-black tracking-tighter text-gray-900 dark:text-white">{{ task.step === 'done' ? 100 : task.progress }}%</p>
             </div>
           </div>
           <UProgress :model-value="task.step === 'done' ? 100 : task.progress" aria-label="任务进度" size="xl" :color="task.step === 'error' || task.step === 'cancelled' ? 'error' : task.step === 'done' ? 'success' : 'primary'" class="h-3 rounded-full overflow-hidden" />
 
-          <div v-if="showStepProgress" class="space-y-1.5 pt-1">
-            <div class="flex items-center justify-between gap-3 text-xs text-neutral-500 dark:text-neutral-400">
-              <span class="truncate">{{ task.stepMessage || statusLabel }}</span>
-              <span class="shrink-0 font-medium">{{ stepProgressValue }}%</span>
+          <div v-if="showStepProgress" class="space-y-1.5">
+            <div class="flex items-center justify-between gap-3">
+              <span class="app-meta truncate">当前阶段进度</span>
+              <span class="app-meta shrink-0 font-medium">{{ stepProgressValue }}%</span>
             </div>
             <UProgress :model-value="stepProgressValue" aria-label="当前阶段进度" size="sm" :color="task.step === 'error' || task.step === 'cancelled' ? 'error' : 'primary'" />
           </div>
 
           <TaskTimingCard :task="task" :time-zone="timeZone" />
-        </div>
+      </section>
 
         <div v-if="(task.step === 'error' || task.step === 'cancelled') && task.error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-2xl flex items-start gap-3">
           <UIcon name="i-lucide-alert-circle" class="w-5 h-5 text-red-500 mt-0.5" />
@@ -59,89 +58,113 @@
               <p class="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">{{ failureSummary.summary }}</p>
             </div>
           </div>
-          <div class="grid gap-2 sm:grid-cols-3 text-xs">
-            <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-              <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">失败类型</p>
-              <p class="mt-1 font-medium text-amber-900 dark:text-amber-100">{{ failureSummary.typeLabel }}</p>
+          <div class="grid gap-2 sm:grid-cols-3">
+            <div class="rounded-xl bg-white/70 px-3 py-2 dark:bg-black/10">
+              <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">失败类型</p>
+              <p class="mt-1 text-sm font-medium text-amber-900 dark:text-amber-100">{{ failureSummary.typeLabel }}</p>
             </div>
-            <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2 sm:col-span-2">
-              <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">关键细节</p>
-              <p class="mt-1 font-medium text-amber-900 dark:text-amber-100 break-words">{{ failureSummary.detail }}</p>
+            <div class="rounded-xl bg-white/70 px-3 py-2 dark:bg-black/10 sm:col-span-2">
+              <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">关键细节</p>
+              <p class="mt-1 break-words text-sm font-medium text-amber-900 dark:text-amber-100">{{ failureSummary.detail }}</p>
             </div>
           </div>
         </div>
 
-        <div class="flex flex-wrap gap-1 rounded-xl border border-gray-200/70 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/50">
+        <section class="space-y-3" aria-label="任务概览">
+          <div class="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p class="app-section-title">任务概览</p>
+              <p class="app-caption">输出、来源、语言与模型等关键信息。</p>
+            </div>
+          </div>
+          <div class="app-stat-grid">
+            <div class="app-stat sm:col-span-2">
+              <p class="app-meta font-medium">输出</p>
+              <p class="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{{ taskOutputSummary }}</p>
+            </div>
+            <div class="app-stat">
+              <p class="app-meta font-medium">字幕来源</p>
+              <p class="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{{ sourceTypeLabel }}</p>
+            </div>
+            <div class="app-stat">
+              <p class="app-meta font-medium">目标语言</p>
+              <p class="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.targetLanguage === 'zh-CN' ? '简体中文' : (task.targetLanguage || '自动') }}</p>
+            </div>
+            <div class="app-stat sm:col-span-2">
+              <p class="app-meta font-medium">翻译模型</p>
+              <p class="mt-1 break-all text-sm font-medium text-gray-800 dark:text-gray-100" :title="modelDisplayText">{{ modelDisplayText }}</p>
+            </div>
+            <div class="app-stat">
+              <p class="app-meta font-medium">媒体库</p>
+              <p class="mt-1 truncate text-sm font-medium text-gray-800 dark:text-gray-100" :title="task.rootName || '默认媒体库'">{{ task.rootName || '默认媒体库' }}</p>
+            </div>
+            <div class="app-stat">
+              <p class="app-meta font-medium">{{ showRecognitionProgress ? '识别进度' : '分块进度' }}</p>
+              <p v-if="showRecognitionProgress" class="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.stepMessage || '等待识别完成后分块' }}</p>
+              <p v-else-if="task.step === 'done'" class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">已完成</p>
+              <p v-else class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.completedChunks || 0 }} / {{ task.totalChunks || '-' }}</p>
+            </div>
+            <template v-if="['asr', 'ocr'].includes(task.sourceType)">
+              <div class="app-stat">
+                <p class="app-meta font-medium">源语言</p>
+                <p class="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.sourceLanguage || (isSourceRecognitionStage ? '待识别' : '自动检测') }}</p>
+              </div>
+              <div class="app-stat">
+                <p class="app-meta font-medium">ASR 置信度</p>
+                <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.asrConfidence != null ? `${(Number(task.asrConfidence) * 100).toFixed(1)}%` : (isSourceRecognitionStage ? '识别完成后显示' : '-') }}</p>
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <div class="flex flex-wrap items-center gap-1 rounded-xl border border-gray-200/70 bg-gray-50/70 p-1 dark:border-gray-800 dark:bg-gray-900/40" role="tablist" aria-label="任务详情">
           <button
             v-for="tab in tabs"
             :key="tab.value"
             type="button"
-            class="rounded-lg px-3 py-2 text-xs font-medium transition-colors"
+            role="tab"
+            :aria-selected="activeTab === tab.value"
+            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:text-sm"
             :class="activeTab === tab.value ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
             @click="activeTab = tab.value"
           >
             {{ tab.label }}
-            <span v-if="tab.value === 'logs' && logs.length" class="ml-1 text-[10px] opacity-70">{{ logs.length }}</span>
+            <span v-if="tab.value === 'logs' && logs.length" class="app-pill app-pill-neutral px-1.5 text-xs font-semibold">{{ logs.length }}</span>
+            <span v-else-if="tab.value === 'diagnostics' && reviewDiagnosticsIssues.length" class="app-pill app-pill-warning px-1.5 text-xs font-semibold">{{ reviewDiagnosticsIssues.length }}</span>
           </button>
         </div>
 
-        <div v-show="activeTab === 'overview'" class="space-y-6">
-        <USeparator />
-
-        <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4 xl:grid-cols-6">
-          <div class="min-w-0 space-y-1">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">媒体库</span>
-            <p class="truncate text-sm font-medium text-gray-700 dark:text-gray-300" :title="task.rootName || '默认媒体库'">{{ task.rootName || '默认媒体库' }}</p>
+        <div v-show="activeTab === 'overview'" class="space-y-3" role="tabpanel">
+          <div>
+            <p class="app-section-title">任务信息</p>
+            <p class="app-caption">关键结果与进度已在上方概览展示，这里补充任务文件与内容说明。</p>
           </div>
-          <div class="min-w-0 space-y-1 xl:col-span-2">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">模型</span>
-            <p class="break-all text-sm font-medium leading-relaxed text-gray-700 dark:text-gray-300" :title="task.model || '默认多模态模型'">{{ task.model || '默认多模态模型' }}</p>
-          </div>
-          <div class="min-w-0 space-y-1">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">目标语言</span>
-            <p class="break-words text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.targetLanguage === 'zh-CN' ? '简体中文' : (task.targetLanguage || '自动') }}</p>
-          </div>
-          <div class="min-w-0 space-y-1">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">输出</span>
-            <p class="break-words text-sm font-medium text-gray-700 dark:text-gray-300">{{ taskOutputSummary }}</p>
-          </div>
-          <div class="min-w-0 space-y-1">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">字幕来源</span>
-            <p class="break-words text-sm font-medium text-gray-700 dark:text-gray-300">{{ sourceTypeLabel }}</p>
-          </div>
-          <div v-if="['asr', 'ocr'].includes(task.sourceType)" class="min-w-0 space-y-1">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">源语言</span>
-            <p class="break-words text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.sourceLanguage || '自动检测' }}</p>
-          </div>
-          <div v-if="['asr', 'ocr'].includes(task.sourceType)" class="min-w-0 space-y-1">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">ASR 置信度</span>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ task.asrConfidence != null ? `${(Number(task.asrConfidence) * 100).toFixed(1)}%` : '-' }}</p>
-          </div>
-          <div class="min-w-0 space-y-1">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">分块进度</span>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300" v-if="task.step === 'done'">已完成</p>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300" v-else>{{ task.completedChunks || 0 }} / {{ task.totalChunks || '-' }}</p>
-          </div>
-          <div class="min-w-0 space-y-1">
-            <span class="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">任务状态</span>
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ statusLabel }}</p>
-          </div>
-        </div>
-
-        <div v-if="qualityRun" class="rounded-2xl border border-gray-200/70 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-900/30">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p class="text-xs font-semibold text-gray-800 dark:text-gray-100">双模型质量校验</p>
-              <p class="text-[11px] text-gray-500 dark:text-gray-400">{{ qualityRun.model }} · 已校验 {{ qualityRun.entriesChecked }} 条 · {{ qualityRun.status }}</p>
+          <div class="app-stat-grid sm:grid-cols-2 xl:grid-cols-4">
+            <div class="app-stat">
+              <p class="app-meta font-medium">任务文件</p>
+              <p class="mt-1 break-all text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.filePath || '—' }}</p>
             </div>
-            <UBadge :color="qualityRun.avgScore < qualityThreshold ? 'warning' : 'success'" variant="subtle">平均 {{ (Number(qualityRun.avgScore) * 100).toFixed(1) }}%</UBadge>
+            <div class="app-stat">
+              <p class="app-meta font-medium">作品</p>
+              <p class="mt-1 break-words text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.contentTitle || '—' }}</p>
+            </div>
+            <div class="app-stat">
+              <p class="app-meta font-medium">创建时间</p>
+              <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.createdAt ? formatDateTime(task.createdAt, timeZone) : '—' }}</p>
+            </div>
+            <div class="app-stat">
+              <p class="app-meta font-medium">更新时间</p>
+              <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ task.updatedAt ? formatDateTime(task.updatedAt, timeZone) : '—' }}</p>
+            </div>
           </div>
-          <div class="mt-2 flex flex-wrap gap-1.5">
-            <UBadge v-for="(count, issue) in qualityRun.issueSummary" :key="issue" color="error" variant="subtle" size="sm">{{ issue }} × {{ count }}</UBadge>
-            <span v-if="!Object.keys(qualityRun.issueSummary || {}).length" class="text-xs text-gray-500 dark:text-gray-400">未发现明确质量问题</span>
+          <div v-if="task.contentBackground" class="space-y-1">
+            <p class="app-meta font-medium">内容背景</p>
+            <p class="whitespace-pre-wrap break-words text-sm leading-6 text-gray-700 dark:text-gray-300">{{ task.contentBackground }}</p>
           </div>
-          <p v-if="qualityRun.error" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ qualityRun.error }}</p>
-        </div>
+          <div v-if="task.customInstructions" class="space-y-1">
+            <p class="app-meta font-medium">自定义要求</p>
+            <p class="whitespace-pre-wrap break-words text-sm leading-6 text-gray-700 dark:text-gray-300">{{ task.customInstructions }}</p>
+          </div>
         </div>
 
         <TaskLogsPanel
@@ -150,24 +173,9 @@
           :current-text="task.currentText"
           :current-text-timestamp="currentTextTimestamp"
         />
-        <div class="flex items-center justify-between pt-4 gap-3 flex-wrap">
-          <div class="flex items-center gap-3 flex-wrap">
-            <UButton v-if="task.step === 'done'" label="下载结果" icon="i-lucide-download" color="primary" @click="downloadSrt" />
-            <UButton v-if="task.step === 'done'" label="下载原始" icon="i-lucide-file-text" color="neutral" variant="ghost" @click="downloadOriginal" />
-            <UButton v-if="task.step === 'review'" label="进入核对" icon="i-lucide-list-checks" color="warning" @click="openReviewPage()" />
-            <UButton v-if="task.step === 'done'" label="返回首页" icon="i-lucide-check-circle" color="primary" to="/" />
-            <UButton v-if="task.step === 'done'" label="返回历史" icon="i-lucide-history" color="neutral" variant="ghost" to="/history" />
-            <UButton v-else-if="task.step === 'error' || task.step === 'cancelled'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
-            <template v-else>
-              <UButton v-if="task.step === 'paused'" label="继续任务" icon="i-lucide-play" color="primary" :loading="resuming" @click="resumeTask" />
-              <UButton v-else-if="canPauseTask" label="暂停任务" icon="i-lucide-pause" color="warning" variant="soft" :loading="pausing" @click="pauseTask" />
-              <UButton label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
-            </template>
-          </div>
-        </div>
-
-        <div v-show="activeTab === 'asr'" class="space-y-4">
-          <div v-if="asrLoading && !asrRun && !asrPartial" class="rounded-2xl border border-gray-200/70 bg-white p-4 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-950/70">
+        <div v-show="activeTab === 'asr'" class="space-y-4" role="tabpanel">
+          <div v-if="asrLoading && !asrRun && !asrPartial" class="surface-card flex items-center gap-2 p-4 text-sm text-gray-500 dark:text-gray-400">
+            <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" />
             正在加载 ASR 识别结果...
           </div>
           <template v-else-if="asrRun || asrPartial">
@@ -176,69 +184,69 @@
                 <UIcon :name="asrPartial.active ? 'i-lucide-loader-2' : 'i-lucide-database'" class="mt-0.5 h-5 w-5 shrink-0" :class="asrPartial.active ? 'animate-spin text-primary-600 dark:text-primary-400' : 'text-gray-500'" />
                 <div class="min-w-0 space-y-1">
                   <p class="text-sm font-semibold text-primary-900 dark:text-primary-100">{{ asrPartialStatusText }}</p>
-                  <p class="text-xs leading-5 text-primary-800/80 dark:text-primary-200/80">
+                  <p class="text-xs leading-5 text-primary-800 dark:text-primary-200">
                     已完成 {{ asrPartial.doneChunks || 0 }} 个分段，已识别 {{ asrPartial.totalSegments || asrSegments.length }} 条。
                     <span v-if="asrPartial.updatedAt">最后更新 {{ formatDateTime(asrPartial.updatedAt, timeZone) }}。</span>
                   </p>
-                  <p v-if="asrPartial.active" class="text-xs leading-5 text-primary-700/75 dark:text-primary-300/75">已识别内容会随分段完成持续追加；当前分段内部进度请查看上方任务进度。</p>
+                  <p v-if="asrPartial.active" class="text-xs leading-5 text-primary-800 dark:text-primary-200">已识别内容会随分段完成持续追加；当前分段内部进度请查看上方任务进度。</p>
                 </div>
               </div>
             </div>
 
-            <div v-if="asrRun" class="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div class="surface-card p-3">
-                <p class="stat-label">引擎 / 模型</p>
+            <div v-if="asrRun" class="app-stat-grid">
+              <div class="app-stat">
+                <p class="app-meta font-medium">引擎 / 模型</p>
                 <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrRun.engine }} · {{ asrRun.model }}</p>
               </div>
-              <div class="surface-card p-3">
-                <p class="stat-label">源语言</p>
+              <div class="app-stat">
+                <p class="app-meta font-medium">源语言</p>
                 <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrRun.language }}</p>
               </div>
-              <div class="surface-card p-3">
-                <p class="stat-label">平均置信度</p>
+              <div class="app-stat">
+                <p class="app-meta font-medium">平均置信度</p>
                 <p class="mt-1 text-sm font-medium" :class="Number(asrRun.confidence) < 0.6 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'">
                   {{ (Number(asrRun.confidence || 0) * 100).toFixed(1) }}%
                 </p>
               </div>
-              <div class="surface-card p-3">
-                <p class="stat-label">RTF</p>
+              <div class="app-stat">
+                <p class="app-meta font-medium">RTF</p>
                 <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ Number(asrRun.rtf || 0).toFixed(3) }}</p>
               </div>
             </div>
 
-            <div v-else class="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div class="surface-card p-3">
-                <p class="stat-label">识别状态</p>
+            <div v-else class="app-stat-grid">
+              <div class="app-stat">
+                <p class="app-meta font-medium">识别状态</p>
                 <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrPartialStatusText }}</p>
               </div>
-              <div class="surface-card p-3">
-                <p class="stat-label">已完成分段</p>
+              <div class="app-stat">
+                <p class="app-meta font-medium">已完成分段</p>
                 <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrPartial?.doneChunks || 0 }}</p>
               </div>
-              <div class="surface-card p-3">
-                <p class="stat-label">已识别片段</p>
+              <div class="app-stat">
+                <p class="app-meta font-medium">已识别片段</p>
                 <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrPartial?.totalSegments || asrSegments.length }} 条</p>
               </div>
-              <div class="surface-card p-3">
-                <p class="stat-label">最后更新</p>
+              <div class="app-stat">
+                <p class="app-meta font-medium">最后更新</p>
                 <p class="mt-1 text-sm font-medium text-gray-800 dark:text-gray-100">{{ asrPartial?.updatedAt ? formatDateTime(asrPartial.updatedAt, timeZone) : '-' }}</p>
               </div>
             </div>
 
-            <div class="rounded-2xl border border-gray-200/70 bg-white p-4 dark:border-gray-800 dark:bg-gray-950/70">
+            <div class="surface-card p-4">
               <div class="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">{{ asrRun ? '识别分段' : '实时识别结果' }}</p>
-                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ asrRun ? '最多展示前 500 条，低置信度会标黄。' : '识别中会随已完成分段追加，最多展示前 500 条。' }}</p>
+                <div class="min-w-0">
+                  <p class="app-section-title">{{ asrRun ? '识别分段' : '实时识别结果' }}</p>
+                  <p class="app-caption">{{ asrRun ? '最多展示前 500 条，低置信度会标黄。' : '识别中会随已完成分段追加，最多展示前 500 条。' }}</p>
                 </div>
-                <UBadge color="neutral" variant="subtle">{{ asrSegments.length }} 条</UBadge>
+                <UBadge color="neutral" variant="subtle" class="shrink-0">{{ asrSegments.length }} 条</UBadge>
               </div>
-              <div v-if="!asrSegments.length" class="rounded-xl border border-dashed border-gray-200 px-3 py-8 text-center text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+              <div v-if="!asrSegments.length" class="surface-card border-dashed px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                 等待第一个识别分段完成...
               </div>
               <div v-else class="max-h-[50vh] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                 <div v-for="segment in asrSegments" :key="segment.id" class="rounded-xl border px-3 py-2" :class="Number(segment.confidence) < 0.6 ? 'border-amber-200 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/15' : 'border-gray-100 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-900/30'">
-                  <div class="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                  <div class="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
                     <span>{{ (Number(segment.startMs) / 1000).toFixed(2) }}s → {{ (Number(segment.endMs) / 1000).toFixed(2) }}s</span>
                     <div class="flex items-center gap-1.5">
                       <UBadge v-if="segment.speaker" color="primary" variant="subtle" size="sm">{{ segment.speaker }}</UBadge>
@@ -250,29 +258,43 @@
               </div>
             </div>
           </template>
-          <div v-else class="rounded-2xl border border-gray-200/70 bg-white p-4 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-950/70">
+          <div v-else class="surface-card p-4 text-sm text-gray-500 dark:text-gray-400">
             {{ ['extracting_audio', 'transcribing', 'paused'].includes(String(task.step || '')) ? '正在等待第一个 ASR 识别分段完成...' : '暂无 ASR 识别结果。' }}
           </div>
         </div>
 
-        <div v-show="activeTab === 'diagnostics'" class="space-y-4">
-        <details v-if="showDiagnosticsSection" class="rounded-2xl border border-gray-200/70 dark:border-white/10 bg-white/70 dark:bg-gray-950/60 p-4">
+        <div v-show="activeTab === 'diagnostics'" class="space-y-4" role="tabpanel">
+        <div v-if="qualityRun" class="surface-card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0">
+              <p class="app-section-title">双模型质量校验</p>
+              <p class="app-meta">{{ qualityRun.model }} · 已校验 {{ qualityRun.entriesChecked }} 条 · {{ qualityRun.status }}</p>
+            </div>
+            <UBadge :color="qualityRun.avgScore < qualityThreshold ? 'warning' : 'success'" variant="subtle">平均 {{ (Number(qualityRun.avgScore) * 100).toFixed(1) }}%</UBadge>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            <UBadge v-for="(count, issue) in qualityRun.issueSummary" :key="issue" color="error" variant="subtle" size="sm">{{ issue }} × {{ count }}</UBadge>
+            <span v-if="!Object.keys(qualityRun.issueSummary || {}).length" class="app-caption">未发现明确质量问题</span>
+          </div>
+          <p v-if="qualityRun.error" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ qualityRun.error }}</p>
+        </div>
+        <details v-if="showDiagnosticsSection" class="surface-card p-4">
           <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
             <div>
-              <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">诊断信息</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">连接状态、翻译模式与用量统计默认折叠显示。</p>
+              <p class="app-section-title">诊断信息</p>
+              <p class="app-caption mt-1">连接状态、翻译模式与用量统计默认折叠显示。</p>
             </div>
             <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-400" />
           </summary>
 
           <div class="mt-4 space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3">
-                <p class="text-[10px] uppercase font-bold tracking-widest text-neutral-500">翻译模式</p>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div class="surface-muted p-3">
+                <p class="app-meta font-medium">翻译模式</p>
                 <p class="mt-1 text-sm font-medium text-gray-700 dark:text-gray-300">{{ translationModeLabel }}</p>
               </div>
-              <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3">
-                <p class="text-[10px] uppercase font-bold tracking-widest text-neutral-500">连接状态</p>
+              <div class="surface-muted p-3">
+                <p class="app-meta font-medium">连接状态</p>
                 <p class="mt-1 text-sm font-medium text-gray-700 dark:text-gray-300">{{ connectionBanner?.title || '无' }}</p>
               </div>
             </div>
@@ -312,7 +334,7 @@
                       @click="openReviewPage(subtitleId)"
                     />
                   </div>
-                  <p v-else class="text-[11px] text-amber-700 dark:text-amber-300">暂无 ID</p>
+                  <p v-else class="app-meta text-amber-700 dark:text-amber-300">暂无 ID</p>
                 </div>
               </div>
             </div>
@@ -323,60 +345,60 @@
               </div>
 
               <div v-if="showResponses" class="rounded-2xl bg-gray-950 text-gray-100 p-4 ring-1 ring-white/10 space-y-4">
-                <div v-if="responsesLoading" class="flex items-center gap-2 text-xs text-gray-400">
+                <div v-if="responsesLoading" class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                   <UIcon name="i-lucide-loader-2" class="w-4 h-4 animate-spin" /> 加载用量统计...
                 </div>
                 <div v-else-if="responsesSummary" class="space-y-4">
                   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">分块数</span><p class="text-sm font-medium text-gray-100">{{ responsesSummary.totalChunks }}</p></div>
-                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输入令牌</span><p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p></div>
-                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">输出令牌</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
-                    <div class="space-y-1"><span class="text-[10px] text-gray-600 uppercase font-bold">总令牌</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
+                    <div class="space-y-1"><span class="app-meta uppercase font-bold text-gray-500">分块数</span><p class="text-sm font-medium text-gray-100">{{ responsesSummary.totalChunks }}</p></div>
+                    <div class="space-y-1"><span class="app-meta uppercase font-bold text-gray-500">输入令牌</span><p class="text-sm font-medium text-amber-400">{{ responsesSummary.totalPromptTokens.toLocaleString() }}</p></div>
+                    <div class="space-y-1"><span class="app-meta uppercase font-bold text-gray-500">输出令牌</span><p class="text-sm font-medium text-emerald-400">{{ responsesSummary.totalCompletionTokens.toLocaleString() }}</p></div>
+                    <div class="space-y-1"><span class="app-meta uppercase font-bold text-gray-500">总令牌</span><p class="text-sm font-medium text-primary-400">{{ responsesSummary.totalTokens.toLocaleString() }}</p></div>
                   </div>
                   <div v-if="responseDiagnosticsSummary" class="rounded-2xl border border-amber-200/70 bg-amber-50/70 dark:border-amber-800/60 dark:bg-amber-900/15 p-4 space-y-3">
                     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div class="space-y-1">
                         <p class="text-sm font-semibold text-amber-900 dark:text-amber-100">翻译返回诊断摘要</p>
                         <p class="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">仅展示概况统计；完整请求与返回保留在下方折叠区，便于排查且不影响页面排版。</p>
-                        <p class="text-[11px] text-amber-800 dark:text-amber-200">{{ responseDiagnosticsSummary.overviewText }}</p>
+                        <p class="app-meta text-amber-800 dark:text-amber-200">{{ responseDiagnosticsSummary.overviewText }}</p>
                       </div>
                       <UBadge color="warning" variant="subtle">{{ responseDiagnosticsSummary.totalIssues }} 个异常块</UBadge>
                     </div>
                     <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">结构化返回</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">结构化返回</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.structuredChunks }}</p>
                       </div>
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">纯文本返回</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">纯文本返回</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.plainChunks }}</p>
                       </div>
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">空响应/异常</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">空响应/异常</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.emptyChunks }}</p>
                       </div>
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">拒答/过滤</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">拒答/过滤</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.refusalChunks + responseDiagnosticsSummary.filteredChunks }}</p>
                       </div>
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">缺条块数</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">缺条块数</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.missingIdChunks }}</p>
                       </div>
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">解析丢失块数</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">解析丢失块数</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.chunksWithParseLoss }}</p>
                       </div>
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">重试块数</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">重试块数</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.retriedChunks }}</p>
                       </div>
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">单条补译块数</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">单条补译块数</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.singleRetriedChunks }}</p>
                       </div>
                       <div class="rounded-xl bg-white/70 dark:bg-black/10 px-3 py-2">
-                        <p class="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">回退原文块数</p>
+                        <p class="app-meta font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">回退原文块数</p>
                         <p class="mt-1 text-sm font-semibold text-amber-950 dark:text-amber-100">{{ responseDiagnosticsSummary.fallbackChunks }}</p>
                       </div>
                     </div>
@@ -384,14 +406,14 @@
                       <UBadge v-for="issue in responseDiagnosticsSummary.issues" :key="issue.issue" color="warning" variant="soft">{{ issue.label }} × {{ issue.count }}</UBadge>
                     </div>
                     <div v-if="responseDiagnosticsSummary.riskTags?.length" class="space-y-2">
-                      <p class="text-[11px] text-amber-700 dark:text-amber-300">高风险标签分布</p>
+                      <p class="app-meta text-amber-700 dark:text-amber-300">高风险标签分布</p>
                       <div class="flex flex-wrap gap-2">
                         <UBadge v-for="risk in responseDiagnosticsSummary.riskTags" :key="risk.tag" color="primary" variant="subtle">{{ riskTagLabel(risk.tag) }} × {{ risk.count }}</UBadge>
                       </div>
                     </div>
                   </div>
                   <div class="space-y-3">
-                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                       <UIcon name="i-lucide-messages-square" class="w-4 h-4" /> AI 返回预览（默认截断，便于快速排查）
                     </div>
                     <div class="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-1">
@@ -409,18 +431,18 @@
                               <UBadge v-if="r.response_meta?.chunkDiagnostics?.fallbackCount" size="xs" color="error" variant="soft">回退原文 {{ r.response_meta.chunkDiagnostics.fallbackCount }} 条</UBadge>
                               <UBadge v-for="tag in (r.response_meta?.chunkRisk?.tags || []).slice(0, 4)" :key="`${r.id}-${tag}`" size="xs" color="primary" variant="subtle">{{ riskTagLabel(tag) }}</UBadge>
                             </div>
-                            <p class="mt-2 text-[11px] text-gray-400 line-clamp-2 break-words">{{ r.raw_response_preview || '暂无返回内容' }}</p>
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 line-clamp-2 break-words">{{ r.raw_response_preview || '暂无返回内容' }}</p>
                           </div>
                           <UIcon name="i-lucide-chevron-down" class="w-4 h-4 text-gray-500 shrink-0" />
                         </summary>
                         <div class="mt-3 grid gap-3 lg:grid-cols-2">
                           <div class="space-y-1 min-w-0">
-                            <p class="text-[10px] uppercase tracking-widest text-gray-500">请求内容</p>
-                            <pre class="text-[11px] leading-5 whitespace-pre-wrap break-words text-gray-400 max-h-48 overflow-y-auto custom-scrollbar">{{ r.raw_request || '暂无请求内容' }}</pre>
+                            <p class="app-meta uppercase tracking-widest text-gray-500">请求内容</p>
+                            <pre class="text-xs leading-5 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400 max-h-48 overflow-y-auto custom-scrollbar">{{ r.raw_request || '暂无请求内容' }}</pre>
                           </div>
                           <div class="space-y-1 min-w-0">
-                            <p class="text-[10px] uppercase tracking-widest text-gray-500">返回内容</p>
-                            <pre class="text-[11px] leading-5 whitespace-pre-wrap break-words text-gray-200 max-h-48 overflow-y-auto custom-scrollbar">{{ r.raw_response || '暂无返回内容' }}</pre>
+                            <p class="app-meta uppercase tracking-widest text-gray-500">返回内容</p>
+                            <pre class="text-xs leading-5 whitespace-pre-wrap break-words text-gray-200 max-h-48 overflow-y-auto custom-scrollbar">{{ r.raw_response || '暂无返回内容' }}</pre>
                           </div>
                         </div>
                       </details>
@@ -429,9 +451,9 @@
                   <div class="max-h-48 overflow-y-auto custom-scrollbar">
                     <table class="w-full text-left">
                       <thead>
-                        <tr class="text-gray-600 text-[10px] uppercase"><th class="pb-2 pr-4">块</th><th class="pb-2 pr-4">模型</th><th class="pb-2 pr-4">输入令牌</th><th class="pb-2 pr-4">输出令牌</th><th class="pb-2">总计令牌</th></tr>
+                        <tr class="text-gray-500 text-xs uppercase"><th class="pb-2 pr-4">块</th><th class="pb-2 pr-4">模型</th><th class="pb-2 pr-4">输入令牌</th><th class="pb-2 pr-4">输出令牌</th><th class="pb-2">总计令牌</th></tr>
                       </thead>
-                      <tbody class="text-gray-400">
+                      <tbody class="text-gray-600 dark:text-gray-300">
                         <tr v-for="r in responsesRecords" :key="r.id" class="border-t border-gray-800/50">
                           <td class="py-1.5 pr-4 text-gray-500">#{{ r.chunk_index + 1 }}</td>
                           <td class="py-1.5 pr-4 text-gray-300">{{ r.model }}</td>
@@ -443,13 +465,27 @@
                     </table>
                   </div>
                 </div>
-                <div v-else class="text-xs text-gray-400">暂无可用统计。</div>
+                <div v-else class="text-xs text-gray-500 dark:text-gray-400">暂无可用统计。</div>
               </div>
             </div>
           </div>
         </details>
         </div>
-      </div>
+
+        <div class="flex flex-wrap items-center gap-2 border-t border-gray-200/70 pt-4 dark:border-gray-800">
+          <UButton v-if="task.step === 'done'" label="下载结果" icon="i-lucide-download" color="primary" @click="downloadSrt" />
+          <UButton v-if="task.step === 'done'" label="下载原始" icon="i-lucide-file-text" color="neutral" variant="ghost" @click="downloadOriginal" />
+          <UButton v-if="task.step === 'review'" label="进入核对" icon="i-lucide-list-checks" color="warning" @click="openReviewPage()" />
+          <UButton v-if="task.step === 'done'" label="返回首页" icon="i-lucide-check-circle" color="primary" to="/" />
+          <UButton v-if="task.step === 'done'" label="返回历史" icon="i-lucide-history" color="neutral" variant="ghost" to="/history" />
+          <UButton v-else-if="task.step === 'error' || task.step === 'cancelled'" label="返回历史" icon="i-lucide-history" color="neutral" to="/history" />
+          <template v-else>
+            <UButton v-if="task.step === 'paused' && !task.pauseRequested" label="继续任务" icon="i-lucide-play" color="primary" :loading="resuming" @click="resumeTask" />
+            <UButton v-else-if="pausePending" label="暂停中…" icon="i-lucide-loader-2" color="warning" variant="soft" loading disabled />
+            <UButton v-else-if="canPauseTask" label="暂停任务" icon="i-lucide-pause" color="warning" variant="soft" :loading="pausing" @click="pauseTask" />
+            <UButton label="取消任务" icon="i-lucide-octagon-x" color="error" variant="soft" :loading="cancelling" @click="cancelTask" />
+          </template>
+        </div>
     </div>
   </AppContainer>
 </template>
@@ -514,6 +550,8 @@ const task = ref<any>({
   finishedAt: '',
   pausedAt: '',
   pausedTotalMs: 0,
+  pauseRequested: false,
+  pauseRequestedAt: '',
   reviewDiagnostics: { totalEntries: 0, needsReview: 0, issues: [] as Array<{ reason: string, count: number, subtitleIds: string[] }> }
 })
 
@@ -547,6 +585,21 @@ const taskOutputSummary = computed(() => {
   return `${mode}${layout} · ${format}`
 })
 const sourceTypeLabel = computed(() => sourceTypeLabels[String(task.value.sourceType || 'auto')] || task.value.sourceType || '自动判断')
+const isSourceRecognitionStage = computed(() => (
+  ['asr', 'ocr'].includes(String(task.value.sourceType || ''))
+  && ['probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'paused'].includes(String(task.value.step || ''))
+))
+const modelDisplayText = computed(() => {
+  const model = task.value.model || '默认多模态模型'
+  if (String(task.value.outputMode || '') === 'original') return '未使用（仅原文）'
+  if (isSourceRecognitionStage.value) return `${model}（翻译阶段使用）`
+  return model
+})
+const showTranslationChunkProgress = computed(() => (
+  Number(task.value.totalChunks || 0) > 0
+  || ['parsing', 'translating', 'exporting', 'done', 'review'].includes(String(task.value.step || ''))
+))
+const showRecognitionProgress = computed(() => isSourceRecognitionStage.value && !showTranslationChunkProgress.value)
 
 const pageTitle = computed(() => {
   const status = String(task.value?.step || '')
@@ -591,7 +644,16 @@ const showDiagnosticsSection = computed(() => !!connectionBanner.value || task.v
 const cancelling = ref(false)
 const pausing = ref(false)
 const resuming = ref(false)
-const canPauseTask = computed(() => (task.value.sourceType === 'asr' || ['extracting_audio', 'transcribing'].includes(String(task.value.step))) && !['parsing', 'translating', 'exporting', 'review', 'done', 'error', 'cancelled', 'paused'].includes(String(task.value.step)))
+const pausePending = computed(() => Boolean(task.value.pauseRequested) && task.value.step !== 'paused')
+const statusBadgeLabel = computed(() => pausePending.value ? '暂停中（等待当前分段完成）' : '')
+const statusBadgeStatus = computed(() => pausePending.value ? 'paused' : String(task.value.step || ''))
+watch(() => task.value.step, (next) => {
+  if (next === 'paused') {
+    task.value.pauseRequested = false
+    task.value.pauseRequestedAt = ''
+  }
+})
+const canPauseTask = computed(() => !task.value.pauseRequested && (task.value.sourceType === 'asr' || ['extracting_audio', 'transcribing'].includes(String(task.value.step))) && !['parsing', 'translating', 'exporting', 'review', 'done', 'error', 'cancelled', 'paused'].includes(String(task.value.step)))
 const toast = useToast()
 const eventSource = ref<EventSource | null>(null)
 const reconnectTimer = ref<ReturnType<typeof setTimeout> | null>(null)
@@ -660,12 +722,22 @@ function openReviewPage(subtitleId?: string) {
 async function pauseTask() {
   pausing.value = true
   try {
-    await $fetch(`/api/tasks/${taskId}/pause`, { method: 'POST' })
-    task.value.step = 'paused'
-    task.value.stepMessage = '任务已暂停，已完成识别分段已保存'
-    task.value.currentText = null
-    appendLog({ type: 'info', message: '任务已暂停，已完成识别分段已保存。', timestamp: formatClock(), category: 'system' })
-    toast.add({ title: '已暂停', description: '当前识别分段完成后会停止，可稍后继续。', color: 'warning' })
+    const result: any = await $fetch(`/api/tasks/${taskId}/pause`, { method: 'POST' })
+    if (result?.pending) {
+      task.value.pauseRequested = true
+      if (result?.pauseRequestedAt) task.value.pauseRequestedAt = result.pauseRequestedAt
+      task.value.stepMessage = '正在暂停，等待当前识别分段完成'
+      appendLog({ type: 'info', message: '已请求暂停，将在当前识别分段完成后停止。', timestamp: formatClock(), category: 'system' })
+      toast.add({ title: '已发送暂停请求', description: '将在当前识别分段完成后停止。', color: 'warning' })
+    } else {
+      task.value.step = 'paused'
+      task.value.pauseRequested = false
+      task.value.pauseRequestedAt = ''
+      task.value.stepMessage = '任务已暂停，已完成识别分段已保存'
+      task.value.currentText = null
+      appendLog({ type: 'info', message: '任务已暂停，已完成识别分段已保存。', timestamp: formatClock(), category: 'system' })
+      toast.add({ title: '已暂停', description: '任务已暂停，可稍后继续。', color: 'warning' })
+    }
   } catch (e: any) {
     toast.add({ title: '暂停失败', description: e?.data?.message || e?.message || '无法暂停任务', color: 'error' })
   } finally {
@@ -678,6 +750,8 @@ async function resumeTask() {
   try {
     await $fetch(`/api/tasks/${taskId}/resume`, { method: 'POST' })
     task.value.step = 'queued'
+    task.value.pauseRequested = false
+    task.value.pauseRequestedAt = ''
     task.value.stepMessage = '正在恢复任务...'
     appendLog({ type: 'info', message: '任务已恢复，将复用已完成的识别分段。', timestamp: formatClock(), category: 'system' })
     toast.add({ title: '已恢复', description: '任务将复用已完成的识别分段继续执行。', color: 'success' })
@@ -733,6 +807,7 @@ const stepProgressValue = computed(() => Math.max(0, Math.min(100, Number(task.v
 const showStepProgress = computed(() => ['probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting', 'paused'].includes(String(task.value.step || '')))
 
 const statusLabel = computed(() => {
+  if (pausePending.value) return '暂停中（等待当前分段完成）'
   switch (task.value.step) {
     case 'queued': return '队列中'
     case 'probing': return '正在分析媒体'
@@ -961,6 +1036,7 @@ const ASR_POLL_MS = 8_000
 const isTerminalTask = computed(() => ['done', 'error', 'cancelled', 'review'].includes(String(task.value.step || '')))
 const asrPartialStatusText = computed(() => {
   if (asrRun.value) return '识别完成'
+  if (task.value.pauseRequested && task.value.step !== 'paused') return '暂停中，等待当前分段完成'
   if (task.value.step === 'paused') return '语音识别已暂停'
   if (isTerminalTask.value) return '语音识别已结束'
   if (task.value.step === 'extracting_audio') return '正在准备音频'
@@ -1071,7 +1147,9 @@ onMounted(async () => {
         stepStartedAt: initialTask.stepStartedAt || '',
         finishedAt: initialTask.finishedAt || '',
         pausedAt: initialTask.pausedAt || '',
-        pausedTotalMs: Number(initialTask.pausedTotalMs || 0)
+        pausedTotalMs: Number(initialTask.pausedTotalMs || 0),
+        pauseRequested: Boolean(initialTask.pauseRequested),
+        pauseRequestedAt: initialTask.pauseRequestedAt || ''
       }
     }
 
@@ -1132,6 +1210,8 @@ onMounted(async () => {
         finishedAt: snapshot.finishedAt || task.value.finishedAt,
         pausedAt: snapshot.pausedAt || task.value.pausedAt,
         pausedTotalMs: Number(snapshot.pausedTotalMs ?? task.value.pausedTotalMs ?? 0),
+        pauseRequested: Boolean(snapshot.pauseRequested ?? task.value.pauseRequested),
+        pauseRequestedAt: snapshot.pauseRequestedAt || task.value.pauseRequestedAt,
         currentText: ['done', 'error', 'review', 'cancelled'].includes(String(snapshot.status)) ? null : task.value.currentText
       }
       return ['done', 'error', 'review', 'cancelled'].includes(String(snapshot.status))

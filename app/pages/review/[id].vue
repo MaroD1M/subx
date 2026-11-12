@@ -28,23 +28,31 @@
         <UPopover v-model:open="exportSettingsOpen" :content="{ align: 'end' }">
           <UButton icon="i-lucide-sliders-horizontal" label="导出设置" color="neutral" variant="ghost" size="sm" title="设置导出模式、字幕样式和格式" />
           <template #content>
-            <div class="w-80 max-w-[calc(100vw-2rem)] space-y-3 p-3">
+            <div class="max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] space-y-2 overflow-y-auto p-3">
               <div class="flex items-center justify-between gap-2">
                 <p class="app-section-title">导出设置</p>
                 <UButton label="预览" icon="i-lucide-eye" size="xs" color="neutral" variant="ghost" @click="exportSettingsOpen = false; openPreview()" />
               </div>
-              <UFormField label="导出模式">
-                <USelect v-model="exportMode" :items="exportModeItems" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField label="字幕样式">
-                <USelect v-model="exportStyle" :items="exportStyleItems" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField label="导出格式">
-                <USelect v-model="exportFormat" :items="exportFormatItems" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField label="双语布局">
-                <USelect v-model="bilingualLayout" :items="bilingualLayoutItems" size="sm" class="w-full" :disabled="exportMode !== 'bilingual'" />
-              </UFormField>
+              <div class="app-field-row">
+                <UFormField label="导出模式" class="w-full">
+                  <USelect v-model="exportMode" :items="exportModeItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
+              <div class="app-field-row">
+                <UFormField label="字幕样式" class="w-full">
+                  <USelect v-model="exportStyle" :items="exportStyleItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
+              <div class="app-field-row">
+                <UFormField label="导出格式" class="w-full">
+                  <USelect v-model="exportFormat" :items="exportFormatItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
+              <div class="app-field-row">
+                <UFormField label="双语布局" class="w-full">
+                  <USelect v-model="bilingualLayout" :items="bilingualLayoutItems" size="sm" class="w-full" :disabled="exportMode !== 'bilingual'" />
+                </UFormField>
+              </div>
               <UButton label="高级样式" icon="i-lucide-palette" size="xs" color="primary" variant="soft" class="w-full justify-center" @click="exportSettingsOpen = false; styleDrawerOpen = true" />
               <p class="app-caption">导出前会自动保存当前修改。文件内容以每条字幕的「最终导出」列为准；「当前译文」只用于恢复和重译参考。</p>
             </div>
@@ -66,9 +74,17 @@
       <audio :src="clipUrl" controls autoplay class="w-full" aria-label="字幕音频片段"></audio>
     </div>
 
-    <div class="surface-card space-y-3 p-3 sm:p-4">
-      <div class="flex flex-wrap items-center gap-2">
-        <UInput v-model="searchQuery" icon="i-lucide-search" size="sm" placeholder="搜索原文 / 译文 / 编号" class="w-full sm:w-56" aria-label="搜索字幕内容" />
+    <section class="app-section space-y-3" aria-labelledby="review-filters-heading">
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="min-w-0">
+          <p id="review-filters-heading" class="app-section-title">筛选与搜索</p>
+          <p class="app-caption">先缩小范围，再勾选条目批量处理。</p>
+        </div>
+        <span v-if="hasActiveFilters" class="app-pill app-pill-primary">已启用 {{ activeFilterCount }} 个筛选</span>
+      </div>
+
+      <div class="app-toolbar-row" role="toolbar" aria-label="筛选与搜索">
+        <UInput v-model="searchQuery" icon="i-lucide-search" size="sm" placeholder="搜索原文 / 译文 / 编号" class="w-full sm:w-64" aria-label="搜索字幕内容" />
         <UButton
           :label="`需要处理 ${contentCounts.needsAttention}`"
           size="sm"
@@ -126,90 +142,112 @@
             :title="advancedFilterCount ? `已启用 ${advancedFilterCount} 个高级筛选` : '打开高级筛选'"
           />
           <template #content>
-            <div class="w-[22rem] max-w-[calc(100vw-2rem)] space-y-3 p-3">
+            <div class="max-h-[70vh] w-[22rem] max-w-[calc(100vw-2rem)] space-y-2 overflow-y-auto p-3">
               <div class="flex items-center justify-between gap-2">
                 <p class="app-section-title">高级筛选</p>
                 <UButton label="重置" icon="i-lucide-filter-x" size="xs" color="neutral" variant="ghost" :disabled="!advancedFilterCount" @click="resetAdvancedFilters" />
               </div>
-              <UFormField label="状态筛选">
-                <USelect v-model="statusFilter" :items="statusFilterItems" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField label="内容筛选">
-                <USelect v-model="contentFilter" :items="contentFilterItems" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField label="原因筛选">
-                <USelect v-model="reasonFilter" :items="reasonFilterItems" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField label="ASR 置信度">
-                <USelect v-model="confidenceFilter" :items="confidenceFilterItems" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField label="翻译质量">
-                <USelect v-model="qualityFilter" :items="qualityFilterItems" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField v-if="proofreadIssueCount" label="AI 校对问题">
-                <USelect v-model="proofreadIssueFilter" :items="proofreadIssueFilterItems" size="sm" class="w-full" />
-              </UFormField>
+              <div class="app-field-row">
+                <UFormField label="状态筛选" class="w-full">
+                  <USelect v-model="statusFilter" :items="statusFilterItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
+              <div class="app-field-row">
+                <UFormField label="内容筛选" class="w-full">
+                  <USelect v-model="contentFilter" :items="contentFilterItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
+              <div class="app-field-row">
+                <UFormField label="原因筛选" class="w-full">
+                  <USelect v-model="reasonFilter" :items="reasonFilterItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
+              <div class="app-field-row">
+                <UFormField label="ASR 置信度" class="w-full">
+                  <USelect v-model="confidenceFilter" :items="confidenceFilterItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
+              <div class="app-field-row">
+                <UFormField label="翻译质量" class="w-full">
+                  <USelect v-model="qualityFilter" :items="qualityFilterItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
+              <div v-if="proofreadIssueCount" class="app-field-row">
+                <UFormField label="AI 校对问题" class="w-full">
+                  <USelect v-model="proofreadIssueFilter" :items="proofreadIssueFilterItems" size="sm" class="w-full" />
+                </UFormField>
+              </div>
               <p class="app-caption">译文与原文相同会忽略标点、空格、大小写和格式标签。AI 问题来自一致性检查缓存。</p>
             </div>
           </template>
         </UPopover>
         <UButton v-if="hasActiveFilters" label="清空筛选" icon="i-lucide-filter-x" size="sm" color="neutral" variant="ghost" @click="resetFilters" />
       </div>
-
-      <div class="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-        <span>已选 {{ selectedEntries.length }}</span>
-        <span v-if="dirtyCount > 0" class="text-primary-700 dark:text-primary-300">待保存 {{ dirtyCount }}</span>
-        <span v-if="hasActiveFilters" class="text-primary-600 dark:text-primary-400">已启用 {{ activeFilterCount }} 个筛选</span>
-
-        <div class="ml-auto flex flex-wrap items-center gap-1.5">
-          <UButton label="全选筛选结果" size="xs" color="neutral" variant="ghost" title="选中当前筛选出的所有条目（跨页生效）" @click="selectVisible" />
-          <UButton label="反选" size="xs" color="neutral" variant="ghost" title="反转当前筛选结果的选中状态" @click="invertVisibleSelection" />
-          <UButton label="清空选择" size="xs" color="neutral" variant="ghost" @click="clearSelection" />
-          <span class="mx-1 hidden h-4 w-px bg-gray-200 dark:bg-gray-700 sm:block" />
-          <UButton label="重译选中" size="xs" color="primary" variant="soft" :loading="retranslating" title="对已勾选条目调用模型重译；会覆盖当前译文和最终导出" @click="retranslateSelected" />
-          <UButton label="重译筛选" size="xs" color="primary" variant="ghost" :loading="retranslating" title="直接重译当前筛选出的全部条目" @click="retranslateFiltered" />
-          <span v-if="retranslating && retranslateProgress" class="text-[11px] font-medium text-primary-700 dark:text-primary-300">{{ retranslateProgress.completed }} / {{ retranslateProgress.total }} 块</span>
-          <UButton label="设为原文" size="xs" color="warning" variant="ghost" title="只把选中条目的最终导出设为原文，不改变当前译文" @click="applyBulkOriginal" />
-          <UPopover :content="{ align: 'end' }">
-            <UButton label="更多" icon="i-lucide-ellipsis" size="xs" color="neutral" variant="ghost" title="顺序与错位修正" />
-            <template #content>
-              <div class="w-64 max-w-[calc(100vw-2rem)] space-y-1 p-2">
-                <p class="section-title px-2 py-1">顺序调整</p>
-                <UButton label="所选上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="moveSelectedUp" />
-                <UButton label="所选下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="moveSelectedDown" />
-                <p class="section-title px-2 pb-1 pt-2">译文平移</p>
-                <UButton label="从选中处下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="shiftAllCol('translatedText', 1)" />
-                <UButton label="从选中处上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="shiftAllCol('translatedText', -1)" />
-                <UButton label="选区内下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="batchShiftCol('translatedText', 1)" />
-                <UButton label="选区内上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="batchShiftCol('translatedText', -1)" />
-                <p class="section-title px-2 pb-1 pt-2">导出文本</p>
-                <UButton label="恢复译文" icon="i-lucide-rotate-ccw" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="batchRestoreTranslated" />
-                <UButton label="导出文本下移" icon="i-lucide-arrow-down" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="shiftAllCol('finalText', 1)" />
-                <UButton label="导出文本上移" icon="i-lucide-arrow-up" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="shiftAllCol('finalText', -1)" />
-                <p class="section-title px-2 pb-1 pt-2">整体时间偏移</p>
-                <div class="flex items-center gap-1 px-2">
-                  <UInput v-model.number="timeOffsetSeconds" type="number" step="0.1" size="xs" class="min-w-0 flex-1" aria-label="时间偏移秒数" placeholder="秒" />
-                  <UButton label="应用偏移" size="xs" color="primary" variant="soft" @click="applyTimeOffset(timeOffsetSeconds)" />
-                </div>
-                <div class="flex gap-1 px-2">
-                  <UButton label="-0.5s" size="xs" color="neutral" variant="ghost" @click="applyTimeOffset(-0.5)" />
-                  <UButton label="+0.5s" size="xs" color="neutral" variant="ghost" @click="applyTimeOffset(0.5)" />
-                </div>
-                <p class="app-caption px-2">作用于全部已加载条目，保存后生效。</p>
-              </div>
-            </template>
-          </UPopover>
-          <UButton label="保存修改" size="xs" color="neutral" :loading="saving" :disabled="dirtyCount === 0" title="写入核对数据，但不会生成字幕文件" @click="saveChanges()" />
-        </div>
-      </div>
-    </div>
+    </section>
 
     <div class="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <div class="min-w-0">
+      <div class="min-w-0 space-y-4">
+        <div class="app-toolbar-card xl:sticky xl:top-3 xl:z-30">
+          <div class="app-toolbar-row min-w-0">
+            <span class="app-pill app-pill-neutral">已选 {{ selectedEntries.length }}</span>
+            <span v-if="dirtyCount > 0" class="app-pill app-pill-warning">待保存 {{ dirtyCount }}</span>
+            <span v-if="hasActiveFilters" class="app-pill app-pill-primary">已启用 {{ activeFilterCount }} 个筛选</span>
+          </div>
+
+          <div class="app-toolbar-row min-w-0 sm:justify-end" role="toolbar" aria-label="批量操作">
+            <UPopover :content="{ align: 'end' }">
+              <UButton label="选择" icon="i-lucide-list-checks" size="xs" color="neutral" variant="ghost" title="全选、反选或清空选择" />
+              <template #content>
+                <div class="w-44 space-y-1 p-2">
+                  <UButton label="全选筛选结果" icon="i-lucide-check-check" size="xs" color="neutral" variant="ghost" class="w-full justify-start" title="选中当前筛选出的所有条目（跨页生效）" @click="selectVisible" />
+                  <UButton label="反选" icon="i-lucide-repeat-2" size="xs" color="neutral" variant="ghost" class="w-full justify-start" title="反转当前筛选结果的选中状态" @click="invertVisibleSelection" />
+                  <UButton label="清空选择" icon="i-lucide-x" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="clearSelection" />
+                </div>
+              </template>
+            </UPopover>
+            <span class="mx-1 hidden h-4 w-px bg-gray-200 dark:bg-gray-700 sm:block" />
+            <UButton label="重译选中" size="xs" color="primary" variant="soft" :loading="retranslating" title="对已勾选条目调用模型重译；会覆盖当前译文和最终导出" @click="retranslateSelected" />
+            <UButton label="重译筛选" size="xs" color="primary" variant="ghost" :loading="retranslating" title="直接重译当前筛选出的全部条目" @click="retranslateFiltered" />
+            <span v-if="retranslating && retranslateProgress" class="app-meta font-medium text-primary-700 dark:text-primary-300">{{ retranslateProgress.completed }} / {{ retranslateProgress.total }} 块</span>
+            <UButton label="设为原文" size="xs" color="warning" variant="ghost" title="只把选中条目的最终导出设为原文，不改变当前译文" @click="applyBulkOriginal" />
+            <UPopover :content="{ align: 'end' }">
+              <UButton label="更多" icon="i-lucide-ellipsis" size="xs" color="neutral" variant="ghost" title="顺序与错位修正" />
+              <template #content>
+                <div class="w-64 max-w-[calc(100vw-2rem)] space-y-1 p-2">
+                  <p class="section-title px-2 py-1">顺序调整</p>
+                  <UButton label="所选上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="moveSelectedUp" />
+                  <UButton label="所选下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="moveSelectedDown" />
+                  <p class="section-title px-2 pb-1 pt-2">译文平移</p>
+                  <UButton label="从选中处下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="shiftAllCol('translatedText', 1)" />
+                  <UButton label="从选中处上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="shiftAllCol('translatedText', -1)" />
+                  <UButton label="选区内下移" icon="i-lucide-arrow-down" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="batchShiftCol('translatedText', 1)" />
+                  <UButton label="选区内上移" icon="i-lucide-arrow-up" size="xs" color="neutral" variant="ghost" class="w-full justify-start" @click="batchShiftCol('translatedText', -1)" />
+                  <p class="section-title px-2 pb-1 pt-2">导出文本</p>
+                  <UButton label="恢复译文" icon="i-lucide-rotate-ccw" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="batchRestoreTranslated" />
+                  <UButton label="导出文本下移" icon="i-lucide-arrow-down" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="shiftAllCol('finalText', 1)" />
+                  <UButton label="导出文本上移" icon="i-lucide-arrow-up" size="xs" color="primary" variant="ghost" class="w-full justify-start" @click="shiftAllCol('finalText', -1)" />
+                  <p class="section-title px-2 pb-1 pt-2">整体时间偏移</p>
+                  <div class="app-field-row mx-2">
+                    <UInput v-model.number="timeOffsetSeconds" type="number" step="0.1" size="xs" class="min-w-0 flex-1" aria-label="时间偏移秒数" placeholder="秒" />
+                    <UButton label="应用偏移" size="xs" color="primary" variant="soft" @click="applyTimeOffset(timeOffsetSeconds)" />
+                  </div>
+                  <div class="flex gap-1 px-2">
+                    <UButton label="-0.5s" size="xs" color="neutral" variant="ghost" @click="applyTimeOffset(-0.5)" />
+                    <UButton label="+0.5s" size="xs" color="neutral" variant="ghost" @click="applyTimeOffset(0.5)" />
+                  </div>
+                  <p class="app-caption px-2">作用于全部已加载条目，保存后生效。</p>
+                </div>
+              </template>
+            </UPopover>
+            <span class="mx-1 hidden h-4 w-px bg-gray-200 dark:bg-gray-700 sm:block" />
+            <UButton label="保存修改" icon="i-lucide-save" size="sm" color="primary" :loading="saving" :disabled="dirtyCount === 0" title="写入核对数据，但不会生成字幕文件" @click="saveChanges()" />
+          </div>
+        </div>
+
         <div class="surface-card overflow-hidden">
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-            <span>共 {{ summary.total }} 条 · 筛选结果 {{ filteredEntries.length }} 条 · 第 {{ currentPage }} / {{ totalPages }} 页</span>
-            <div class="flex items-center gap-2">
+          <div class="app-toolbar-row justify-between gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+            <span class="app-meta">共 {{ summary.total }} 条 · 筛选结果 {{ filteredEntries.length }} 条 · 第 {{ currentPage }} / {{ totalPages }} 页</span>
+            <div class="app-toolbar-row ml-auto">
               <USelect v-model="pageSize" :items="pageSizeItems" size="xs" class="w-24" aria-label="每页条数" />
               <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="currentPage <= 1" @click="currentPage -= 1" />
               <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="currentPage >= totalPages" @click="currentPage += 1" />
@@ -220,7 +258,7 @@
             <ReviewEntryCard
               v-for="entry in pagedEntries"
               :key="entry.subtitleId"
-              v-memo="[entry.finalText, entry.translatedText, entry.originalText, entry.reviewStatus, entry.reviewReasons?.join(','), entry.selected, entry.edited, entry.asrConfidence, entry.qualityScore, entry.qualityIssues?.join(','), entry.startTime, entry.endTime, focusedSubtitleId === String(entry.subtitleId), proofreadRevision]"
+              v-memo="[entry.finalText, entry.translatedText, entry.originalText, entry.reviewStatus, entry.reviewReasons?.join(','), entry.selected, entry.edited, entry.asrConfidence, entry.qualityScore, entry.qualityIssues?.join(','), entry.startTime, entry.endTime, focusedSubtitleId === String(entry.subtitleId), retranslatingSingleId, qualityThreshold, proofreadRevision]"
               :id="`review-entry-${entry.subtitleId}`"
               tabindex="-1"
               :entry="entry"
@@ -265,7 +303,7 @@
       </div>
 
       <div class="surface-card hidden max-h-[calc(100vh-2rem)] flex-col overflow-hidden xl:sticky xl:top-4 xl:flex">
-        <div class="flex items-center gap-1 border-b border-gray-100 p-2 dark:border-gray-800">
+        <div class="app-toolbar-row gap-1 border-b border-gray-100 p-2 dark:border-gray-800">
           <button
             type="button"
             class="rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors"
@@ -283,16 +321,16 @@
             @click="switchRightPanel('proofread')"
           >
             AI 校对
-            <UBadge v-if="proofreadIssueCount" color="warning" variant="subtle">{{ proofreadIssueCount }}</UBadge>
+            <span v-if="proofreadIssueCount" class="app-pill app-pill-warning">{{ proofreadIssueCount }}</span>
           </button>
           <UButton v-if="rightPanelTab === 'preview'" label="刷新" size="xs" color="neutral" variant="ghost" class="ml-auto" :loading="previewLoading" @click="loadPreview" />
         </div>
 
         <div v-if="rightPanelTab === 'preview'" class="min-h-0 flex-1 overflow-y-auto">
-          <div class="flex flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+          <div class="app-toolbar-row gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
             <USelect v-model="previewFormat" :items="previewFormatItems" size="xs" class="w-24" aria-label="预览格式" />
             <USelect v-model="bilingualLayout" :items="bilingualLayoutItems" size="xs" class="w-32" aria-label="双语布局" />
-            <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ previewFormat === 'ass' ? 'ASS 样式预览' : 'SRT 文本预览' }}</span>
+            <span class="app-meta">{{ previewFormat === 'ass' ? 'ASS 样式预览' : 'SRT 文本预览' }}</span>
           </div>
           <div class="p-3">
             <div v-if="previewLoading" class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
@@ -382,6 +420,8 @@
 </template>
 
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
+
 definePageMeta({ key: route => String(route.params.id || '') })
 import {
   proofreadIssueLabel,
@@ -401,6 +441,8 @@ import {
   matchesReviewSearch,
   type ReviewContentFilter
 } from '~~/shared/reviewFilters'
+
+const ReviewProofreadPanel = defineAsyncComponent(() => import('~/components/ReviewProofreadPanel.vue'))
 
 useHead({
   title: '字幕核对 - SubX'

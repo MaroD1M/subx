@@ -28,9 +28,12 @@ const schema = readFileSync(new URL('./postgres-schema.sql', import.meta.url), '
 
 const tables = [
   'config', 'tasks', 'translations_cache', 'task_responses', 'transcription_runs', 'asr_segments',
+  'task_proofread_cache', 'asr_checkpoints', 'review_jobs', 'series_profiles',
   'watch_folders', 'watch_events', 'notification_channels', 'notification_deliveries',
   'api_tokens', 'api_audit_logs', 'integration_events', 'task_jobs', 'task_logs',
   'task_review_entries', 'translation_quality_runs', 'translation_quality_entries',
+  'library_coverage_index', 'coverage_snapshots', 'coverage_auto_fill_policies',
+  'translation_memory', 'media_metadata_cache', 'cost_usage',
   'auth', 'sessions', 'schema_migrations'
 ]
 

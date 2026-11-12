@@ -28,14 +28,34 @@ describe('task queue', () => {
       process: () => new Promise<void>((resolve) => { finishProcess = resolve })
     })
 
+    db.prepare(`
+      INSERT INTO tasks (task_id, file_path, model, status, progress)
+      VALUES ('queue-pause', '/tmp/demo.srt', 'test-model', 'transcribing', 20)
+    `).run()
+
     await queue.add('queue-pause')
     await expect.poll(() => queue.isActive('queue-pause'), { timeout: 2000 }).toBe(true)
-    expect(queue.pause('queue-pause')).toBe(true)
-    expect((db.prepare('SELECT status FROM task_jobs WHERE task_id = ?').get('queue-pause') as any).status).toBe('paused')
+    expect(queue.pause('queue-pause')).toEqual({ paused: false, pending: true })
+    expect((db.prepare('SELECT status FROM task_jobs WHERE task_id = ?').get('queue-pause') as any).status).toBe('running')
     expect(isTaskCancelled('queue-pause')).toBe(false)
 
+    db.prepare("UPDATE tasks SET status = 'paused' WHERE task_id = 'queue-pause'").run()
     finishProcess?.()
-    await new Promise(resolve => setTimeout(resolve, 20))
+    await expect.poll(
+      () => (db.prepare('SELECT status FROM task_jobs WHERE task_id = ?').get('queue-pause') as any)?.status,
+      { timeout: 2000 }
+    ).toBe('paused')
+  })
+
+  it('pauses a queued task immediately', () => {
+    db.prepare("INSERT INTO task_jobs (task_id, status) VALUES ('queue-queued-pause', 'queued')").run()
+    const queue = new TaskQueue({
+      getTask: () => null,
+      process: async () => undefined
+    })
+
+    expect(queue.pause('queue-queued-pause')).toEqual({ paused: true, pending: false })
+    expect((db.prepare('SELECT status FROM task_jobs WHERE task_id = ?').get('queue-queued-pause') as any).status).toBe('paused')
   })
 
   it('claims a queued task and supports cancellation', async () => {

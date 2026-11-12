@@ -35,6 +35,7 @@ export interface CoverageResult {
   scanned: number
   truncated: boolean
   cachedAt: string
+  hasCache?: boolean
   summary: { total: number, done: number, review: number, processing: number, failed: number, missing: number }
   series: Array<{ seriesKey: string, seriesTitle: string, files: CoverageFile[] }>
   files: CoverageFile[]
@@ -48,6 +49,19 @@ interface CoverageTaskRow {
   output_path?: string | null
   created_at?: string | null
   updated_at?: string | null
+}
+
+interface CoverageIndexRow {
+  path?: string | null
+  status?: string | null
+  task_id?: string | null
+  task_status?: string | null
+  subtitle_path?: string | null
+  subtitle_source?: string | null
+  matched_language?: string | null
+  embedded_track_title?: string | null
+  file_mtime?: string | null
+  scanned_at?: string | null
 }
 
 interface CoverageCacheEntry {
@@ -288,6 +302,41 @@ export function deriveCoverageStatus(
   return subtitleExists ? 'done' : 'missing'
 }
 
+function summarizeFiles(files: CoverageFile[]): CoverageResult['summary'] {
+  const summary = {
+    total: files.length,
+    done: 0,
+    review: 0,
+    processing: 0,
+    failed: 0,
+    missing: 0
+  }
+  for (const file of files) summary[file.status] += 1
+  return summary
+}
+
+function groupFiles(files: CoverageFile[]): CoverageResult['series'] {
+  const seriesMap = new Map<string, { seriesKey: string, seriesTitle: string, files: CoverageFile[] }>()
+  for (const file of files) {
+    let group = seriesMap.get(file.seriesKey)
+    if (!group) {
+      group = { seriesKey: file.seriesKey, seriesTitle: file.seriesTitle, files: [] }
+      seriesMap.set(file.seriesKey, group)
+    }
+    group.files.push(file)
+  }
+
+  const series = Array.from(seriesMap.values())
+    .sort((a, b) => (
+      a.seriesTitle.localeCompare(b.seriesTitle, 'zh-CN')
+      || a.seriesKey.localeCompare(b.seriesKey, 'zh-CN')
+    ))
+  for (const group of series) {
+    group.files.sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'))
+  }
+  return series
+}
+
 function persistCoverageIndex(result: CoverageResult) {
   try {
     const db = useDb()
@@ -333,7 +382,123 @@ function persistCoverageIndex(result: CoverageResult) {
   }
 }
 
-export function updateCoverageIndexForTask(taskId: string) {
+export function persistCoverageSnapshot(result: CoverageResult, includeEmbedded: boolean) {
+  try {
+    const db = useDb()
+    if (!db?.prepare) return
+    db.prepare(`
+      INSERT INTO coverage_snapshots (
+        root_id, target_language, include_embedded, scanned_at, truncated, result_json
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(root_id, target_language, include_embedded) DO UPDATE SET
+        scanned_at=excluded.scanned_at, truncated=excluded.truncated, result_json=excluded.result_json
+    `).run(
+      result.rootId,
+      result.targetLanguage,
+      includeEmbedded ? 1 : 0,
+      new Date().toISOString(),
+      result.truncated ? 1 : 0,
+      JSON.stringify(result)
+    )
+  } catch (error) {
+    console.warn('[Coverage] Failed to persist coverage snapshot:', (error as any)?.message || error)
+  }
+}
+
+export function readCoverageSnapshot(
+  rootId: string,
+  targetLanguage: string,
+  includeEmbedded: boolean
+): CoverageResult | null {
+  try {
+    const db = useDb()
+    if (!db?.prepare) return null
+    const row = db.prepare(`
+      SELECT result_json, scanned_at, truncated
+      FROM coverage_snapshots
+      WHERE root_id = ? AND target_language = ? AND include_embedded = ?
+    `).get(rootId, targetLanguage, includeEmbedded ? 1 : 0) as any
+    if (!row?.result_json) return null
+    const parsed = JSON.parse(String(row.result_json))
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.files) || !Array.isArray(parsed.series)) return null
+    const result = parsed as CoverageResult
+    return {
+      ...result,
+      cachedAt: toUtcIsoString(row.scanned_at) || result.cachedAt,
+      truncated: row.truncated == null ? Boolean(result.truncated) : Boolean(row.truncated)
+    }
+  } catch {
+    return null
+  }
+}
+
+function loadCoverageIndexRows(rootId: string, targetLanguage: string): CoverageIndexRow[] {
+  try {
+    const db = useDb()
+    if (!db?.prepare) return []
+    return db.prepare(`
+      SELECT path, status, task_id, task_status, subtitle_path, subtitle_source,
+        matched_language, embedded_track_title, file_mtime, scanned_at
+      FROM library_coverage_index
+      WHERE root_id = ? AND target_language = ?
+    `).all(rootId, targetLanguage) as CoverageIndexRow[]
+  } catch {
+    return []
+  }
+}
+
+function applyCoverageTaskState(file: CoverageFile, row: CoverageIndexRow): CoverageFile {
+  const taskId = row.task_id ? String(row.task_id) : undefined
+  const taskStatus = row.task_status ? String(row.task_status) : undefined
+  if (!taskId && !taskStatus) return file
+
+  // Subtitle presence must come from the variant-specific snapshot. The
+  // shared index may have been written by the other includeEmbedded variant.
+  const subtitleExists = Boolean(file.subtitlePath || file.subtitleSource)
+  const status = deriveCoverageStatus(taskStatus ? { status: taskStatus } : null, subtitleExists)
+  return { ...file, status, taskId, taskStatus }
+}
+
+export function overlayCoverageIndex(result: CoverageResult): CoverageResult {
+  const rows = loadCoverageIndexRows(result.rootId, result.targetLanguage)
+  if (!rows.length) return result
+
+  const rowsByPath = new Map<string, CoverageIndexRow>()
+  for (const row of rows) {
+    if (!row?.path) continue
+    rowsByPath.set(normalizePath(String(row.path)), row)
+  }
+
+  const patch = (file: CoverageFile) => {
+    const row = rowsByPath.get(normalizePath(file.path))
+    if (!row) return file
+    return applyCoverageTaskState(file, row)
+  }
+
+  const files = result.files.map(patch)
+  const series = result.series.map(group => ({ ...group, files: group.files.map(patch) }))
+  return { ...result, files, series, summary: summarizeFiles(files) }
+}
+
+async function resolveCoverageOptions(options: {
+  targetLanguage?: string
+  includeEmbedded?: boolean
+}) {
+  const requestedLanguage = String(options.targetLanguage || '').trim()
+  const targetLanguage = requestedLanguage
+    || String((await ConfigService.getConfig()).targetLanguage || 'zh-CN').trim()
+    || 'zh-CN'
+  return {
+    targetLanguage,
+    includeEmbedded: options.includeEmbedded !== false
+  }
+}
+
+function coverageCacheKey(rootId: string, targetLanguage: string, includeEmbedded: boolean) {
+  return `${rootId}\u0000${targetLanguage}\u0000${includeEmbedded ? '1' : '0'}`
+}
+
+export async function updateCoverageIndexForTask(taskId: string) {
   try {
     const db = useDb()
     const task = db.prepare('SELECT task_id, file_path, root_id, target_lang, status FROM tasks WHERE task_id = ?').get(taskId) as any
@@ -574,18 +739,31 @@ export function clearEmbeddedSubtitleCache() {
   embeddedSubtitleCache.clear()
 }
 
-export async function buildLibraryCoverage(
+export async function getCachedLibraryCoverage(
+  rootId: string,
+  options: { targetLanguage?: string, includeEmbedded?: boolean } = {}
+): Promise<CoverageResult | null> {
+  const { targetLanguage, includeEmbedded } = await resolveCoverageOptions(options)
+  const snapshot = readCoverageSnapshot(rootId, targetLanguage, includeEmbedded)
+  if (snapshot) {
+    const result = overlayCoverageIndex({ ...snapshot, targetLanguage, hasCache: true })
+    result.hasCache = true
+    return result
+  }
+
+  // Snapshots are variant-specific. Never reconstruct from the shared index:
+  // its rows don't carry includeEmbedded and can belong to another variant.
+  return null
+}
+
+export async function scanLibraryCoverage(
   rootId: string,
   options: { targetLanguage?: string, refresh?: boolean, includeEmbedded?: boolean } = {}
 ): Promise<CoverageResult> {
-  const requestedLanguage = String(options.targetLanguage || '').trim()
-  const targetLanguage = requestedLanguage
-    || String((await ConfigService.getConfig()).targetLanguage || 'zh-CN').trim()
-    || 'zh-CN'
+  const { targetLanguage, includeEmbedded } = await resolveCoverageOptions(options)
   const normalizedTarget = normalizeCoverageLanguage(targetLanguage) || normalizeLanguageToken(targetLanguage)
-  const includeEmbedded = options.includeEmbedded !== false
 
-  const cacheKey = `${rootId}\u0000${targetLanguage}\u0000${includeEmbedded ? '1' : '0'}`
+  const cacheKey = coverageCacheKey(rootId, targetLanguage, includeEmbedded)
   const cached = coverageCache.get(cacheKey)
   if (!options.refresh && cached && Date.now() - cached.cachedAt < COVERAGE_CACHE_TTL_MS) {
     return cached.result
@@ -639,35 +817,6 @@ export async function buildLibraryCoverage(
 
   files.sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'))
 
-  const summary = {
-    total: files.length,
-    done: 0,
-    review: 0,
-    processing: 0,
-    failed: 0,
-    missing: 0
-  }
-  for (const file of files) summary[file.status] += 1
-
-  const seriesMap = new Map<string, { seriesKey: string, seriesTitle: string, files: CoverageFile[] }>()
-  for (const file of files) {
-    let group = seriesMap.get(file.seriesKey)
-    if (!group) {
-      group = { seriesKey: file.seriesKey, seriesTitle: file.seriesTitle, files: [] }
-      seriesMap.set(file.seriesKey, group)
-    }
-    group.files.push(file)
-  }
-
-  const series = Array.from(seriesMap.values())
-    .sort((a, b) => (
-      a.seriesTitle.localeCompare(b.seriesTitle, 'zh-CN')
-      || a.seriesKey.localeCompare(b.seriesKey, 'zh-CN')
-    ))
-  for (const group of series) {
-    group.files.sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'))
-  }
-
   const result: CoverageResult = {
     rootId: scanned.rootId || root.id,
     rootName: scanned.rootName || root.name,
@@ -675,12 +824,23 @@ export async function buildLibraryCoverage(
     scanned: Number(scanned.total ?? scanned.files.length),
     truncated: Boolean(scanned.truncated),
     cachedAt: new Date().toISOString(),
-    summary,
-    series,
+    hasCache: true,
+    summary: summarizeFiles(files),
+    series: groupFiles(files),
     files
   }
 
-  if (!result.truncated) persistCoverageIndex(result)
+  if (!result.truncated) {
+    persistCoverageIndex(result)
+    persistCoverageSnapshot(result, includeEmbedded)
+  }
   coverageCache.set(cacheKey, { cachedAt: Date.now(), result })
   return result
+}
+
+export async function buildLibraryCoverage(
+  rootId: string,
+  options: { targetLanguage?: string, refresh?: boolean, includeEmbedded?: boolean } = {}
+): Promise<CoverageResult> {
+  return scanLibraryCoverage(rootId, options)
 }

@@ -14,10 +14,10 @@
     </div>
     <div v-else-if="storage" class="space-y-4">
       <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div class="surface-muted p-3"><p class="app-meta">磁盘总量</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(storage.disk.totalBytes) }}</p></div>
-        <div class="surface-muted p-3"><p class="app-meta">磁盘可用</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(storage.disk.freeBytes) }}</p></div>
-        <div class="surface-muted p-3"><p class="app-meta">缓存合计</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(storage.cacheBytes) }}</p></div>
-        <div class="surface-muted p-3"><p class="app-meta">缓存文件</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ storage.cacheFiles }} 个</p></div>
+        <div class="app-stat"><p class="app-meta">磁盘总量</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(storage.disk.totalBytes) }}</p></div>
+        <div class="app-stat"><p class="app-meta">磁盘可用</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(storage.disk.freeBytes) }}</p></div>
+        <div class="app-stat"><p class="app-meta">缓存合计</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(storage.cacheBytes) }}</p></div>
+        <div class="app-stat"><p class="app-meta">缓存文件</p><p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ storage.cacheFiles }} 个</p></div>
       </div>
 
       <div>
@@ -30,7 +30,7 @@
         </div>
       </div>
 
-      <div class="divide-y divide-gray-100 rounded-xl border border-gray-100 dark:divide-gray-800 dark:border-gray-800">
+      <div class="divide-y divide-gray-100 rounded-lg border border-gray-100 dark:divide-gray-800 dark:border-gray-800">
         <div v-for="category in storage.categories" :key="category.key" class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
@@ -38,12 +38,12 @@
               <UBadge v-if="!category.cleanable" color="neutral" variant="subtle" size="sm">不参与清理</UBadge>
             </div>
             <p class="mt-0.5 app-caption">{{ category.description }}</p>
-            <p v-if="category.path" class="mt-0.5 break-all text-[11px] text-gray-400 dark:text-gray-500">{{ category.path }}</p>
+            <p v-if="category.path" class="mt-0.5 break-all text-xs text-gray-500 dark:text-gray-400">{{ category.path }}</p>
           </div>
           <div class="flex flex-wrap items-center gap-3 sm:justify-end">
             <div class="text-right">
               <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(category.bytes) }}</p>
-              <p class="text-[11px] text-gray-500 dark:text-gray-400">{{ category.files }} 个文件</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ category.files }} 个文件</p>
             </div>
             <div v-if="category.cleanable" class="flex items-center gap-1.5">
               <UButton label="清理旧缓存" size="xs" color="neutral" variant="soft" :loading="storageCleaning" @click="requestStorageCleanup(category, false)" />
@@ -53,14 +53,14 @@
         </div>
       </div>
 
-      <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">“全部清理”也会跳过最近 5 分钟仍在使用的文件，避免和正在运行的任务冲突。模型文件只在「语音识别 → 本地模型管理」中卸载。</p>
+      <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">“全部清理”也会跳过最近 5 分钟仍在使用的文件，避免和正在运行的任务冲突。模型文件只在「语音识别 → 本地模型管理」中卸载。</p>
     </div>
     <div v-else class="py-8 text-center text-xs text-gray-500 dark:text-gray-400">无法读取存储信息，请稍后重试。</div>
 
     <UModal v-model:open="storageConfirmOpen" :title="storageConfirm?.title || '确认清理'" :description="storageConfirm?.description || ''" @update:open="value => { if (!value) storageConfirm = null }">
       <template #content>
         <div class="space-y-4 p-5">
-          <div class="rounded-xl border border-amber-100 bg-amber-50/80 p-3 text-sm leading-6 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+          <div class="app-info-warning p-3 text-sm leading-6">
             清理后不可恢复。该操作只会删除 SubX 缓存和临时文件，不会删除媒体、字幕输出或模型。
           </div>
           <div class="flex items-center justify-end gap-3">

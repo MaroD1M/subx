@@ -4,7 +4,7 @@
     :class="focused ? 'rounded-2xl bg-warning-50/40 ring-2 ring-warning-400/70 dark:bg-warning-900/10' : ''"
     :style="cardStyle"
   >
-    <div class="flex items-start justify-between gap-3">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
       <div class="min-w-0 space-y-2">
         <div class="flex flex-wrap items-center gap-2">
           <span class="inline-flex" @click.prevent="emit('toggle-select', entry, $event)">
@@ -85,24 +85,24 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(180px,0.9fr)_minmax(180px,0.9fr)_minmax(240px,1.2fr)]">
-      <div class="space-y-1.5 rounded-2xl bg-gray-50 p-3 dark:bg-gray-900/60">
-        <p class="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400">原文</p>
-        <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
+    <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.2fr)]">
+      <div class="surface-muted space-y-1.5 p-3">
+        <p class="stat-label">原文</p>
+        <p class="whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">{{ entry.originalText }}</p>
       </div>
-      <div class="space-y-1.5 rounded-2xl bg-gray-50 p-3 dark:bg-gray-900/60">
+      <div class="surface-muted space-y-1.5 p-3">
         <div class="flex items-center justify-between gap-1">
-          <p class="text-[10px] uppercase tracking-widest text-gray-500 dark:text-gray-400" title="AI 当前译文；重译会覆盖此列">当前译文</p>
+          <p class="stat-label" title="AI 当前译文；重译会覆盖此列">当前译文</p>
           <div class="flex items-center gap-0.5">
             <UButton icon="i-lucide-chevron-up" variant="ghost" size="xs" color="neutral" title="译文上移" aria-label="译文上移" @click="emit('shift-translation', entry, -1)" />
             <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="neutral" title="译文下移" aria-label="译文下移" @click="emit('shift-translation', entry, 1)" />
           </div>
         </div>
-        <p class="whitespace-pre-wrap break-words text-[13px] leading-6 text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
+        <p class="whitespace-pre-wrap break-words text-sm leading-6 text-gray-800 dark:text-gray-100">{{ entry.translatedText || '—' }}</p>
       </div>
-      <div class="space-y-2 rounded-2xl border border-primary-100 bg-white p-3 dark:border-primary-900/40 dark:bg-gray-950/60">
+      <div class="space-y-2 rounded-xl border border-primary-100 bg-white p-3 dark:border-primary-900/40 dark:bg-gray-950/60">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <p class="text-[10px] uppercase tracking-widest text-primary-700" title="此列内容会写入最终字幕文件">最终导出</p>
+          <p class="stat-label" title="此列内容会写入最终字幕文件"><span class="text-primary-700 dark:text-primary-300">最终导出</span></p>
           <div class="flex items-center gap-0.5">
             <UButton icon="i-lucide-chevron-up" variant="ghost" size="xs" color="primary" title="最终导出上移" aria-label="最终导出上移" @click="emit('shift-final', entry, -1)" />
             <UButton icon="i-lucide-chevron-down" variant="ghost" size="xs" color="primary" title="最终导出下移" aria-label="最终导出下移" @click="emit('shift-final', entry, 1)" />

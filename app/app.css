@@ -21,33 +21,43 @@
     --ui-color-primary-500: #0f766e !important;
     --ui-color-primary-600: #115e59 !important;
     --ui-color-primary-700: #134e4a !important;
-    --surface-soft: rgba(255, 255, 255, 0.92);
-    --surface-strong: rgba(255, 255, 255, 0.98);
-    --surface-muted: rgba(248, 250, 252, 0.92);
-    --border-soft: rgba(15, 23, 42, 0.08);
-    --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -20px rgba(15, 23, 42, 0.3);
-    --shadow-strong: 0 18px 40px -28px rgba(15, 23, 42, 0.35);
-    --radius-card: 1rem;
-    --radius-control: 0.75rem;
-    --bg-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    --ui-primary: #115e59 !important;
+    --ui-error: #b91c1c !important;
+    --ui-success: #047857 !important;
+    --ui-warning: #92400e !important;
+    --ui-info: #0369a1 !important;
+    --surface-soft: #ffffff;
+    --surface-strong: #ffffff;
+    --surface-muted: #f8fafc;
+    --border-soft: rgba(15, 23, 42, 0.09);
+    --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 20px -18px rgba(15, 23, 42, 0.22);
+    --shadow-strong: 0 16px 36px -26px rgba(15, 23, 42, 0.32);
+    --radius-card: 0.75rem;
+    --radius-control: 0.5rem;
+    --bg-canvas: #f8fafc;
 }
 
 .dark {
     color-scheme: dark;
-    --surface-soft: rgba(17, 24, 39, 0.86);
-    --surface-strong: rgba(17, 24, 39, 0.96);
-    --surface-muted: rgba(15, 23, 42, 0.72);
-    --border-soft: rgba(148, 163, 184, 0.18);
-    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -20px rgba(0, 0, 0, 0.45);
-    --shadow-strong: 0 18px 40px -28px rgba(0, 0, 0, 0.55);
-    --radius-card: 1rem;
-    --radius-control: 0.75rem;
-    --bg-gradient: linear-gradient(180deg, #0a0f1a 0%, #0f172a 100%);
+    --surface-soft: #0f172a;
+    --surface-strong: #0f172a;
+    --surface-muted: #111827;
+    --border-soft: rgba(148, 163, 184, 0.16);
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 20px -18px rgba(0, 0, 0, 0.5);
+    --shadow-strong: 0 16px 36px -26px rgba(0, 0, 0, 0.6);
+    --radius-card: 0.75rem;
+    --radius-control: 0.5rem;
+    --bg-canvas: #0b1120;
+    --ui-primary: #2dd4bf !important;
+    --ui-error: #f87171 !important;
+    --ui-success: #34d399 !important;
+    --ui-warning: #fbbf24 !important;
+    --ui-info: #38bdf8 !important;
 }
 
 body {
     @apply antialiased text-gray-900 dark:text-gray-100;
-    background: var(--bg-gradient);
+    background: var(--bg-canvas);
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'WenQuanYi Micro Hei', sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
@@ -91,7 +101,7 @@ body {
 }
 
 .app-meta {
-    @apply text-[11px] leading-4 text-gray-500 dark:text-gray-400;
+    @apply text-xs leading-5 text-gray-500 dark:text-gray-400;
 }
 
 .version-badge {
@@ -112,11 +122,106 @@ body {
 }
 
 .stat-label {
-    @apply text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400;
+    @apply text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400;
 }
 
 .stat-value {
     @apply text-2xl font-bold text-gray-900 dark:text-white;
+}
+
+@layer components {
+    .app-page-stack {
+        @apply space-y-5;
+    }
+
+    .app-card {
+        background: var(--surface-strong);
+        border: 1px solid var(--border-soft);
+        box-shadow: var(--shadow-soft);
+        border-radius: var(--radius-card);
+    }
+
+    .app-card-muted {
+        background: var(--surface-muted);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-card);
+    }
+
+    .app-card-padding {
+        @apply p-3 sm:p-4;
+    }
+
+    .app-toolbar {
+        @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+    }
+
+    .app-toolbar-meta {
+        @apply flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400;
+    }
+
+    .app-stat-tile {
+        @apply rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/40;
+    }
+
+    .app-stat-label {
+        @apply text-[11px] font-medium leading-4 text-gray-500 dark:text-gray-400;
+    }
+
+    .app-stat-value {
+        @apply text-lg font-bold tabular-nums text-gray-900 dark:text-white;
+    }
+
+    .app-info-banner {
+        @apply flex items-start gap-2 rounded-lg border px-3 py-2 text-xs leading-5;
+    }
+
+    .app-info-success {
+        @apply border-emerald-200/70 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300;
+    }
+
+    .app-info-warning {
+        @apply border-amber-200/70 bg-amber-50/70 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300;
+    }
+
+    .app-info-error {
+        @apply border-red-200/70 bg-red-50/70 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300;
+    }
+
+    .app-info-info {
+        @apply border-sky-200/70 bg-sky-50/70 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-300;
+    }
+
+    .app-pill {
+        @apply inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none;
+    }
+
+    .app-pill-neutral {
+        @apply border-gray-200/80 bg-gray-50 text-gray-600 dark:border-gray-700/60 dark:bg-gray-900/40 dark:text-gray-300;
+    }
+
+    .app-pill-primary {
+        @apply border-primary-200/70 bg-primary-50 text-primary-700 dark:border-primary-800/60 dark:bg-primary-950/30 dark:text-primary-300;
+    }
+
+    .app-pill-success {
+        @apply border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300;
+    }
+
+    .app-pill-warning {
+        @apply border-amber-200/70 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300;
+    }
+
+    .app-pill-missing {
+        @apply border-orange-200/70 bg-orange-50 text-orange-700 dark:border-orange-800/60 dark:bg-orange-950/30 dark:text-orange-300;
+    }
+
+    .app-pill-error {
+        @apply border-red-200/70 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300;
+    }
+
+    .app-pill-info {
+        @apply border-sky-200/70 bg-sky-50 text-sky-700 dark:border-sky-800/60 dark:bg-sky-950/30 dark:text-sky-300;
+    }
 }
 
 .page-title {
@@ -234,4 +339,66 @@ body {
 .content-auto-node {
     content-visibility: auto;
     contain-intrinsic-size: 44px;
+}
+
+@layer components {
+    .app-page {
+        @apply space-y-5;
+    }
+
+    .app-section {
+        background: var(--surface-strong);
+        border: 1px solid var(--border-soft);
+        box-shadow: var(--shadow-soft);
+        border-radius: var(--radius-card);
+        @apply p-4 sm:p-5;
+    }
+
+    .app-section-head {
+        @apply flex flex-col gap-3 border-b border-gray-100 pb-3 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between;
+    }
+
+    .app-section-body {
+        @apply pt-4;
+    }
+
+    .app-toolbar-row {
+        @apply flex flex-wrap items-center gap-2;
+    }
+
+    .app-toolbar-card {
+        background: var(--surface-strong);
+        border: 1px solid var(--border-soft);
+        box-shadow: var(--shadow-soft);
+        border-radius: var(--radius-card);
+        @apply flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4;
+    }
+
+    .app-stat-grid {
+        @apply grid gap-2 sm:grid-cols-2 xl:grid-cols-4;
+    }
+
+    .app-stat {
+        @apply rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/40;
+    }
+
+    .app-field-row {
+        @apply flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/40;
+    }
+
+    .app-empty {
+        @apply rounded-xl border border-dashed border-gray-300 bg-white/70 px-4 py-8 text-center dark:border-gray-700 dark:bg-gray-950/40;
+    }
+
+    .app-divider {
+        @apply h-px w-full bg-gray-100 dark:bg-gray-800;
+    }
+
+    .app-scroll {
+        @apply min-h-0 overflow-y-auto pr-1;
+    }
+
+    .app-code {
+        @apply rounded bg-gray-100 px-1 py-0.5 font-mono text-[11px] text-gray-700 dark:bg-gray-800 dark:text-gray-200;
+    }
 }

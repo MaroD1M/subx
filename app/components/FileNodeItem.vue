@@ -48,7 +48,7 @@
       <UIcon v-else :name="fileIcon" class="w-4 h-4 shrink-0" />
       <div class="min-w-0 flex-1">
         <span class="block text-sm truncate" :title="node.name">{{ displayName }}</span>
-        <span v-if="showSecondaryPath" class="block text-[11px] text-gray-400 dark:text-gray-500 truncate" :title="node.path">{{ node.path }}</span>
+        <span v-if="showSecondaryPath" class="block text-xs text-gray-400 dark:text-gray-500 truncate" :title="node.path">{{ node.path }}</span>
       </div>
     </div>
 

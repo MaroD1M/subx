@@ -18,227 +18,280 @@
       </div>
     </div>
 
-    <div class="surface-card p-4 sm:p-5 space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">全局自动化设置</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">自动任务默认单并发，避免与手动任务争抢资源。</p>
+    <details class="app-section group">
+      <summary class="app-section-head cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <div class="min-w-0">
+          <p class="app-section-title">全局自动化设置</p>
+          <p class="app-caption">并发与通知默认值，展开后可修改。</p>
         </div>
-        <UBadge :color="automationConfig.notificationEnabled === false ? 'neutral' : 'success'" variant="subtle">
-          {{ automationConfig.notificationEnabled === false ? '通知已关闭' : '通知已启用' }}
-        </UBadge>
-      </div>
-      <div class="grid gap-3 md:grid-cols-3">
-        <UFormField label="自动任务并发上限">
-          <UInput v-model.number="automationConfig.automationConcurrency" type="number" min="1" max="10" class="w-full" />
-        </UFormField>
-        <UFormField label="低置信度通知阈值">
-          <UInput v-model.number="lowConfidencePercent" type="number" min="0" max="100" class="w-full">
-            <template #trailing><span class="text-xs text-gray-400">%</span></template>
-          </UInput>
-        </UFormField>
-        <div class="flex items-end">
-          <div class="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 px-3 py-2.5">
-            <span class="text-sm text-gray-600 dark:text-gray-300">启用通知</span>
-            <USwitch v-model="automationConfig.notificationEnabled" aria-label="启用通知" />
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="app-pill" :class="automationConfig.notificationEnabled === false ? 'app-pill-neutral' : 'app-pill-success'">
+            {{ automationConfig.notificationEnabled === false ? '通知已关闭' : '通知已启用' }}
+          </span>
+          <span class="app-pill app-pill-neutral">并发 {{ automationConfig.automationConcurrency }}</span>
+          <UIcon name="i-lucide-chevron-down" class="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </div>
+      </summary>
+      <div class="app-section-body space-y-4">
+        <div class="grid gap-3 md:grid-cols-3">
+          <UFormField label="自动任务并发上限">
+            <UInput v-model.number="automationConfig.automationConcurrency" type="number" min="1" max="10" class="w-full" />
+          </UFormField>
+          <UFormField label="低置信度通知阈值">
+            <UInput v-model.number="lowConfidencePercent" type="number" min="0" max="100" class="w-full">
+              <template #trailing><span class="app-meta">%</span></template>
+            </UInput>
+          </UFormField>
+          <div class="flex items-end">
+            <div class="app-field-row w-full">
+              <span class="text-sm text-gray-600 dark:text-gray-300">启用通知</span>
+              <USwitch v-model="automationConfig.notificationEnabled" aria-label="启用通知" />
+            </div>
           </div>
         </div>
+        <div class="flex justify-end">
+          <UButton label="保存全局设置" icon="i-lucide-save" color="primary" :loading="savingConfig" @click="saveAutomationConfig" />
+        </div>
       </div>
-      <div class="flex justify-end">
-        <UButton label="保存全局设置" icon="i-lucide-save" color="primary" :loading="savingConfig" @click="saveAutomationConfig" />
-      </div>
-    </div>
+    </details>
 
     <div class="space-y-4">
       <AppSubNav v-model="activeTab" :items="tabs" label="自动化分区" />
 
       <div class="min-w-0 space-y-4">
         <section v-show="activeTab === 'folders'" class="space-y-4" aria-label="监控目录">
-          <div class="surface-card p-4 sm:p-5 space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="app-section">
+            <div class="app-section-head">
               <div>
-                <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">监控目录</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">新文件稳定后自动创建任务；历史文件请使用“回填”。</p>
+                <p class="app-section-title">监控目录</p>
+                <p class="app-caption">新文件稳定后自动创建任务；历史文件请使用“回填”。</p>
               </div>
               <UButton label="新增监控目录" icon="i-lucide-folder-plus" color="primary" variant="soft" @click="openFolderModal()" />
             </div>
 
-            <div v-if="!folders.length" class="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/20 p-8 text-center space-y-3">
-              <UIcon name="i-lucide-folder-search" class="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600" />
-              <p class="text-sm font-medium text-gray-700 dark:text-gray-200">还没有监控目录</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">可直接监控整个媒体库，或只监控其中的子目录。</p>
-              <UButton label="新增监控目录" icon="i-lucide-plus" color="primary" variant="soft" @click="openFolderModal()" />
-            </div>
-
-            <div v-else class="space-y-3">
-              <article v-for="folder in folders" :key="folder.id" class="rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-4 space-y-3">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div class="min-w-0 space-y-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ folder.rootName || folder.rootId }}{{ folder.path ? ` / ${folder.path}` : ' / 根目录' }}</p>
-                      <UBadge :color="folder.enabled ? 'success' : 'neutral'" variant="subtle">{{ folder.enabled ? '已启用' : '已停用' }}</UBadge>
-                      <UBadge color="neutral" variant="subtle">{{ folder.mode === 'both' ? '新文件 + 回填' : folder.mode === 'backfill' ? '仅回填' : '仅新文件' }}</UBadge>
-                      <UBadge color="neutral" variant="subtle">{{ folder.recursive ? '递归' : '单层' }}</UBadge>
-                    </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                      扩展名 {{ folder.rules.extensions.join(', ') }} · 稳定 {{ folder.rules.stableSeconds }}s · 目标 {{ folder.outputPolicy.targetLanguage || automationConfig.targetLanguage }}
-                    </p>
-                    <div class="flex flex-wrap gap-2 text-xs">
-                      <UBadge color="primary" variant="soft">待处理 {{ folder.pendingEvents || 0 }}</UBadge>
-                      <UBadge :color="folder.failedEvents ? 'error' : 'neutral'" variant="soft">失败 {{ folder.failedEvents || 0 }}</UBadge>
-                      <UBadge v-if="folder.rules.skipExistingSubtitles" color="neutral" variant="subtle">跳过已有字幕</UBadge>
-                      <UBadge v-if="folder.rules.skipExistingOutput" color="neutral" variant="subtle">跳过已有输出</UBadge>
-                    </div>
-                  </div>
-                  <div class="flex flex-wrap items-center gap-1">
-                    <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="编辑监控目录" @click="openFolderModal(folder)" />
-                    <UButton label="回填" icon="i-lucide-history" size="xs" color="warning" variant="soft" @click="openBackfillModal(folder)" />
-                    <UButton icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" aria-label="删除监控目录" @click="removeFolder(folder)" />
-                  </div>
+            <div class="app-section-body space-y-4">
+              <div v-if="folders.length" class="app-stat-grid">
+                <div class="app-stat">
+                  <p class="app-stat-label">监控目录</p>
+                  <p class="app-stat-value">{{ folderStats.total }}</p>
                 </div>
-              </article>
+                <div class="app-stat">
+                  <p class="app-stat-label">已启用</p>
+                  <p class="app-stat-value">{{ folderStats.enabled }}</p>
+                </div>
+                <div class="app-stat">
+                  <p class="app-stat-label">待处理事件</p>
+                  <p class="app-stat-value">{{ folderStats.pending }}</p>
+                </div>
+                <div class="app-stat">
+                  <p class="app-stat-label">失败事件</p>
+                  <p class="app-stat-value">{{ folderStats.failed }}</p>
+                </div>
+              </div>
+
+              <div v-if="!folders.length" class="app-empty space-y-3">
+                <UIcon name="i-lucide-folder-search" class="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600" />
+                <p class="text-sm font-medium text-gray-700 dark:text-gray-200">还没有监控目录</p>
+                <p class="app-caption">可直接监控整个媒体库，或只监控其中的子目录。</p>
+                <UButton label="新增监控目录" icon="i-lucide-plus" color="primary" variant="soft" @click="openFolderModal()" />
+              </div>
+
+              <div v-else class="space-y-3">
+                <article v-for="folder in folders" :key="folder.id" class="surface-muted p-4 space-y-3">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 space-y-2">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ folder.rootName || folder.rootId }}{{ folder.path ? ` / ${folder.path}` : ' / 根目录' }}</p>
+                        <span class="app-pill" :class="folder.enabled ? 'app-pill-success' : 'app-pill-neutral'">{{ folder.enabled ? '已启用' : '已停用' }}</span>
+                        <span class="app-pill app-pill-neutral">{{ folder.mode === 'both' ? '新文件 + 回填' : folder.mode === 'backfill' ? '仅回填' : '仅新文件' }}</span>
+                        <span class="app-pill app-pill-neutral">{{ folder.recursive ? '递归' : '单层' }}</span>
+                      </div>
+                      <p class="app-meta">
+                        扩展名 {{ folder.rules.extensions.join(', ') }} · 稳定 {{ folder.rules.stableSeconds }}s · 目标 {{ folder.outputPolicy.targetLanguage || automationConfig.targetLanguage }}
+                      </p>
+                      <div class="flex flex-wrap gap-2">
+                        <span class="app-pill app-pill-primary">待处理 {{ folder.pendingEvents || 0 }}</span>
+                        <span class="app-pill" :class="folder.failedEvents ? 'app-pill-error' : 'app-pill-neutral'">失败 {{ folder.failedEvents || 0 }}</span>
+                        <span v-if="folder.rules.skipExistingSubtitles" class="app-pill app-pill-neutral">跳过已有字幕</span>
+                        <span v-if="folder.rules.skipExistingOutput" class="app-pill app-pill-neutral">跳过已有输出</span>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1">
+                      <UButton label="回填" icon="i-lucide-history" size="xs" color="warning" variant="soft" @click="openBackfillModal(folder)" />
+                      <span class="mx-1 h-4 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                      <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="编辑监控目录" title="编辑监控目录" @click="openFolderModal(folder)" />
+                      <UButton icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" aria-label="删除监控目录" title="删除监控目录" @click="removeFolder(folder)" />
+                    </div>
+                  </div>
+                </article>
+              </div>
             </div>
           </div>
         </section>
 
         <section v-show="activeTab === 'events'" class="space-y-4" aria-label="监控事件">
-          <div class="surface-card p-4 sm:p-5 space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="app-section">
+            <div class="app-section-head">
               <div>
-                <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">最近事件</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">去重、过滤、失败原因与自动任务关联都在这里查看。</p>
+                <p class="app-section-title">最近事件</p>
+                <p class="app-caption">去重、过滤、失败原因与自动任务关联都在这里查看。</p>
               </div>
               <USelect v-model="eventStatus" :items="eventStatusOptions" class="w-36" aria-label="事件状态筛选" />
             </div>
 
-            <div v-if="!filteredEvents.length" class="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/20 p-8 text-center text-sm text-gray-500 dark:text-gray-400">
-              当前筛选下暂无事件
-            </div>
-            <div v-else class="space-y-2">
-              <article v-for="item in filteredEvents" :key="item.id" class="rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-3 sm:p-4">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div class="min-w-0 space-y-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <UBadge :color="eventColor(item.status)" variant="subtle">{{ statusLabel(item.status) }}</UBadge>
-                      <p class="break-all text-sm font-medium text-gray-900 dark:text-white">{{ item.path }}</p>
+            <div class="app-section-body">
+              <div v-if="!filteredEvents.length" class="app-empty text-sm text-gray-500 dark:text-gray-400">
+                当前筛选下暂无事件
+              </div>
+              <div v-else class="space-y-2">
+                <article v-for="item in filteredEvents" :key="item.id" class="surface-muted p-3 sm:p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0 space-y-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="app-pill" :class="eventPillClass(item.status)">{{ statusLabel(item.status) }}</span>
+                        <p class="break-all text-sm font-medium text-gray-900 dark:text-white">{{ item.path }}</p>
+                      </div>
+                      <p class="app-meta">{{ item.folderName }} · {{ formatDate(item.createdAt) }} · {{ formatSize(item.size) }}</p>
+                      <p v-if="item.error" class="break-all text-xs text-red-600 dark:text-red-400">{{ item.error }}</p>
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ item.folderName }} · {{ formatDate(item.createdAt) }} · {{ formatSize(item.size) }}</p>
-                    <p v-if="item.error" class="break-all text-xs text-red-600 dark:text-red-400">{{ item.error }}</p>
+                    <div class="flex flex-wrap items-center gap-1">
+                      <UButton v-if="item.taskId" label="任务" icon="i-lucide-external-link" size="xs" color="primary" variant="ghost" :to="`/task/${item.taskId}`" />
+                      <UButton v-if="['failed', 'done', 'skipped'].includes(item.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="warning" variant="soft" @click="retryEvent(item)" />
+                    </div>
                   </div>
-                  <div class="flex flex-wrap items-center gap-1">
-                    <UButton v-if="item.taskId" label="任务" icon="i-lucide-external-link" size="xs" color="primary" variant="ghost" :to="`/task/${item.taskId}`" />
-                    <UButton v-if="['failed', 'done', 'skipped'].includes(item.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="warning" variant="soft" @click="retryEvent(item)" />
-                  </div>
-                </div>
-              </article>
+                </article>
+              </div>
             </div>
           </div>
         </section>
 
         <section v-show="activeTab === 'notifications'" class="space-y-4" aria-label="通知渠道">
-          <div class="surface-card p-4 sm:p-5 space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="app-section">
+            <div class="app-section-head">
               <div>
-                <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">通知渠道</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">任务完成、失败、取消、低置信度和监控异常可分别通知。</p>
+                <p class="app-section-title">通知渠道</p>
+                <p class="app-caption">任务完成、失败、取消、低置信度和监控异常可分别通知。</p>
               </div>
               <UButton label="新增渠道" icon="i-lucide-bell-plus" color="primary" variant="soft" @click="openChannelModal()" />
             </div>
 
-            <div v-if="!channels.length" class="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/20 p-8 text-center text-sm text-gray-500 dark:text-gray-400">
-              尚未配置通知渠道
-            </div>
-            <div v-else class="grid gap-3 xl:grid-cols-2">
-              <article v-for="channel in channels" :key="channel.id" class="rounded-2xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-4 space-y-3">
-                <div class="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ channel.name }}</p>
-                      <UBadge color="primary" variant="subtle">{{ channelTypeLabel(channel.type) }}</UBadge>
-                      <UBadge :color="channel.enabled ? 'success' : 'neutral'" variant="subtle">{{ channel.enabled ? '启用' : '停用' }}</UBadge>
+            <div class="app-section-body">
+              <div v-if="!channels.length" class="app-empty text-sm text-gray-500 dark:text-gray-400">
+                尚未配置通知渠道
+              </div>
+              <div v-else class="grid gap-3 xl:grid-cols-2">
+                <article v-for="channel in channels" :key="channel.id" class="surface-muted p-4 space-y-3">
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ channel.name }}</p>
+                        <span class="app-pill app-pill-primary">{{ channelTypeLabel(channel.type) }}</span>
+                        <span class="app-pill" :class="channel.enabled ? 'app-pill-success' : 'app-pill-neutral'">{{ channel.enabled ? '启用' : '停用' }}</span>
+                      </div>
+                      <p class="mt-1 app-meta">{{ channelEventText(channel) }}</p>
                     </div>
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ channelEventText(channel) }}</p>
+                    <div class="flex items-center gap-1">
+                      <UButton label="测试" icon="i-lucide-send" size="xs" color="primary" variant="soft" :loading="testingChannelId === channel.id" @click="testChannel(channel)" />
+                      <span class="mx-1 h-4 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                      <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="编辑通知渠道" title="编辑通知渠道" @click="openChannelModal(channel)" />
+                      <UButton icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" aria-label="删除通知渠道" title="删除通知渠道" @click="removeChannel(channel)" />
+                    </div>
                   </div>
-                  <div class="flex items-center gap-1">
-                    <UButton label="测试" icon="i-lucide-send" size="xs" color="primary" variant="soft" :loading="testingChannelId === channel.id" @click="testChannel(channel)" />
-                    <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="编辑通知渠道" @click="openChannelModal(channel)" />
-                    <UButton icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" aria-label="删除通知渠道" @click="removeChannel(channel)" />
-                  </div>
-                </div>
-                <p v-if="channel.config.events?.length" class="text-xs text-gray-500 dark:text-gray-400">事件：{{ channel.config.events.map(eventLabel).join('、') }}</p>
-              </article>
+                  <p v-if="channel.config.events?.length" class="app-caption">事件：{{ channel.config.events.map(eventLabel).join('、') }}</p>
+                </article>
+              </div>
             </div>
           </div>
 
-          <div class="surface-card p-4 sm:p-5 space-y-3">
-            <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">最近投递</p>
-            <div v-if="!deliveries.length" class="text-xs text-gray-500 dark:text-gray-400">暂无投递记录</div>
-            <div v-else class="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-              <div v-for="delivery in deliveries" :key="delivery.id" class="rounded-xl border border-gray-100 dark:border-gray-800 px-3 py-2 text-xs">
-                <div class="flex flex-wrap items-center gap-2">
-                  <AppStatusBadge :status="delivery.status" />
-                  <span class="font-medium text-gray-700 dark:text-gray-200">{{ delivery.title }}</span>
-                  <span class="text-gray-400">{{ delivery.channelName }}</span>
-                  <span class="ml-auto text-gray-400">{{ formatDate(delivery.createdAt) }}</span>
+          <div class="app-section">
+            <div class="app-section-head">
+              <div>
+                <p class="app-section-title">最近投递</p>
+                <p class="app-caption">测试与自动通知的发送结果。</p>
+              </div>
+            </div>
+            <div class="app-section-body">
+              <div v-if="!deliveries.length" class="app-caption">暂无投递记录</div>
+              <div v-else class="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                <div v-for="delivery in deliveries" :key="delivery.id" class="surface-muted px-3 py-2">
+                  <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <AppStatusBadge :status="delivery.status" />
+                    <span class="font-medium text-gray-700 dark:text-gray-200">{{ delivery.title }}</span>
+                    <span class="app-meta">{{ delivery.channelName }}</span>
+                    <span class="app-meta ml-auto">{{ formatDate(delivery.createdAt) }}</span>
+                  </div>
+                  <p v-if="delivery.lastError" class="mt-1 break-all text-xs text-red-600 dark:text-red-400">{{ delivery.lastError }}</p>
                 </div>
-                <p v-if="delivery.lastError" class="mt-1 break-all text-red-600 dark:text-red-400">{{ delivery.lastError }}</p>
               </div>
             </div>
           </div>
         </section>
 
         <section v-show="activeTab === 'integrations'" class="space-y-4" aria-label="外部集成">
-          <div class="surface-card p-4 sm:p-5 space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="app-section">
+            <div class="app-section-head">
               <div>
-                <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">下载器 / 媒体服务器 Webhook</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Sonarr、Radarr、Jellyfin、Plex、Emby、Bazarr 事件自动创建任务。</p>
+                <p class="app-section-title">下载器 / 媒体服务器 Webhook</p>
+                <p class="app-caption">Sonarr、Radarr、Jellyfin、Plex、Emby、Bazarr 事件自动创建任务。</p>
               </div>
               <UButton label="保存集成设置" icon="i-lucide-save" color="primary" :loading="savingIntegration" @click="saveIntegrationConfig" />
             </div>
-            <UFormField label="Webhook Token">
-              <div class="flex gap-2">
-                <UInput v-model="integrationConfig.token" type="password" placeholder="至少 16 位随机字符串" class="flex-1" />
-                <UButton label="生成" icon="i-lucide-dices" color="neutral" variant="soft" @click="generateIntegrationToken" />
+            <div class="app-section-body space-y-4">
+              <UFormField label="Webhook Token">
+                <div class="flex gap-2">
+                  <UInput v-model="integrationConfig.token" type="password" placeholder="至少 16 位随机字符串" class="flex-1" />
+                  <UButton label="生成" icon="i-lucide-dices" color="neutral" variant="soft" @click="generateIntegrationToken" />
+                </div>
+              </UFormField>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <UFormField label="回调路径前缀（可选）">
+                  <UInput v-model="integrationConfig.pathFrom" placeholder="/downloads 或 C:\Media" class="w-full" />
+                </UFormField>
+                <UFormField label="映射到 SubX 容器路径">
+                  <UInput v-model="integrationConfig.pathTo" placeholder="/media" class="w-full" />
+                </UFormField>
               </div>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">留空不会清空已有 Token；修改后需要同步更新下载器里的 Webhook URL。保存后请立即复制 URL，刷新页面后 Token 会重新隐藏。</p>
-            </UFormField>
-            <div class="grid gap-3 sm:grid-cols-2">
-              <UFormField label="回调路径前缀（可选）">
-                <UInput v-model="integrationConfig.pathFrom" placeholder="/downloads 或 C:\Media" class="w-full" />
-              </UFormField>
-              <UFormField label="映射到 SubX 容器路径">
-                <UInput v-model="integrationConfig.pathTo" placeholder="/media" class="w-full" />
-              </UFormField>
-            </div>
-            <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">例如下载器回调 <code>/downloads/Movies/A.mkv</code>，映射为 <code>/media/Movies/A.mkv</code>。留空则直接按媒体库路径解析。</p>
 
-            <div class="space-y-2">
-              <p class="text-xs font-medium text-gray-600 dark:text-gray-300">Webhook URL</p>
-              <div v-for="source in integrationSources" :key="source.value" class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/30">
-                <UBadge color="primary" variant="subtle">{{ source.label }}</UBadge>
-                <code class="min-w-0 flex-1 break-all text-[11px] text-gray-600 dark:text-gray-300">{{ webhookUrl(source.value) }}</code>
-                <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" :aria-label="`复制 ${source.label} Webhook`" @click="copyWebhook(source.value)" />
+              <details class="rounded-xl border border-gray-100 dark:border-gray-800 px-3 py-2">
+                <summary class="cursor-pointer app-caption font-medium">Token 与路径映射说明</summary>
+                <div class="mt-2 space-y-1.5 app-caption">
+                  <p>留空不会清空已有 Token；修改后需要同步更新下载器里的 Webhook URL。保存后请立即复制 URL，刷新页面后 Token 会重新隐藏。</p>
+                  <p>例如下载器回调 <code class="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">/downloads/Movies/A.mkv</code>，映射为 <code class="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">/media/Movies/A.mkv</code>。留空则直接按媒体库路径解析。</p>
+                </div>
+              </details>
+
+              <div class="space-y-2">
+                <p class="app-meta font-medium">Webhook URL</p>
+                <div v-for="source in integrationSources" :key="source.value" class="surface-muted flex flex-wrap items-center gap-2 p-3">
+                  <span class="app-pill app-pill-primary">{{ source.label }}</span>
+                  <code class="min-w-0 flex-1 break-all text-xs text-gray-600 dark:text-gray-300">{{ webhookUrl(source.value) }}</code>
+                  <UButton icon="i-lucide-copy" size="xs" color="neutral" variant="ghost" :aria-label="`复制 ${source.label} Webhook`" @click="copyWebhook(source.value)" />
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="surface-card p-4 sm:p-5 space-y-3">
-            <div class="flex items-center justify-between gap-3">
-              <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">最近集成事件</p>
+          <div class="app-section">
+            <div class="app-section-head">
+              <div>
+                <p class="app-section-title">最近集成事件</p>
+                <p class="app-caption">Webhook 触发与任务创建结果。</p>
+              </div>
               <UButton label="刷新" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" @click="refreshIntegrationEvents()" />
             </div>
-            <div v-if="!integrationEvents.length" class="text-xs text-gray-500 dark:text-gray-400">暂无 Webhook 事件</div>
-            <div v-else class="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-              <div v-for="item in integrationEvents" :key="item.id" class="rounded-xl border border-gray-100 dark:border-gray-800 px-3 py-2 text-xs">
-                <div class="flex flex-wrap items-center gap-2">
-                  <UBadge color="primary" variant="subtle">{{ item.source }}</UBadge>
-                  <AppStatusBadge :status="item.status" />
-                  <span class="break-all text-gray-700 dark:text-gray-200">{{ item.path }}</span>
-                  <UButton v-if="item.taskId" label="任务" size="xs" color="primary" variant="ghost" :to="`/task/${item.taskId}`" />
-                  <span class="ml-auto text-gray-400">{{ formatDate(item.createdAt) }}</span>
+            <div class="app-section-body">
+              <div v-if="!integrationEvents.length" class="app-caption">暂无 Webhook 事件</div>
+              <div v-else class="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                <div v-for="item in integrationEvents" :key="item.id" class="surface-muted px-3 py-2">
+                  <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <span class="app-pill app-pill-primary">{{ item.source }}</span>
+                    <AppStatusBadge :status="item.status" />
+                    <span class="break-all text-gray-700 dark:text-gray-200">{{ item.path }}</span>
+                    <UButton v-if="item.taskId" label="任务" size="xs" color="primary" variant="ghost" :to="`/task/${item.taskId}`" />
+                    <span class="app-meta ml-auto">{{ formatDate(item.createdAt) }}</span>
+                  </div>
+                  <p v-if="item.error" class="mt-1 break-all text-xs text-red-600 dark:text-red-400">{{ item.error }}</p>
                 </div>
-                <p v-if="item.error" class="mt-1 break-all text-red-600 dark:text-red-400">{{ item.error }}</p>
               </div>
             </div>
           </div>
@@ -253,12 +306,12 @@
     <UModal v-model:open="folderModalOpen" :title="folderForm.id ? '编辑监控目录' : '新增监控目录'" description="规则越严格，误触发越少。" :ui="{ content: 'sm:max-w-3xl xl:max-w-4xl' }">
       <template #body>
         <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-          <div class="rounded-2xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
-            <p class="text-xs font-semibold text-primary-800 dark:text-primary-200">快速模板</p>
+          <details class="rounded-xl border border-primary-100 bg-primary-50/60 px-3 py-2 dark:border-primary-900/40 dark:bg-primary-950/20">
+            <summary class="cursor-pointer text-xs font-semibold text-primary-800 dark:text-primary-200">快速模板</summary>
             <div class="mt-2 flex flex-wrap gap-2">
               <UButton v-for="template in automationTemplates" :key="template.id" :label="template.name" size="xs" color="primary" variant="soft" :title="template.description" @click="applyAutomationTemplate(template)" />
             </div>
-          </div>
+          </details>
           <div class="grid gap-3 sm:grid-cols-2">
             <UFormField label="媒体库">
               <USelect v-model="folderForm.rootId" :items="rootOptions" class="w-full" />
@@ -286,7 +339,7 @@
           </div>
 
           <details class="rounded-2xl border border-gray-200 dark:border-gray-800 p-3" open>
-            <summary class="cursor-pointer text-sm font-semibold text-gray-800 dark:text-gray-100">过滤规则</summary>
+            <summary class="cursor-pointer app-section-title">过滤规则</summary>
             <div class="mt-3 space-y-3">
               <UFormField label="视频扩展名（逗号分隔）">
                 <UInput v-model="extensionsText" placeholder=".mkv,.mp4" class="w-full" />
@@ -318,34 +371,34 @@
                 <UFormField label="最大体积 MB（0 不限）"><UInput v-model.number="folderForm.rules.maxSizeMb" type="number" min="0" class="w-full" /></UFormField>
                 <UFormField label="最短时长 秒（0 不限）"><UInput v-model.number="folderForm.rules.minDurationSec" type="number" min="0" class="w-full" /></UFormField>
                 <UFormField label="文件稳定等待 秒"><UInput v-model.number="folderForm.rules.stableSeconds" type="number" min="0" class="w-full" /></UFormField>
-                <div class="space-y-3 rounded-xl border border-primary-100 bg-primary-50/50 p-3 sm:col-span-2 dark:border-primary-900/40 dark:bg-primary-950/20">
-                  <div class="flex items-start gap-2">
-                    <UIcon name="i-lucide-regex" class="mt-0.5 h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" />
-                    <div class="min-w-0 space-y-1">
-                      <p class="text-xs font-semibold text-primary-800 dark:text-primary-200">正则怎么写？</p>
-                      <p class="text-[11px] leading-relaxed text-primary-800/80 dark:text-primary-200/80">
+                <details class="rounded-xl border border-primary-100 bg-primary-50/50 p-3 sm:col-span-2 dark:border-primary-900/40 dark:bg-primary-950/20">
+                  <summary class="cursor-pointer text-xs font-semibold text-primary-800 dark:text-primary-200">正则写法与示例</summary>
+                  <div class="mt-3 space-y-3">
+                    <div class="flex items-start gap-2">
+                      <UIcon name="i-lucide-regex" class="mt-0.5 h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" />
+                      <p class="text-xs leading-relaxed text-primary-800 dark:text-primary-200">
                         正则匹配的是相对媒体库的文件路径；多个关键词用 <code class="rounded bg-white/70 px-1 py-0.5 dark:bg-black/20">|</code> 分隔，默认区分大小写，留空表示不限制。点击下方示例可直接填入。
                       </p>
                     </div>
-                  </div>
                   <div class="grid gap-3 sm:grid-cols-2">
                     <div class="space-y-1.5">
-                      <p class="text-[11px] font-medium text-primary-800 dark:text-primary-200">包含示例</p>
+                      <p class="text-xs font-medium text-primary-800 dark:text-primary-200">包含示例</p>
                       <div class="flex flex-wrap gap-1.5">
                         <UButton v-for="snippet in includeRegexSnippets" :key="snippet.value" :label="snippet.label" size="xs" color="primary" variant="soft" :title="`填入：${snippet.value}`" @click="folderForm.rules.includeRegex = snippet.value" />
                       </div>
                     </div>
                     <div class="space-y-1.5">
-                      <p class="text-[11px] font-medium text-primary-800 dark:text-primary-200">排除示例</p>
+                      <p class="text-xs font-medium text-primary-800 dark:text-primary-200">排除示例</p>
                       <div class="flex flex-wrap gap-1.5">
                         <UButton v-for="snippet in excludeRegexSnippets" :key="snippet.value" :label="snippet.label" size="xs" color="neutral" variant="soft" :title="`填入：${snippet.value}`" @click="folderForm.rules.excludeRegex = snippet.value" />
                       </div>
                     </div>
                   </div>
-                  <p class="text-[11px] leading-relaxed text-primary-800/70 dark:text-primary-200/70">
+                  <p class="text-xs leading-relaxed text-primary-800 dark:text-primary-200">
                     例：<code>S01|S02</code> 只处理第 1、2 季；<code>1080p|2160p</code> 只保留高清；<code>Sample|Trailer</code> 跳过样本和预告。
                   </p>
-                </div>
+                  </div>
+                </details>
               </div>
               <div class="grid gap-2 sm:grid-cols-2">
                 <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/30 px-3 py-2.5">
@@ -358,7 +411,7 @@
                 </div>
               </div>
               <details class="rounded-xl border border-gray-100 dark:border-gray-800 p-3">
-                <summary class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300">时间范围（可选）</summary>
+                <summary class="cursor-pointer app-caption font-medium">时间范围（可选）</summary>
                 <div class="mt-3 grid gap-3 sm:grid-cols-2">
                   <UFormField label="创建时间起"><UInput v-model="folderForm.rules.createdAfter" type="datetime-local" class="w-full" /></UFormField>
                   <UFormField label="创建时间止"><UInput v-model="folderForm.rules.createdBefore" type="datetime-local" class="w-full" /></UFormField>
@@ -370,7 +423,7 @@
           </details>
 
           <details class="rounded-2xl border border-gray-200 dark:border-gray-800 p-3" open>
-            <summary class="cursor-pointer text-sm font-semibold text-gray-800 dark:text-gray-100">任务输出策略</summary>
+            <summary class="cursor-pointer app-section-title">任务输出策略</summary>
             <div class="mt-3 grid gap-3 sm:grid-cols-2">
               <UFormField label="目标语言"><UInput v-model="folderForm.outputPolicy.targetLanguage" placeholder="zh-CN（留空使用全局）" class="w-full" /></UFormField>
               <UFormField label="模型（留空使用全局）"><UInput v-model="folderForm.outputPolicy.model" placeholder="gpt-4o-mini" class="w-full" /></UFormField>
@@ -398,7 +451,7 @@
                   :aria-pressed="folderForm.outputPolicy.notifyChannelIds.includes(channel.id)"
                   @click="toggleChannelId(channel.id)"
                 />
-                <span v-if="!channels.length" class="text-xs text-gray-400">暂无可选渠道</span>
+                <span v-if="!channels.length" class="text-xs text-gray-500 dark:text-gray-400">暂无可选渠道</span>
               </div>
             </div>
           </details>
@@ -421,7 +474,7 @@
             <UFormField label="修改时间止"><UInput v-model="backfillForm.end" type="datetime-local" class="w-full" /></UFormField>
           </div>
           <UFormField label="最多加入队列"><UInput v-model.number="backfillForm.limit" type="number" min="1" max="5000" class="w-full" /></UFormField>
-          <p class="text-xs text-gray-500 dark:text-gray-400">回填会按全局自动并发逐步执行，不会一次性打满任务队列。</p>
+          <p class="app-caption">回填会按全局自动并发逐步执行，不会一次性打满任务队列。</p>
         </div>
       </template>
       <template #footer>
@@ -454,7 +507,10 @@
                 <UInput v-model="channelForm.config.proxyUrl" placeholder="http://192.168.1.10:7890" class="min-w-0 flex-1" />
                 <UButton label="测试代理" size="sm" color="neutral" variant="soft" :loading="testingChannelProxy" @click="testChannelProxy" />
               </div>
-              <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">容器里不要写 127.0.0.1，它指向容器自己；填宿主机局域网 IP。留空时使用容器的 HTTPS_PROXY / HTTP_PROXY / ALL_PROXY。</p>
+              <details class="mt-1 rounded-lg border border-gray-100 px-2.5 py-1.5 dark:border-gray-800">
+                <summary class="cursor-pointer app-caption font-medium">代理填写说明</summary>
+                <p class="app-caption mt-1.5">容器里不要写 127.0.0.1，它指向容器自己；填宿主机局域网 IP。留空时使用容器的 HTTPS_PROXY / HTTP_PROXY / ALL_PROXY。</p>
+              </details>
             </UFormField>
           </template>
           <template v-else-if="channelForm.type === 'smtp'">
@@ -574,8 +630,8 @@ const tabs = [
   { value: 'folders', label: '监控目录', icon: 'i-lucide-folder-search' },
   { value: 'events', label: '事件记录', icon: 'i-lucide-list-video' },
   { value: 'notifications', label: '通知渠道', icon: 'i-lucide-bell' },
-  { value: 'api', label: 'API Token', icon: 'i-lucide-key-round' },
-  { value: 'integrations', label: '外部集成', icon: 'i-lucide-cable' }
+  { value: 'integrations', label: '外部集成', icon: 'i-lucide-cable' },
+  { value: 'api', label: 'API Token', icon: 'i-lucide-key-round' }
 ]
 const activeTab = ref(String(route.query.tab || 'folders'))
 if (!tabs.some(tab => tab.value === activeTab.value)) activeTab.value = 'folders'
@@ -606,6 +662,12 @@ watch(configData, (value: any) => {
 
 const { data: foldersData, error: foldersError, refresh: refreshFolders } = await useWatchFoldersData()
 const folders = computed<WatchFolder[]>(() => foldersData.value?.folders || [])
+const folderStats = computed(() => ({
+  total: folders.value.length,
+  enabled: folders.value.filter(folder => folder.enabled).length,
+  pending: folders.value.reduce((total, folder) => total + Number(folder.pendingEvents || 0), 0),
+  failed: folders.value.reduce((total, folder) => total + Number(folder.failedEvents || 0), 0)
+}))
 const { data: eventsData, error: eventsError, refresh: refreshEvents } = await useFetch('/api/watch-events', { query: { limit: 150 } })
 const events = computed<WatchEvent[]>(() => eventsData.value?.events || [])
 const { data: channelsData, error: channelsError, refresh: refreshChannels } = await useFetch('/api/notification-channels')
@@ -882,6 +944,13 @@ function eventColor(status: string) {
   if (status === 'skipped') return 'neutral'
   if (status === 'pending' || status === 'queued' || status === 'processing') return 'warning'
   return 'neutral'
+}
+function eventPillClass(status: string) {
+  const color = eventColor(status)
+  if (color === 'success') return 'app-pill-success'
+  if (color === 'error') return 'app-pill-error'
+  if (color === 'warning') return 'app-pill-warning'
+  return 'app-pill-neutral'
 }
 function statusLabel(status: string) {
   return ({ pending: '待处理', queued: '已排队', processing: '处理中', done: '完成', failed: '失败', skipped: '已跳过', ignored: '已忽略' } as Record<string, string>)[status] || status

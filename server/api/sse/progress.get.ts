@@ -41,7 +41,7 @@ export default defineEventHandler((event) => {
         try {
             const row = db.prepare(`
                 SELECT status, progress, step_progress, step_message, done_chunks, total_chunks, error,
-                       started_at, step_started_at, finished_at, paused_at, paused_total_ms
+                       started_at, step_started_at, finished_at, paused_at, paused_total_ms, pause_requested_at
                 FROM tasks WHERE task_id = ?
             `).get(taskId) as any
             if (!row) return
@@ -59,6 +59,8 @@ export default defineEventHandler((event) => {
                 finishedAt: row.finished_at || null,
                 pausedAt: row.paused_at || null,
                 pausedTotalMs: Number(row.paused_total_ms || 0),
+                pauseRequested: Boolean(row.pause_requested_at),
+                pauseRequestedAt: row.pause_requested_at || null,
                 snapshot: true
             })
         } catch { /* keep the stream alive */ }

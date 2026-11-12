@@ -4,10 +4,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ocr_utils import is_pgs_codec, merge_chunk_segments, pgsrip_language, pgsrip_sup_name, pgsrip_track_flag, plan_chunks
+from ocr_utils import clamp_int, is_pgs_codec, merge_chunk_segments, pgsrip_language, pgsrip_sup_name, pgsrip_track_flag, plan_chunks
 
 
 class OcrUtilsTests(unittest.TestCase):
+    def test_clamp_int_without_maximum(self):
+        self.assertEqual(clamp_int(100000, 30, 10), 100000)
+        self.assertEqual(clamp_int(0, 30, 10), 10)
+        self.assertEqual(clamp_int("invalid", 30, 10), 30)
+        self.assertEqual(clamp_int(1000, 30, 10, maximum=None), 1000)
+        self.assertEqual(clamp_int(1000, 30, 10, 100), 100)
+
     def test_is_pgs_codec(self):
         self.assertTrue(is_pgs_codec("hdmv_pgs_subtitle"))
         self.assertTrue(is_pgs_codec("PGSsub"))

@@ -55,4 +55,40 @@ describe('TaskTimingCard', () => {
     expect(wrapper.text()).not.toContain('预计剩余')
     wrapper.unmount()
   })
+
+  it('hides overall ETA for ASR recognition stages', () => {
+    const wrapper = mountCard({ step: 'transcribing', sourceType: 'asr', progress: 50, stepProgress: 50 })
+    expect(wrapper.text()).toContain('翻译阶段开始后估算')
+    expect(wrapper.text()).not.toContain('预计完成')
+    wrapper.unmount()
+  })
+
+  it('labels the resumed stage and avoids stale ETA for a resumed ASR task', () => {
+    const wrapper = mountCard({
+      step: 'transcribing',
+      sourceType: 'asr',
+      progress: 50,
+      stepProgress: 50,
+      pausedTotalMs: 60_000
+    })
+    expect(wrapper.text()).toContain('当前阶段（本次恢复后）')
+    expect(wrapper.text()).toContain('翻译阶段开始后估算')
+    expect(wrapper.text()).not.toContain('预计完成')
+    expect(wrapper.text()).not.toContain('约 ')
+    wrapper.unmount()
+  })
+
+  it('shows paused ETA while a pause is pending and no clock', () => {
+    const wrapper = mountCard({
+      step: 'transcribing',
+      sourceType: 'asr',
+      progress: 50,
+      stepProgress: 50,
+      pauseRequested: true
+    })
+    expect(wrapper.text()).toContain('已暂停')
+    expect(wrapper.text()).not.toContain('预计完成')
+    expect(wrapper.text()).not.toContain('翻译阶段开始后估算')
+    wrapper.unmount()
+  })
 })

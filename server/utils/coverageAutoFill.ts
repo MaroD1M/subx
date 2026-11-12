@@ -3,7 +3,7 @@ import { parseTimestamp } from '~~/shared/time'
 import type { CoverageAutoFillPolicy, CoverageAutoFillResult, WatchOutputPolicy } from '../../types'
 import { ConfigService } from './config'
 import { useDb } from './db'
-import { buildLibraryCoverage, type CoverageFile } from './libraryCoverage'
+import { scanLibraryCoverage, type CoverageFile } from './libraryCoverage'
 import { globalTaskQueue, TaskService } from './task'
 import { seriesKeyFromPath, SeriesService } from './series'
 import { CostService } from './cost'
@@ -200,7 +200,7 @@ export const CoverageAutoFillService = {
       }
     }
 
-    const coverage = await buildLibraryCoverage(rootId, {
+    const coverage = await scanLibraryCoverage(rootId, {
       targetLanguage: policy.targetLanguage,
       refresh: true,
       includeEmbedded: policy.includeEmbedded

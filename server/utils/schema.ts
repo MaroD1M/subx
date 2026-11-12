@@ -46,6 +46,7 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       finished_at TEXT,
       paused_at TEXT,
       paused_total_ms INTEGER NOT NULL DEFAULT 0,
+      pause_requested_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -347,6 +348,16 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       file_mtime TEXT,
       scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (root_id, target_language, path)
+    );
+
+    CREATE TABLE IF NOT EXISTS coverage_snapshots (
+      root_id TEXT NOT NULL,
+      target_language TEXT NOT NULL,
+      include_embedded INTEGER NOT NULL DEFAULT 1,
+      scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
+      truncated INTEGER NOT NULL DEFAULT 0,
+      result_json TEXT NOT NULL DEFAULT '{}',
+      PRIMARY KEY (root_id, target_language, include_embedded)
     );
 
     CREATE TABLE IF NOT EXISTS coverage_auto_fill_policies (

@@ -2,7 +2,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { PgDatabase, translateSql } from '../pgSync'
-import { runMigrations } from '../migrations'
+import { MIGRATIONS, runMigrations } from '../migrations'
 
 const databaseUrl = process.env.PG_TEST_DATABASE_URL
 const allowReset = process.env.PG_TEST_ALLOW_RESET === '1'
@@ -53,7 +53,10 @@ live('live PostgreSQL bridge', () => {
 
       const versions = a.prepare('SELECT version FROM schema_migrations ORDER BY version').all()
         .map((row: any) => Number(row.version))
-      expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+      const expectedVersions = [1, 2, ...MIGRATIONS.map(migration => migration.version).sort((left, right) => left - right)]
+      expect(versions).toEqual(expectedVersions)
+      expect(a.prepare("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'tasks' AND column_name = 'pause_requested_at'").get()).toBeTruthy()
+      expect(a.prepare("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'coverage_snapshots'").get()).toBeTruthy()
     } finally {
       a.close()
       b.close()

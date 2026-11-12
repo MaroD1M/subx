@@ -50,8 +50,8 @@ export function isTerminalStatus(status?: string | null) {
 export async function ensureTaskNotPaused(taskId: string) {
   try {
     const db = (await import('./db')).useDb()
-    const row = db.prepare('SELECT status FROM tasks WHERE task_id = ?').get(taskId) as { status?: string } | undefined
-    if (row?.status === 'paused') throw new TaskPausedError()
+    const row = db.prepare('SELECT status, pause_requested_at FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, pause_requested_at?: string | null } | undefined
+    if (row?.status === 'paused' || row?.pause_requested_at != null) throw new TaskPausedError()
   } catch (error) {
     if (error instanceof TaskPausedError) throw error
     // DB hiccups must not pause a running task.

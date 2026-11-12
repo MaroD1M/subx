@@ -1,233 +1,323 @@
 <template>
-  <AppContainer size="wide" class="space-y-5 pb-4">
+  <AppContainer size="wide" class="app-page-stack pb-4">
     <PageHeader
       title="覆盖检查"
       description="检查媒体库中视频的目标语言字幕覆盖情况，并批量补齐缺失字幕。"
       :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '覆盖检查', icon: 'i-lucide-list-checks' }]"
     >
+      <p class="app-caption">
+        扫描覆盖会读取媒体库并探测内嵌字幕，大型媒体库可能需要较长时间。
+      </p>
       <template #actions>
         <UButton
-          label="刷新覆盖"
-          icon="i-lucide-refresh-cw"
+          :label="coverage?.hasCache ? '重新扫描' : '扫描覆盖'"
+          :icon="coverage?.hasCache ? 'i-lucide-refresh-cw' : 'i-lucide-scan-search'"
           size="sm"
           color="primary"
-          variant="soft"
-          :loading="loading"
-          :disabled="!mediaRoots.length"
-          @click="loadCoverage(true)"
+          variant="solid"
+          :loading="scanning"
+          :disabled="!mediaRoots.length || !selectedRootId || scanning"
+          @click="scanCoverage"
         />
       </template>
     </PageHeader>
 
-    <div v-if="!mediaRoots.length" class="rounded-3xl border border-dashed border-gray-300 bg-white/70 p-8 text-center dark:border-gray-700 dark:bg-gray-950/40">
+    <div v-if="!mediaRoots.length" class="app-empty space-y-3">
       <UIcon name="i-lucide-library-big" class="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600" />
-      <p class="mt-3 text-sm font-medium text-gray-700 dark:text-gray-200">还没有可检查的媒体库</p>
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">请先添加并启用至少一个媒体库，再回来检查字幕覆盖情况。</p>
-      <UButton label="前往媒体库" icon="i-lucide-library-big" color="primary" variant="soft" class="mt-4" to="/media-libraries" />
+      <p class="text-sm font-medium text-gray-700 dark:text-gray-200">还没有可检查的媒体库</p>
+      <p class="app-caption">请先添加并启用至少一个媒体库，再回来检查字幕覆盖情况。</p>
+      <UButton label="前往媒体库" icon="i-lucide-library-big" color="primary" variant="soft" class="mt-1" to="/media-libraries" />
     </div>
 
     <template v-else>
-      <div class="surface-card space-y-3 p-3 sm:p-4">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <UFormField label="媒体库" class="w-full sm:max-w-sm">
-            <USelect v-model="selectedRootId" :items="rootItems" class="w-full" aria-label="选择媒体库" />
-          </UFormField>
-          <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <label class="flex items-center gap-2 rounded-lg border border-gray-200/80 bg-white/70 px-2.5 py-1.5 dark:border-gray-700/70 dark:bg-gray-950/30">
-              <span class="whitespace-nowrap text-gray-600 dark:text-gray-300">包含内嵌字幕</span>
+      <div class="app-toolbar-card items-stretch">
+        <div class="app-toolbar">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <UFormField label="媒体库" class="w-full sm:max-w-sm">
+              <USelect v-model="selectedRootId" :items="rootItems" class="w-full" aria-label="选择媒体库" />
+            </UFormField>
+            <label class="app-field-row w-full justify-between gap-3 sm:w-auto">
+              <span class="whitespace-nowrap text-xs font-medium text-gray-600 dark:text-gray-300">包含内嵌字幕</span>
               <USwitch v-model="includeEmbedded" aria-label="包含内嵌字幕" />
             </label>
-            <UBadge color="neutral" variant="subtle">目标语言 {{ targetLanguageLabel(activeTargetLanguage) }}</UBadge>
-            <UBadge v-if="coverage" color="neutral" variant="subtle">扫描 {{ coverage.scanned }} 个文件</UBadge>
-            <UBadge v-if="coverage?.cachedAt" color="neutral" variant="subtle">缓存 {{ formatDate(coverage.cachedAt) }}</UBadge>
-            <UBadge v-if="coverage && !coverage.truncated" color="success" variant="subtle">结果完整</UBadge>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="app-pill app-pill-neutral">目标语言 {{ targetLanguageLabel(activeTargetLanguage) }}</span>
+            <template v-if="coverage?.hasCache">
+              <span class="app-pill app-pill-info">扫描 {{ coverage.scanned }} 个文件</span>
+              <span class="app-pill" :class="cacheStale ? 'app-pill-warning' : 'app-pill-success'">{{ cacheStale ? '缓存可能过期' : '缓存有效' }}</span>
+              <span class="app-pill" :class="coverage.truncated ? 'app-pill-warning' : 'app-pill-success'">{{ coverage.truncated ? '结果截断' : '结果完整' }}</span>
+            </template>
+            <span v-else class="app-pill app-pill-warning">尚未扫描</span>
+            <span v-if="loading" class="app-meta inline-flex items-center gap-1.5">
+              <UIcon name="i-lucide-loader-2" class="h-3.5 w-3.5 animate-spin" />
+              正在读取缓存…
+            </span>
           </div>
         </div>
-        <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">
+
+        <div class="app-stat-grid">
+          <div class="app-stat">
+            <p class="app-stat-label">扫描文件</p>
+            <p class="app-stat-value text-base">{{ coverage?.hasCache ? coverage.scanned : '—' }}</p>
+          </div>
+          <div class="app-stat">
+            <p class="app-stat-label">缺失文件</p>
+            <p class="app-stat-value text-base" :class="coverage?.hasCache && summary.missing ? 'text-orange-600 dark:text-orange-400' : ''">
+              {{ coverage?.hasCache ? summary.missing : '—' }}
+            </p>
+          </div>
+          <div class="app-stat">
+            <p class="app-stat-label">已完成</p>
+            <p class="app-stat-value text-base">{{ coverage?.hasCache ? summary.done : '—' }}</p>
+          </div>
+          <div class="app-stat">
+            <p class="app-stat-label">缓存时间</p>
+            <p class="mt-0.5 truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{{ coverage?.cachedAt ? formatDate(coverage.cachedAt) : '尚未扫描' }}</p>
+            <p v-if="coverage?.hasCache" class="app-meta">{{ cacheStale ? '建议重新扫描' : '缓存较新' }}</p>
+          </div>
+        </div>
+
+        <p class="app-caption">
           缺失表示该视频还没有目标语言字幕；处理中、待核对和失败会关联当前翻译任务。勾选缺失文件后即可批量创建翻译任务。
         </p>
+        <div v-if="coverage?.hasCache" class="app-info-banner app-info-warning">
+          <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>结果来自缓存，媒体库变动后请重新扫描。</span>
+        </div>
       </div>
 
-      <CoverageAutoFillPanel
-        v-model:root-id="selectedRootId"
-        :roots="mediaRoots"
-        :target-language="targetLanguage"
-        @completed="loadCoverage(true)"
-      />
-
       <CoverageHealthCard
+        v-if="coverage?.hasCache"
         :summary="summary"
         :active-status="statusFilter"
         @select="statusFilter = statusFilter === $event ? 'all' : $event"
       />
 
-      <div class="surface-card space-y-3 p-3 sm:p-4">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div class="flex flex-wrap gap-1.5" role="group" aria-label="状态筛选">
-            <UButton
-              v-for="tab in statusTabs"
-              :key="tab.value"
-              :label="`${tab.label} ${tab.count}`"
-              size="xs"
-              :color="statusFilter === tab.value ? 'primary' : 'neutral'"
-              :variant="statusFilter === tab.value ? 'solid' : 'soft'"
-              @click="statusFilter = tab.value"
-            />
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <UInput
-              v-model="searchQuery"
-              icon="i-lucide-search"
-              size="sm"
-              placeholder="搜索文件名、路径或系列"
-              class="w-full sm:w-64"
-              aria-label="搜索文件"
-            />
-            <UButton
-              v-if="searchQuery || statusFilter !== 'all'"
-              label="清空筛选"
-              icon="i-lucide-filter-x"
-              size="sm"
-              color="neutral"
-              variant="ghost"
-              @click="clearFilters"
-            />
+      <CoverageAutoFillPanel
+        v-model:root-id="selectedRootId"
+        :roots="mediaRoots"
+        :target-language="targetLanguage"
+        @completed="loadCoverage()"
+      />
+
+      <div v-if="error && coverage" class="app-info-banner app-info-error flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex min-w-0 items-start gap-2">
+          <UIcon name="i-lucide-circle-alert" class="mt-0.5 h-4 w-4 shrink-0" />
+          <div class="min-w-0">
+            <p class="font-medium">覆盖操作失败</p>
+            <p class="mt-0.5 break-all opacity-80">{{ error }}</p>
           </div>
         </div>
-        <div v-if="coverage?.truncated" class="rounded-xl border border-amber-200/70 bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
-          扫描结果较多，当前只展示部分文件。请刷新重试，或缩小媒体库范围后再检查。
+        <div class="flex shrink-0 flex-wrap gap-2">
+          <UButton label="重新加载缓存" icon="i-lucide-refresh-cw" size="sm" color="neutral" variant="soft" :loading="loading" @click="loadCoverage" />
+          <UButton label="重试扫描" icon="i-lucide-scan-search" size="sm" color="primary" variant="soft" :loading="scanning" @click="scanCoverage" />
         </div>
       </div>
 
-      <div v-if="error" class="surface-card space-y-3 border border-red-200/70 p-5 text-center dark:border-red-900/40">
+      <div v-if="error && !coverage" class="app-empty space-y-3 border-red-200/70 dark:border-red-900/40">
         <UIcon name="i-lucide-circle-alert" class="mx-auto h-7 w-7 text-red-500" />
-        <div>
-          <p class="text-sm font-medium text-gray-800 dark:text-gray-100">加载覆盖情况失败</p>
-          <p class="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">{{ error }}</p>
+        <p class="text-sm font-medium text-gray-800 dark:text-gray-100">加载覆盖情况失败</p>
+        <p class="app-caption break-all">{{ error }}</p>
+        <div class="flex flex-wrap justify-center gap-2">
+          <UButton label="重新加载缓存" icon="i-lucide-refresh-cw" size="sm" color="neutral" variant="soft" :loading="loading" @click="loadCoverage" />
+          <UButton label="扫描覆盖" icon="i-lucide-scan-search" size="sm" color="primary" variant="soft" :loading="scanning" @click="scanCoverage" />
         </div>
-        <UButton label="重新加载" icon="i-lucide-refresh-cw" size="sm" color="primary" variant="soft" :loading="loading" @click="loadCoverage(true)" />
       </div>
 
-      <div v-else-if="loading && !coverage" class="surface-card flex items-center justify-center gap-2 p-8 text-sm text-gray-500 dark:text-gray-400">
-        <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" />
-        正在扫描媒体库覆盖情况...
+      <div v-else-if="loading && !coverage" class="app-toolbar-card items-center justify-center">
+        <span class="app-meta inline-flex items-center gap-2">
+          <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" />
+          正在读取覆盖缓存...
+        </span>
       </div>
 
-      <div v-else-if="!coverage" class="surface-card p-8 text-center text-sm text-gray-500 dark:text-gray-400">
-        选择媒体库后将自动检查字幕覆盖情况。
-      </div>
-
-      <div v-else-if="!coverage.files.length" class="rounded-2xl border border-dashed border-gray-300 bg-white/70 p-8 text-center dark:border-gray-700 dark:bg-gray-950/40">
-        <UIcon name="i-lucide-file-search" class="mx-auto h-7 w-7 text-gray-300 dark:text-gray-600" />
-        <p class="mt-3 text-sm font-medium text-gray-700 dark:text-gray-200">当前媒体库未找到视频文件</p>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">请确认路径挂载正确，或刷新后重试。</p>
+      <div v-else-if="!coverage?.hasCache" class="app-empty space-y-3">
+        <UIcon name="i-lucide-scan-search" class="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600" />
+        <p class="text-sm font-medium text-gray-700 dark:text-gray-200">尚未扫描当前媒体库</p>
+        <p class="app-caption">点击扫描后会读取媒体库并探测内嵌字幕，生成字幕覆盖结果。</p>
+        <UButton
+          label="扫描覆盖"
+          icon="i-lucide-scan-search"
+          color="primary"
+          variant="solid"
+          class="mt-1"
+          :loading="scanning"
+          :disabled="scanning"
+          @click="scanCoverage"
+        />
       </div>
 
       <template v-else>
-        <div v-if="missingFiles.length" class="surface-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-          <div class="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-            <UIcon name="i-lucide-mouse-pointer-click" class="h-4 w-4 shrink-0 text-orange-500" />
-            <span>已选 <strong class="font-semibold text-gray-900 dark:text-white">{{ selectedMissingFiles.length }}</strong> / {{ missingFiles.length }} 个缺失文件</span>
+        <section class="app-section space-y-3 p-3 sm:p-4">
+          <div class="app-toolbar">
+            <div class="flex flex-wrap gap-1.5" role="group" aria-label="状态筛选">
+              <UButton
+                v-for="tab in statusTabs"
+                :key="tab.value"
+                :label="`${tab.label} ${tab.count}`"
+                size="xs"
+                :color="statusFilter === tab.value ? 'primary' : 'neutral'"
+                :variant="statusFilter === tab.value ? 'solid' : 'soft'"
+                @click="statusFilter = tab.value"
+              />
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <UInput
+                v-model="searchQuery"
+                icon="i-lucide-search"
+                size="sm"
+                placeholder="搜索文件名、路径或系列"
+                class="w-full sm:w-64"
+                aria-label="搜索文件"
+              />
+              <UButton
+                v-if="searchQuery || statusFilter !== 'all'"
+                label="清空筛选"
+                icon="i-lucide-filter-x"
+                size="sm"
+                color="neutral"
+                variant="ghost"
+                @click="clearFilters"
+              />
+            </div>
+          </div>
+          <div v-if="coverage?.truncated" class="app-info-banner app-info-warning">
+            扫描结果较多，当前只展示部分文件。请重新扫描重试，或缩小媒体库范围后再检查。
+          </div>
+        </section>
+
+        <div v-if="!coverage.files.length" class="app-empty space-y-2">
+          <UIcon name="i-lucide-file-search" class="mx-auto h-7 w-7 text-gray-300 dark:text-gray-600" />
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-200">当前媒体库未找到视频文件</p>
+          <p class="app-caption">请确认路径挂载正确，或重新扫描后重试。</p>
+        </div>
+
+        <template v-else>
+          <div v-if="missingFiles.length" class="app-toolbar-card">
+            <div class="flex flex-wrap items-center gap-2">
+              <UIcon name="i-lucide-mouse-pointer-click" class="h-4 w-4 shrink-0 text-orange-500" />
+              <span class="app-pill app-pill-primary">已选 {{ selectedMissingFiles.length }} / {{ missingFiles.length }}</span>
+              <span class="app-meta">个缺失文件</span>
+              <UButton
+                :label="allMissingSelected ? '取消全选缺失' : '全选缺失'"
+                :icon="allMissingSelected ? 'i-lucide-square-x' : 'i-lucide-check-square'"
+                size="xs"
+                color="neutral"
+                variant="soft"
+                @click="toggleSelectAllMissing"
+              />
+              <UButton
+                v-if="selectedMissingFiles.length"
+                label="清空选择"
+                icon="i-lucide-x"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="clearSelection"
+              />
+            </div>
             <UButton
-              :label="allMissingSelected ? '取消全选缺失' : '全选缺失'"
-              :icon="allMissingSelected ? 'i-lucide-square-x' : 'i-lucide-check-square'"
-              size="xs"
-              color="neutral"
-              variant="soft"
-              @click="toggleSelectAllMissing"
-            />
-            <UButton
-              v-if="selectedMissingFiles.length"
-              label="清空选择"
-              icon="i-lucide-x"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              @click="clearSelection"
+              label="翻译选中缺失"
+              icon="i-lucide-languages"
+              color="primary"
+              variant="solid"
+              size="sm"
+              :loading="submitting"
+              :disabled="!selectedMissingFiles.length || submitting"
+              @click="translateSelectedMissing"
             />
           </div>
-          <UButton
-            label="翻译选中缺失"
-            icon="i-lucide-languages"
-            color="primary"
-            size="sm"
-            :loading="submitting"
-            :disabled="!selectedMissingFiles.length || submitting"
-            @click="translateSelectedMissing"
-          />
-        </div>
 
-        <div v-if="!visibleGroups.length" class="surface-card space-y-2 p-8 text-center text-xs text-gray-500 dark:text-gray-400">
-          <UIcon name="i-lucide-search-x" class="mx-auto h-6 w-6 text-gray-300 dark:text-gray-600" />
-          <p>当前筛选下没有匹配的文件</p>
-          <UButton label="清空筛选" size="xs" color="neutral" variant="soft" @click="clearFilters" />
-        </div>
+          <div v-if="!visibleGroups.length" class="app-empty space-y-2">
+            <UIcon name="i-lucide-search-x" class="mx-auto h-6 w-6 text-gray-300 dark:text-gray-600" />
+            <p class="app-caption">当前筛选下没有匹配的文件</p>
+            <UButton label="清空筛选" size="xs" color="neutral" variant="soft" @click="clearFilters" />
+          </div>
 
-        <div v-else class="space-y-3">
-          <section v-for="group in visibleGroups" :key="group.key" class="surface-card overflow-hidden">
-            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-3 dark:border-gray-800 sm:px-4">
-              <div class="min-w-0">
-                <p class="break-all text-sm font-semibold text-gray-900 dark:text-white">{{ group.title }}</p>
-                <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  {{ group.files.length }} 个文件<span v-if="group.missingCount"> · 缺失 {{ group.missingCount }} 个</span>
-                </p>
-              </div>
-              <UBadge color="neutral" variant="subtle" size="sm">{{ group.files.length }}</UBadge>
-            </div>
-
-            <div class="divide-y divide-gray-100 dark:divide-gray-800">
-              <div
-                v-for="file in group.files"
-                :key="fileKey(file)"
-                class="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-start sm:gap-4 sm:px-4"
+          <div v-else class="space-y-2">
+            <section v-for="group in visibleGroups" :key="group.key" class="app-section overflow-hidden p-0 sm:p-0">
+              <button
+                type="button"
+                class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-900/40 sm:px-4"
+                :aria-expanded="isGroupExpanded(group.key)"
+                @click="toggleGroup(group.key)"
               >
-                <div class="flex min-w-0 flex-1 items-start gap-3">
-                  <UCheckbox
-                    v-if="file.status === 'missing'"
-                    :model-value="isSelected(file)"
-                    :aria-label="`选择缺失文件 ${file.name}`"
-                    class="mt-0.5 shrink-0"
-                    @update:model-value="toggleFileSelection(file)"
-                  />
-                  <UIcon
-                    v-else
-                    :name="statusMeta(file.status).icon"
-                    class="mt-0.5 h-4 w-4 shrink-0"
-                    :class="statusMeta(file.status).iconClass"
-                  />
-
-                  <div class="min-w-0 flex-1 space-y-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <p class="min-w-0 break-all text-sm font-medium text-gray-800 dark:text-gray-100">{{ file.name }}</p>
-                      <UBadge :color="statusMeta(file.status).color" variant="subtle" size="sm">{{ statusMeta(file.status).label }}</UBadge>
+                <UIcon
+                  :name="isGroupExpanded(group.key) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                  class="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500"
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p class="min-w-0 break-all text-sm font-semibold text-gray-900 dark:text-white">{{ group.title }}</p>
+                    <span class="app-meta">{{ group.files.length }} 个文件</span>
+                    <span v-if="group.missingCount" class="app-pill app-pill-error">缺失 {{ group.missingCount }}</span>
+                    <span v-if="group.reviewCount" class="app-pill app-pill-warning">待核对 {{ group.reviewCount }}</span>
+                    <span v-if="group.failedCount" class="app-pill app-pill-error">失败 {{ group.failedCount }}</span>
+                  </div>
+                  <div class="mt-1 flex items-center gap-2">
+                    <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800 sm:max-w-48">
+                      <div class="h-full rounded-full bg-emerald-500 transition-all" :style="{ width: `${groupCompletionRate(group)}%` }" />
                     </div>
-                    <p class="break-all font-mono text-[11px] leading-5 text-gray-500 dark:text-gray-400">{{ file.path }}</p>
-                    <p v-if="file.subtitleSource || file.subtitlePath" class="flex min-w-0 items-start gap-1.5 text-[11px] leading-5 text-emerald-700 dark:text-emerald-300">
-                      <UIcon
-                        :name="file.subtitleSource === 'embedded' ? 'i-lucide-box' : 'i-lucide-file-check-2'"
-                        class="mt-0.5 h-3.5 w-3.5 shrink-0"
-                      />
-                      <span class="min-w-0 break-all">{{ subtitleSourceLabel(file) }}</span>
-                    </p>
-                    <p v-if="file.updatedAt" class="text-[11px] text-gray-400 dark:text-gray-500">更新于 {{ formatDate(file.updatedAt) }}</p>
+                    <span class="app-meta shrink-0 tabular-nums">完成 {{ group.doneCount }}/{{ group.files.length }}</span>
                   </div>
                 </div>
+              </button>
 
-                <div class="flex shrink-0 flex-wrap items-center gap-2 pl-7 sm:justify-end sm:pl-0">
-                  <UButton
-                    v-if="file.taskId"
-                    label="查看任务"
-                    icon="i-lucide-arrow-up-right"
-                    size="xs"
-                    color="neutral"
-                    variant="soft"
-                    :to="`/task/${file.taskId}`"
-                  />
+              <div v-if="isGroupExpanded(group.key)" class="divide-y divide-gray-100 dark:divide-gray-800">
+                <div
+                  v-for="file in group.files"
+                  :key="fileKey(file)"
+                  class="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:gap-3 sm:px-4"
+                >
+                  <div class="flex min-w-0 flex-1 items-start gap-2.5">
+                    <UCheckbox
+                      v-if="file.status === 'missing'"
+                      :model-value="isSelected(file)"
+                      :aria-label="`选择缺失文件 ${file.name}`"
+                      class="mt-0.5 shrink-0"
+                      @update:model-value="toggleFileSelection(file)"
+                    />
+                    <UIcon
+                      v-else
+                      :name="statusMeta(file.status).icon"
+                      class="mt-0.5 h-4 w-4 shrink-0"
+                      :class="statusMeta(file.status).iconClass"
+                    />
+
+                    <div class="min-w-0 flex-1 space-y-0.5">
+                      <div class="flex flex-wrap items-center gap-1.5">
+                        <p class="min-w-0 break-all text-sm font-medium text-gray-800 dark:text-gray-100">{{ file.name }}</p>
+                        <span class="app-pill" :class="statusPillClass(file.status)">{{ statusMeta(file.status).label }}</span>
+                      </div>
+                      <p class="app-meta break-all font-mono">{{ file.path }}</p>
+                      <p v-if="file.subtitleSource || file.subtitlePath" class="flex min-w-0 items-start gap-1.5 text-xs leading-5 text-emerald-700 dark:text-emerald-300">
+                        <UIcon
+                          :name="file.subtitleSource === 'embedded' ? 'i-lucide-box' : 'i-lucide-file-check-2'"
+                          class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                        />
+                        <span class="min-w-0 break-all">{{ subtitleSourceLabel(file) }}</span>
+                      </p>
+                      <p v-if="file.updatedAt" class="app-meta">更新于 {{ formatDate(file.updatedAt) }}</p>
+                    </div>
+                  </div>
+
+                  <div class="flex shrink-0 flex-wrap items-center gap-2 pl-7 sm:justify-end sm:pl-0">
+                    <UButton
+                      v-if="file.taskId"
+                      label="查看任务"
+                      icon="i-lucide-arrow-up-right"
+                      size="xs"
+                      color="neutral"
+                      variant="soft"
+                      :to="`/task/${file.taskId}`"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
-        </div>
+            </section>
+          </div>
+        </template>
       </template>
     </template>
   </AppContainer>
@@ -280,9 +370,11 @@ interface CoverageResponse {
   rootId: string
   rootName: string
   targetLanguage: string
+  includeEmbedded?: boolean
   scanned: number
   truncated: boolean
-  cachedAt?: string
+  cachedAt?: string | null
+  hasCache: boolean
   summary: CoverageSummary
   series: CoverageSeries[]
   files: CoverageFile[]
@@ -293,6 +385,10 @@ interface CoverageGroup {
   title: string
   files: CoverageFile[]
   missingCount: number
+  reviewCount: number
+  failedCount: number
+  doneCount: number
+  processingCount: number
 }
 
 const STATUS_META: Record<CoverageStatus, { label: string, color: BadgeColor, icon: string, iconClass: string }> = {
@@ -323,13 +419,21 @@ const targetLanguage = computed(() => String(config.value?.targetLanguage || 'zh
 
 const coverage = ref<CoverageResponse | null>(null)
 const activeTargetLanguage = computed(() => coverage.value?.targetLanguage || targetLanguage.value)
+const cacheStale = computed(() => {
+  if (!coverage.value?.hasCache || !coverage.value.cachedAt) return false
+  const cachedAt = new Date(coverage.value.cachedAt).getTime()
+  if (!Number.isFinite(cachedAt)) return false
+  return Date.now() - cachedAt > 24 * 60 * 60 * 1000
+})
 const loading = ref(false)
+const scanning = ref(false)
 const submitting = ref(false)
 const includeEmbedded = ref(true)
 const error = ref('')
 const statusFilter = ref<'all' | CoverageStatus>('all')
 const searchQuery = ref('')
 const selectedKeys = ref<Set<string>>(new Set())
+const expandedKeys = ref<Set<string>>(new Set())
 let readyForCoverage = false
 let requestSerial = 0
 
@@ -342,6 +446,7 @@ watch(mediaRoots, (roots) => {
 
 watch(selectedRootId, () => {
   clearSelection()
+  expandedKeys.value = new Set()
   coverage.value = null
   error.value = ''
   if (!readyForCoverage) return
@@ -350,7 +455,15 @@ watch(selectedRootId, () => {
 
 watch(includeEmbedded, () => {
   if (!readyForCoverage) return
-  void loadCoverage(true)
+  void loadCoverage()
+})
+
+watch([searchQuery, statusFilter], () => {
+  if (!coverage.value?.hasCache) return
+  if (!searchQuery.value.trim() && statusFilter.value === 'all') return
+  const next = new Set(expandedKeys.value)
+  for (const group of visibleGroups.value) next.add(group.key)
+  expandedKeys.value = next
 })
 
 onMounted(() => {
@@ -366,8 +479,6 @@ const summary = computed<CoverageSummary>(() => coverage.value?.summary || {
   failed: 0,
   missing: 0
 })
-
-
 
 const statusTabs = computed(() => [
   { value: 'all' as const, label: '全部', count: summary.value.total },
@@ -404,13 +515,35 @@ const visibleGroups = computed<CoverageGroup[]>(() => {
     let group = groups.get(key)
     if (!group) {
       const title = seriesTitles.value.get(key) || file.seriesTitle || file.seriesKey || '未分组文件'
-      group = { key, title, files: [], missingCount: 0 }
+      group = {
+        key,
+        title,
+        files: [],
+        missingCount: 0,
+        reviewCount: 0,
+        failedCount: 0,
+        doneCount: 0,
+        processingCount: 0
+      }
       groups.set(key, group)
     }
     group.files.push(file)
     if (file.status === 'missing') group.missingCount += 1
+    else if (file.status === 'review') group.reviewCount += 1
+    else if (file.status === 'failed') group.failedCount += 1
+    else if (file.status === 'done') group.doneCount += 1
+    else if (file.status === 'processing') group.processingCount += 1
   }
-  return Array.from(groups.values())
+  return Array.from(groups.values()).sort((a, b) => {
+    const priority = (group: CoverageGroup) => {
+      if (group.missingCount > 0) return 0
+      if (group.reviewCount > 0 || group.failedCount > 0) return 1
+      if (group.processingCount > 0) return 2
+      return 3
+    }
+    const diff = priority(a) - priority(b)
+    return diff || a.title.localeCompare(b.title, 'zh-CN')
+  })
 })
 
 const missingFiles = computed(() => (coverage.value?.files || []).filter(file => file.status === 'missing'))
@@ -423,6 +556,15 @@ function fileKey(file: CoverageFile) {
 
 function statusMeta(status: CoverageStatus) {
   return STATUS_META[status] || STATUS_META.missing
+}
+
+function statusPillClass(status: CoverageStatus) {
+  if (status === 'done') return 'app-pill-success'
+  if (status === 'review') return 'app-pill-warning'
+  if (status === 'processing') return 'app-pill-info'
+  if (status === 'failed') return 'app-pill-error'
+  if (status === 'missing') return 'app-pill-missing'
+  return 'app-pill-neutral'
 }
 
 function targetLanguageLabel(value: string) {
@@ -444,6 +586,10 @@ function formatDate(value: unknown) {
   return formatDateTime(value, timeZone)
 }
 
+function groupCompletionRate(group: CoverageGroup) {
+  return group.files.length ? Math.round((group.doneCount / group.files.length) * 100) : 0
+}
+
 function clearFilters() {
   statusFilter.value = 'all'
   searchQuery.value = ''
@@ -451,6 +597,28 @@ function clearFilters() {
 
 function clearSelection() {
   selectedKeys.value = new Set()
+}
+
+function isGroupExpanded(key: string) {
+  return expandedKeys.value.has(key)
+}
+
+function toggleGroup(key: string) {
+  const next = new Set(expandedKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedKeys.value = next
+}
+
+function resetGroupExpansion() {
+  const next = new Set<string>()
+  for (const group of visibleGroups.value) {
+    if (group.missingCount > 0) next.add(group.key)
+  }
+  if (searchQuery.value.trim() || statusFilter.value !== 'all') {
+    for (const group of visibleGroups.value) next.add(group.key)
+  }
+  expandedKeys.value = next
 }
 
 function isSelected(file: CoverageFile) {
@@ -482,9 +650,10 @@ function pruneSelection() {
   selectedKeys.value = next
 }
 
-async function loadCoverage(forceRefresh = false) {
+async function loadCoverage() {
   if (!selectedRootId.value) return
   const serial = ++requestSerial
+  if (scanning.value) scanning.value = false
   loading.value = true
   error.value = ''
   try {
@@ -493,18 +662,47 @@ async function loadCoverage(forceRefresh = false) {
       targetLanguage: targetLanguage.value,
       includeEmbedded: includeEmbedded.value ? '1' : '0'
     }
-    if (forceRefresh) query.refresh = '1'
     const result = await $fetch<CoverageResponse>('/api/library/coverage', { query })
     if (serial !== requestSerial) return
     coverage.value = result
     pruneSelection()
+    resetGroupExpansion()
   } catch (e: any) {
     if (serial !== requestSerial) return
-    coverage.value = null
     error.value = e?.data?.message || e?.message || '无法加载覆盖情况'
     toast.add({ title: '加载失败', description: error.value, color: 'error' })
   } finally {
     if (serial === requestSerial) loading.value = false
+  }
+}
+
+async function scanCoverage() {
+  if (!selectedRootId.value || scanning.value) return
+  const serial = ++requestSerial
+  if (loading.value) loading.value = false
+  scanning.value = true
+  error.value = ''
+  try {
+    const result = await $fetch<CoverageResponse>('/api/library/coverage/scan', {
+      method: 'POST',
+      body: {
+        rootId: selectedRootId.value,
+        targetLanguage: targetLanguage.value,
+        includeEmbedded: includeEmbedded.value
+      }
+    })
+    if (serial !== requestSerial) return
+    coverage.value = result
+    pruneSelection()
+    resetGroupExpansion()
+    const count = Number(result.scanned ?? result.summary?.total ?? result.files?.length ?? 0)
+    toast.add({ title: '扫描完成', description: `共 ${count} 个文件`, color: 'success' })
+  } catch (e: any) {
+    if (serial !== requestSerial) return
+    error.value = e?.data?.message || e?.message || '扫描覆盖失败'
+    toast.add({ title: '扫描失败', description: error.value, color: 'error' })
+  } finally {
+    if (serial === requestSerial) scanning.value = false
   }
 }
 
@@ -543,7 +741,7 @@ async function translateSelectedMissing() {
       : (result?.taskId ? 1 : selectedMissingFiles.value.length)
     toast.add({ title: '已创建翻译任务', description: `已为 ${taskCount} 个缺失文件创建任务`, color: 'success' })
     clearSelection()
-    await loadCoverage(true)
+    await loadCoverage()
   } catch (e: any) {
     toast.add({ title: '创建任务失败', description: e?.data?.message || e?.message || '无法创建翻译任务', color: 'error' })
   } finally {

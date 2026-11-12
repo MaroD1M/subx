@@ -182,7 +182,7 @@ export function resolveApiTokenScope(method: string, pathname: string): string |
     return verb === 'GET' || verb === 'HEAD' ? 'tasks:read' : 'system:admin'
   }
   if (path.startsWith('/api/asr/')) return 'tasks:read'
-  if (path === '/api/library/coverage' || path === '/api/series/profiles') return 'tasks:read'
+  if (path === '/api/library/coverage' || path === '/api/library/coverage/scan' || path === '/api/series/profiles') return 'tasks:read'
   if (path === '/api/series/profile') {
     return verb === 'GET' || verb === 'HEAD' ? 'tasks:read' : 'tasks:write'
   }

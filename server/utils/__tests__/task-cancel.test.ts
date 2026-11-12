@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const dbState = new Map<string, { status: string, progress: number, error?: string | null, forceRetranslate?: number, stepProgress?: number, stepMessage?: string | null }>()
+const dbState = new Map<string, { status: string, progress: number, error?: string | null, forceRetranslate?: number, stepProgress?: number, stepMessage?: string | null, pauseRequestedAt?: string | null }>()
 const jobs = new Map<string, { status: string }>()
 const emitted: Array<{ event: string, payload: any }> = []
 
@@ -10,7 +10,7 @@ const mockDb = {
       get(taskId: string) {
         if (sql.includes('SELECT status')) {
           const row = dbState.get(taskId)
-          return row ? { status: row.status, step_progress: row.stepProgress ?? 0, step_message: row.stepMessage ?? null } : undefined
+          return row ? { status: row.status, step_progress: row.stepProgress ?? 0, step_message: row.stepMessage ?? null, pause_requested_at: row.pauseRequestedAt ?? null } : undefined
         }
 
         if (sql.includes('SELECT * FROM tasks')) {
@@ -43,6 +43,9 @@ const mockDb = {
             updated_at: '2025-01-01 00:00:00',
             status: row.status,
             progress: row.progress,
+            step_progress: row.stepProgress ?? 0,
+            step_message: row.stepMessage ?? null,
+            pause_requested_at: row.pauseRequestedAt ?? null,
             error: row.error ?? null
           }
         }
@@ -57,10 +60,10 @@ const mockDb = {
         }
 
         if (sql.includes('UPDATE tasks SET status = ?, progress = ?')) {
-          const [status, progress, , stepProgress, stepMessage, error, _startedAt, _stepStartedAt, _finishedAt, _pausedAt, _pausedTotalMs, taskId, expectedStatus] = args
+          const [status, progress, , stepProgress, stepMessage, error, _startedAt, _stepStartedAt, _finishedAt, _pausedAt, _pausedTotalMs, clearPauseRequest, taskId, expectedStatus] = args
           const current = dbState.get(taskId) ?? { status: 'queued', progress: 0, error: null }
           if (expectedStatus !== undefined && current.status !== expectedStatus) return { changes: 0 }
-          dbState.set(taskId, { ...current, status: String(status), progress: Number(progress), error: error == null ? null : String(error), stepProgress: Number(stepProgress), stepMessage: stepMessage == null ? null : String(stepMessage) })
+          dbState.set(taskId, { ...current, status: String(status), progress: Number(progress), error: error == null ? null : String(error), stepProgress: Number(stepProgress), stepMessage: stepMessage == null ? null : String(stepMessage), pauseRequestedAt: Number(clearPauseRequest) === 1 ? null : current.pauseRequestedAt })
           return { changes: 1 }
         }
 
@@ -188,6 +191,29 @@ describe('Task cancellation guards', () => {
     await expect(ensureTaskNotPaused('task-paused')).rejects.toBeInstanceOf(TaskPausedError)
   })
 
+  it('detects a pause request while the running segment finishes', async () => {
+    dbState.set('task-pause-requested', { status: 'transcribing', progress: 20, error: null, pauseRequestedAt: '2025-01-01 00:00:05' })
+    const { ensureTaskNotPaused, TaskPausedError } = await import('../taskState')
+
+    await expect(ensureTaskNotPaused('task-pause-requested')).rejects.toBeInstanceOf(TaskPausedError)
+  })
+
+  it('maps pause_requested_at on task detail', () => {
+    dbState.set('task-pause-mapped', { status: 'transcribing', progress: 20, error: null, pauseRequestedAt: '2025-01-01 00:00:05' })
+
+    const task = TaskService.getTask('task-pause-mapped')
+    expect(task.pauseRequested).toBe(true)
+    expect(task.pauseRequestedAt).toBeTruthy()
+  })
+
+  it('does not map pauseRequested when no pause was requested', () => {
+    dbState.set('task-pause-none', { status: 'transcribing', progress: 20, error: null })
+
+    const task = TaskService.getTask('task-pause-none')
+    expect(task.pauseRequested).toBe(false)
+    expect(task.pauseRequestedAt).toBeUndefined()
+  })
+
   it('emits cancelled as a terminal event', async () => {
     dbState.set('task-terminal', { status: 'queued', progress: 10, error: null })
 
@@ -201,6 +227,15 @@ describe('Task cancellation guards', () => {
     expect(emitted.at(-1)?.payload?.step).toBe('cancelled')
   })
 
+
+  it('clears a pending pause request when the task reaches a terminal status', async () => {
+    dbState.set('task-pause-terminal', { status: 'transcribing', progress: 20, error: null, pauseRequestedAt: '2025-01-01 00:00:05' })
+
+    await TaskService.updateStatus('task-pause-terminal', 'done', 100, { stepMessage: '任务完成' })
+
+    expect(dbState.get('task-pause-terminal')?.status).toBe('done')
+    expect(dbState.get('task-pause-terminal')?.pauseRequestedAt).toBeNull()
+  })
 
   it('persists forceRetranslate for retried tasks', async () => {
     await TaskService.createTask({

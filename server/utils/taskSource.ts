@@ -283,6 +283,7 @@ export async function prepareTaskSource(options: PrepareTaskSourceOptions): Prom
     task.asrCheckpointKey = chunked.checkpointKey
     db.prepare('UPDATE tasks SET asr_checkpoint_key = ? WHERE task_id = ?').run(chunked.checkpointKey, taskId)
     await ensureTaskNotCancelled(taskId)
+    await ensureTaskNotPaused(taskId)
     const persisted = AsrService.persistResult(taskId, asrResult)
     allEntries = AsrService.toSubtitleEntries(asrResult)
     if (allEntries.length === 0) {

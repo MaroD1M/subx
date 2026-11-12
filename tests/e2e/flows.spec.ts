@@ -72,6 +72,7 @@ test('subtitle output tab uses shared labels and sends a structured style', asyn
   await tree.getByText('Shows', { exact: true }).click()
   await tree.getByText('Demo Show', { exact: true }).click()
   await tree.getByText('Demo.Show.S01E02.mkv', { exact: true }).click()
+  await expect(page.getByText('1920 × 1080 预览')).toHaveCount(0)
   await page.getByRole('button', { name: '字幕输出' }).click()
 
   await expect(page.getByText('样式预设')).toBeVisible()
@@ -327,7 +328,7 @@ test('task page shows timing and live ASR checkpoint segments', async ({ page })
     await expect(page.getByText('已进行')).toBeVisible()
     await expect(page.getByText('预计剩余')).toBeVisible()
 
-    await page.getByRole('button', { name: '语音识别' }).click()
+    await page.getByRole('tab', { name: '语音识别' }).click()
     await expect(page.getByText('语音识别进行中').first()).toBeVisible()
     await expect(page.getByText('实时识别结果')).toBeVisible()
     await expect(page.getByText('First live segment')).toBeVisible()
@@ -441,6 +442,22 @@ test.describe('mobile', () => {
 
     await page.goto('/history')
     await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
+
+    await page.goto('/coverage')
+    await expect(page.getByRole('heading', { name: '覆盖检查' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
+
+    await page.goto('/settings?tab=intelligence')
+    await expect(page.getByRole('heading', { name: '智能增强' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
+
+    await page.goto('/task/preview-done')
+    await expect(page.getByRole('heading', { name: /翻译任务/ })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
+
+    await page.goto('/automation')
+    await expect(page.getByRole('heading', { name: '自动化' })).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false)
   })
 })

@@ -8,24 +8,24 @@
       <UIcon name="i-lucide-loader-2" class="h-5 w-5 animate-spin" />
       <p>正在检查系统状态...</p>
     </div>
-    <div v-else-if="error" class="space-y-3 rounded-xl border border-red-200 bg-red-50/70 p-4 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
+    <div v-else-if="error" class="app-info-error space-y-3 p-4 text-sm">
       <p>{{ error }}</p>
       <UButton label="重试" size="xs" color="error" variant="soft" @click="loadChecks" />
     </div>
     <div v-else class="space-y-4">
       <div class="flex flex-wrap items-center gap-2">
         <UBadge :color="summaryColor" variant="subtle">{{ summaryLabel }}</UBadge>
-        <span class="text-[11px] text-gray-500 dark:text-gray-400">检测时间：{{ formatDate(checkedAt) }}</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400">检测时间：{{ formatDate(checkedAt) }}</span>
       </div>
 
-      <div class="divide-y divide-gray-100 rounded-xl border border-gray-100 dark:divide-gray-800 dark:border-gray-800">
+      <div class="divide-y divide-gray-100 rounded-lg border border-gray-100 dark:divide-gray-800 dark:border-gray-800">
         <div v-for="check in checks" :key="check.id" class="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-start gap-2">
             <UIcon :name="iconFor(check.status)" class="mt-0.5 h-4 w-4 shrink-0" :class="textColorFor(check.status)" />
             <div class="min-w-0">
               <p class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ check.label }}</p>
               <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ check.message }}</p>
-              <p v-if="check.detail" class="mt-0.5 break-all text-[11px] text-gray-400 dark:text-gray-500">{{ check.detail }}</p>
+              <p v-if="check.detail" class="mt-0.5 break-all text-xs text-gray-500 dark:text-gray-400">{{ check.detail }}</p>
             </div>
           </div>
           <UBadge :color="badgeColorFor(check.status)" variant="subtle" size="sm">{{ statusLabel(check.status) }}</UBadge>

@@ -1,10 +1,17 @@
 <template>
-  <div class="space-y-4">
-    <div class="space-y-4">
-      <AppSubNav v-model="activeTab" :items="settingsTabs" label="设置分区" />
+  <div class="app-page">
+    <div class="app-page-stack">
+      <AppSubNav :model-value="activeGroup" :items="settingsGroupItems" label="设置分组" @update:model-value="selectSettingsGroup" />
+      <AppSubNav
+        v-if="showTabNav"
+        :model-value="activeTab"
+        :items="activeGroupTabs"
+        label="设置分区"
+        @update:model-value="selectSettingsTab"
+      />
 
       <div class="min-w-0 space-y-4">
-        <div v-show="activeTab === 'ai'" class="space-y-4">
+        <div v-if="activeTab === 'ai'" class="space-y-4">
           <SettingsAiSection
             :config="config"
             :provider-type-items="providerTypeItems"
@@ -20,18 +27,20 @@
           />
         </div>
 
-        <div v-show="activeTab === 'asr'" class="space-y-4">
+        <div v-if="activeTab === 'asr'" class="space-y-4">
           <SettingsSection title="语音识别" description="无字幕视频会自动走 ASR；有字幕的视频也能在首页手动强制识别。模型需手动下载。">
             <template #actions>
               <UButton label="检测服务" size="xs" color="neutral" variant="soft" :loading="testingAsr" @click="testAsr" />
             </template>
 
             <div class="space-y-4">
-              <div class="flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+              <div class="app-toolbar surface-muted p-3">
                 <span class="text-xs font-medium text-gray-600 dark:text-gray-300">快速预设</span>
-                <UButton v-for="preset in asrPresets" :key="preset.id" :label="preset.label" size="xs" color="neutral" variant="soft" @click="applyAsrPreset(preset)" />
+                <div class="app-toolbar-row">
+                  <UButton v-for="preset in asrPresets" :key="preset.id" :label="preset.label" size="xs" color="neutral" variant="soft" @click="applyAsrPreset(preset)" />
+                </div>
               </div>
-              <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+              <div class="app-field-row">
                 <div class="space-y-0.5">
                   <p class="text-sm font-medium text-gray-700 dark:text-gray-300">启用语音识别</p>
                   <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">无文本字幕时允许使用 ASR；关闭后只处理已有字幕。</p>
@@ -75,72 +84,72 @@
                 </UFormField>
               </div>
 
-              <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
+              <div class="surface-muted p-3 space-y-3">
                 <div>
                   <p class="text-sm font-medium text-gray-700 dark:text-gray-300">长任务超时</p>
-                  <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">作用于新任务。低配 NAS 或超长视频可适当调大，但不要无限放大，避免任务卡死后长期占用资源。</p>
+                  <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">作用于新任务。低配 NAS 或超长视频可适当调大；上限只取决于设备性能、磁盘空间和队列实际承受能力。数值过大时，卡住的任务会占用资源更久。</p>
                 </div>
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <UFormField label="音频上传超时（分钟）">
-                    <UInput v-model="asrUploadTimeoutMinutes" type="number" min="1" max="1440" class="w-full" />
-                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">音频上传或创建 ASR 任务的最长等待时间。网络慢或文件很大时可调大。</p>
+                    <UInput v-model="asrUploadTimeoutMinutes" type="number" min="1" class="w-full" />
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">音频上传或创建 ASR 任务的最长等待时间。网络慢或文件很大时可调大。</p>
                   </UFormField>
                   <UFormField label="状态请求超时（秒）">
-                    <UInput v-model="asrPollTimeoutSeconds" type="number" min="1" max="60" class="w-full" />
-                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">单次查询识别进度的最长等待时间。一般保持 30 秒即可。</p>
+                    <UInput v-model="asrPollTimeoutSeconds" type="number" min="1" class="w-full" />
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">单次查询识别进度的最长等待时间。一般保持 30 秒即可。</p>
                   </UFormField>
                   <UFormField label="无进度超时（分钟）">
-                    <UInput v-model="asrJobIdleTimeoutMinutes" type="number" min="1" max="1440" class="w-full" />
-                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">连续这么久没有进度或阶段变化才判定卡死。排队等待不会触发。</p>
+                    <UInput v-model="asrJobIdleTimeoutMinutes" type="number" min="1" class="w-full" />
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">连续这么久没有进度或阶段变化才判定卡死。排队等待不会触发。</p>
                   </UFormField>
                   <UFormField label="总任务上限（小时）">
-                    <UInput v-model="asrJobAbsoluteTimeoutHours" type="number" min="1" max="168" class="w-full" />
-                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">单个 ASR 任务的绝对最长执行时间，到时一定中止并取消远端任务。</p>
+                    <UInput v-model="asrJobAbsoluteTimeoutHours" type="number" min="1" class="w-full" />
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">单个 ASR 任务的绝对最长执行时间，到时一定中止并取消远端任务。</p>
                   </UFormField>
                 </div>
               </div>
 
-              <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
+              <div class="surface-muted p-3 space-y-3">
                 <div>
                   <p class="text-sm font-medium text-gray-700 dark:text-gray-300">分段与断点</p>
                   <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">长视频会按分段识别；暂停、失败或容器重启后可从已完成分段继续。</p>
                 </div>
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <UFormField label="分段时长（分钟）">
-                    <UInput v-model="asrChunkMinutes" type="number" min="1" max="60" class="w-full" />
-                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">越短暂停生效越快，但 ASR 调用次数更多。</p>
+                    <UInput v-model="asrChunkMinutes" type="number" min="1" class="w-full" />
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">越短暂停生效越快，但 ASR 调用次数更多。</p>
                   </UFormField>
                   <UFormField label="分段重叠（秒）">
                     <UInput v-model.number="config.asrChunkOverlapSeconds" type="number" min="0" max="30" class="w-full" />
-                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">用于减少分段边界切断句子；合并时会去重。</p>
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">用于减少分段边界切断句子；合并时会去重。</p>
                   </UFormField>
                   <UFormField label="检查点保留（小时）">
-                    <UInput v-model.number="config.asrResumeTtlHours" type="number" min="1" max="8760" class="w-full" />
-                    <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">暂停或失败后保留已完成分段的时间。</p>
+                    <UInput v-model.number="config.asrResumeTtlHours" type="number" min="1" class="w-full" />
+                    <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">暂停或失败后保留已完成分段的时间。</p>
                   </UFormField>
                 </div>
               </div>
 
               <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-                  <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">VAD</p><p class="text-[11px] text-gray-500 dark:text-gray-400">过滤静音</p></div>
+                <div class="app-field-row">
+                  <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">VAD</p><p class="text-xs text-gray-500 dark:text-gray-400">过滤静音</p></div>
                   <USwitch v-model="config.asrVad" aria-label="启用 VAD" />
                 </div>
-                <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-                  <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">词级时间轴</p><p class="text-[11px] text-gray-500 dark:text-gray-400">提升对齐</p></div>
+                <div class="app-field-row">
+                  <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">词级时间轴</p><p class="text-xs text-gray-500 dark:text-gray-400">提升对齐</p></div>
                   <USwitch v-model="config.asrWordTimestamps" aria-label="启用词级时间轴" />
                 </div>
-                <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-                  <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">保留音频</p><p class="text-[11px] text-gray-500 dark:text-gray-400">默认关闭</p></div>
+                <div class="app-field-row">
+                  <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">保留音频</p><p class="text-xs text-gray-500 dark:text-gray-400">默认关闭</p></div>
                   <USwitch v-model="config.asrKeepAudio" aria-label="保留临时音频" />
                 </div>
-                <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-                  <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">说话人分离</p><p class="text-[11px] text-gray-500 dark:text-gray-400">pyannote PoC，默认关闭</p></div>
+                <div class="app-field-row">
+                  <div><p class="text-xs font-medium text-gray-700 dark:text-gray-300">说话人分离</p><p class="text-xs text-gray-500 dark:text-gray-400">pyannote PoC，默认关闭</p></div>
                   <USwitch v-model="config.asrDiarization" aria-label="启用说话人分离" />
                 </div>
               </div>
 
-              <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
+              <div class="surface-muted p-3 space-y-3">
                 <div class="flex items-center justify-between gap-3">
                   <div>
                     <p class="text-sm font-medium text-gray-700 dark:text-gray-300">云 ASR 兜底</p>
@@ -153,22 +162,22 @@
                   <UFormField label="云模型"><UInput v-model="config.asrCloudModel" placeholder="whisper-1" class="w-full" /></UFormField>
                   <UFormField label="云 API Key"><UInput v-model="config.asrCloudApiKey" type="password" placeholder="sk-..." class="w-full" /></UFormField>
                   <div class="flex items-end">
-                    <div class="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/40">
+                    <div class="app-field-row w-full">
                       <span class="text-sm text-gray-600 dark:text-gray-300">本地失败时回退云端</span>
                       <USwitch v-model="config.asrCloudFallback" aria-label="本地失败时回退云端" />
                     </div>
                   </div>
                 </div>
-                <p class="text-[11px] leading-5 text-amber-700 dark:text-amber-300">隐私提示：开启后会先把音频上传到云服务。长音频超过 24MB 时会先压缩为 32kbps mono MP3；仍超限则报错。</p>
+                <p class="text-xs leading-5 text-amber-700 dark:text-amber-300">隐私提示：开启后会先把音频上传到云服务。长音频超过 24MB 时会先压缩为 32kbps mono MP3；仍超限则报错。</p>
               </div>
 
-              <AsrModelManager :selected-model="config.asrModel" :engine="config.asrEngine" @select="config.asrModel = $event" />
+              <LazyAsrModelManager :selected-model="config.asrModel" :engine="config.asrEngine" @select="config.asrModel = $event" />
 
-              <p class="rounded-xl border border-amber-100 bg-amber-50/80 p-3 text-xs leading-5 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+              <p class="app-info-warning p-3">
                 单镜像已内置 ASR 服务，不需要再启动 sidecar profile。模型默认不会自动下载，请在「本地模型管理」中手动开始，下载前请预留 10–20GB 空间。ARM NAS 可把引擎切到 <code>whisper-cpp</code>。
               </p>
 
-              <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
+              <div class="surface-muted p-3 space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p class="text-sm font-medium text-gray-700 dark:text-gray-300">ASR 指标</p>
@@ -177,11 +186,11 @@
                   <UButton label="刷新" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="asrMetricsLoading" @click="loadAsrMetrics" />
                 </div>
                 <div v-if="asrMetrics" class="grid grid-cols-2 gap-2 md:grid-cols-5">
-                  <div class="rounded-xl bg-gray-50 p-2.5 dark:bg-gray-900/40"><p class="text-[11px] text-gray-500">识别次数</p><p class="text-lg font-bold">{{ asrMetrics.summary.runs }}</p></div>
-                  <div class="rounded-xl bg-gray-50 p-2.5 dark:bg-gray-900/40"><p class="text-[11px] text-gray-500">音频小时</p><p class="text-lg font-bold">{{ asrMetrics.summary.audioHours.toFixed(2) }}</p></div>
-                  <div class="rounded-xl bg-gray-50 p-2.5 dark:bg-gray-900/40"><p class="text-[11px] text-gray-500">平均 RTF</p><p class="text-lg font-bold">{{ asrMetrics.summary.avgRtf.toFixed(2) }}</p></div>
-                  <div class="rounded-xl bg-gray-50 p-2.5 dark:bg-gray-900/40"><p class="text-[11px] text-gray-500">平均置信度</p><p class="text-lg font-bold">{{ (asrMetrics.summary.avgConfidence * 100).toFixed(0) }}%</p></div>
-                  <div class="rounded-xl bg-gray-50 p-2.5 dark:bg-gray-900/40"><p class="text-[11px] text-gray-500">低置信度</p><p class="text-lg font-bold">{{ asrMetrics.summary.lowConfidenceRuns }}</p></div>
+                  <div class="app-stat"><p class="text-xs text-gray-500">识别次数</p><p class="text-lg font-bold">{{ asrMetrics.summary.runs }}</p></div>
+                  <div class="app-stat"><p class="text-xs text-gray-500">音频小时</p><p class="text-lg font-bold">{{ asrMetrics.summary.audioHours.toFixed(2) }}</p></div>
+                  <div class="app-stat"><p class="text-xs text-gray-500">平均 RTF</p><p class="text-lg font-bold">{{ asrMetrics.summary.avgRtf.toFixed(2) }}</p></div>
+                  <div class="app-stat"><p class="text-xs text-gray-500">平均置信度</p><p class="text-lg font-bold">{{ (asrMetrics.summary.avgConfidence * 100).toFixed(0) }}%</p></div>
+                  <div class="app-stat"><p class="text-xs text-gray-500">低置信度</p><p class="text-lg font-bold">{{ asrMetrics.summary.lowConfidenceRuns }}</p></div>
                 </div>
                 <div v-if="asrMetrics?.engines?.length" class="flex flex-wrap gap-2">
                   <UBadge v-for="engine in asrMetrics.engines" :key="engine.engine" color="neutral" variant="subtle">
@@ -193,14 +202,14 @@
           </SettingsSection>
         </div>
 
-        <div v-show="activeTab === 'ocr'" class="space-y-4">
+        <div v-if="activeTab === 'ocr'" class="space-y-4">
           <SettingsSection title="图像字幕 OCR" description="把 PGS / VobSub / DVD 图像字幕转换为文本。OCR 与语音识别是并列的字幕来源。">
             <template #actions>
               <UButton label="检测服务" size="xs" color="neutral" variant="soft" :loading="testingOcr" @click="testOcr" />
             </template>
 
             <div class="space-y-4">
-              <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+              <div class="app-field-row">
                 <div class="space-y-0.5">
                   <p class="text-sm font-medium text-gray-700 dark:text-gray-300">启用图像字幕 OCR</p>
                   <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">PGS / VobSub / DVD 图像字幕。没有文本字幕时优先 OCR，再回退 ASR。</p>
@@ -246,43 +255,43 @@
                   </UFormField>
                 </div>
 
-                <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
+                <div class="surface-muted p-3 space-y-3">
                   <div>
                     <p class="text-sm font-medium text-gray-700 dark:text-gray-300">长视频与超时</p>
                     <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">PGS 直接交给 pgsrip；VobSub/DVD 超过分段时长会自动分段处理，并保留断点供重试复用。</p>
                   </div>
                   <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <UFormField label="最大视频时长（小时）">
-                      <UInputNumber v-model="ocrMaxHours" :min="0.1" :max="24" :step="0.5" class="w-full" />
+                      <UInputNumber v-model="ocrMaxHours" :min="0.1" :step="0.5" class="w-full" />
                     </UFormField>
                     <UFormField label="分段时长（分钟）">
-                      <UInputNumber v-model="ocrChunkMinutes" :min="5" :max="240" :step="5" class="w-full" />
+                      <UInputNumber v-model="ocrChunkMinutes" :min="5" :step="5" class="w-full" />
                     </UFormField>
                     <UFormField label="无进度超时（分钟）">
-                      <UInputNumber v-model="ocrJobIdleTimeoutMinutes" :min="1" :max="1440" :step="1" class="w-full" />
+                      <UInputNumber v-model="ocrJobIdleTimeoutMinutes" :min="1" :step="1" class="w-full" />
                     </UFormField>
                     <UFormField label="总任务上限（小时）">
-                      <UInputNumber v-model="ocrJobAbsoluteTimeoutHours" :min="1" :max="168" :step="1" class="w-full" />
+                      <UInputNumber v-model="ocrJobAbsoluteTimeoutHours" :min="1" :step="1" class="w-full" />
                     </UFormField>
                   </div>
                   <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <UFormField label="PGS 识别超时（分钟）">
-                      <UInputNumber v-model="ocrPgsripTimeoutMinutes" :min="5" :max="1440" :step="5" class="w-full" />
+                      <UInputNumber v-model="ocrPgsripTimeoutMinutes" :min="5" :step="5" class="w-full" />
                     </UFormField>
                     <UFormField label="单段抽帧超时（分钟）">
-                      <UInputNumber v-model="ocrFfmpegTimeoutMinutes" :min="1" :max="1440" :step="1" class="w-full" />
+                      <UInputNumber v-model="ocrFfmpegTimeoutMinutes" :min="1" :step="1" class="w-full" />
                     </UFormField>
                     <UFormField label="单段重试次数">
                       <UInputNumber v-model="config.ocrChunkRetries" :min="0" :max="5" :step="1" class="w-full" />
                     </UFormField>
                     <UFormField label="断点保留（小时）">
-                      <UInputNumber v-model="config.ocrResumeTtlHours" :min="1" :max="168" :step="1" class="w-full" />
+                      <UInputNumber v-model="config.ocrResumeTtlHours" :min="1" :step="1" class="w-full" />
                     </UFormField>
                   </div>
-                  <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">默认最大视频时长 4 小时、30 分钟一段。调大后请留意 <code>temp/ocr</code> 磁盘占用；明显超过总任务上限时会在 OCR 开始前明确报错。</p>
+                  <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">默认最大视频时长 4 小时、30 分钟一段。调大后请留意 <code>temp/ocr</code> 磁盘占用；明显超过总任务上限时会在 OCR 开始前明确报错。</p>
                 </div>
 
-                <div class="rounded-xl border border-sky-100 bg-sky-50/70 p-3 text-xs leading-5 text-sky-800 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-200">
+                <div class="app-info-info p-3">
                   <p class="font-medium">PGS / Blu-ray</p>
                   <p>优先使用 pgsrip 按字幕 cue 识别，长电影不强制整片抽帧；结果为空或明显不完整时自动回退到字幕图像 OCR。</p>
                   <p class="mt-2 font-medium">VobSub / DVD</p>
@@ -290,12 +299,12 @@
                 </div>
               </div>
 
-              <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">OCR 不需要下载独立模型。单镜像已内置 Tesseract 语言包与 RapidOCR；引擎选择只影响本机识别质量与速度。</p>
+              <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">OCR 不需要下载独立模型。单镜像已内置 Tesseract 语言包与 RapidOCR；引擎选择只影响本机识别质量与速度。</p>
             </div>
           </SettingsSection>
         </div>
 
-        <div v-show="activeTab === 'defaults'" class="space-y-4">
+        <div v-if="activeTab === 'defaults'" class="space-y-4">
           <SettingsDefaultSection
             :config="config"
             :language-options="LANGUAGE_OPTIONS"
@@ -307,18 +316,18 @@
           />
         </div>
 
-        <div v-show="activeTab === 'intelligence'" class="space-y-4">
-          <SettingsIntelligenceSection :config="config" @update:config="applyConfigPatch" />
+        <div v-if="activeTab === 'intelligence'" class="space-y-4">
+          <LazySettingsIntelligenceSection :config="config" @update:config="applyConfigPatch" />
         </div>
 
-        <div v-show="activeTab === 'styles'" class="space-y-4">
+        <div v-if="activeTab === 'styles'" class="space-y-4">
           <SettingsSection title="自定义翻译风格" description="在默认风格之外新增自己的语气、术语和表达要求。">
             <template #actions>
               <UButton label="新增风格" size="xs" color="primary" variant="soft" icon="i-lucide-plus" @click="addCustomStyle" />
             </template>
 
             <div v-if="config.customStylePresets?.length" class="space-y-3">
-              <div v-for="(preset, index) in config.customStylePresets" :key="preset.id || index" class="rounded-xl border border-gray-200/80 bg-gray-50/50 p-3 dark:border-gray-800 dark:bg-gray-900/30">
+              <div v-for="(preset, index) in config.customStylePresets" :key="preset.id || index" class="surface-muted p-3">
                 <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                   <UInput v-model="preset.name" placeholder="风格名称，例如：日式轻小说" />
                   <UInput v-model="preset.description" placeholder="适用场景说明" />
@@ -334,7 +343,7 @@
 
           <SettingsSection title="内置风格" description="内置风格由系统提供，不可直接编辑；可参考其写法创建自定义风格。">
             <div class="grid gap-3 md:grid-cols-2">
-              <div v-for="preset in builtinStylePresets" :key="preset.id" class="rounded-xl border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-900/30">
+              <div v-for="preset in builtinStylePresets" :key="preset.id" class="surface-muted p-3">
                 <div class="flex items-start gap-2">
                   <UIcon :name="preset.icon || 'i-lucide-wand-sparkles'" class="mt-0.5 h-4 w-4 shrink-0 text-primary-700" />
                   <div class="min-w-0">
@@ -347,7 +356,7 @@
           </SettingsSection>
         </div>
 
-        <div v-show="activeTab === 'glossary'" class="space-y-4">
+        <div v-if="activeTab === 'glossary'" class="space-y-4">
           <SettingsSection title="术语表" description="固定专有名词、角色名或台词的译法。">
             <template #actions>
               <UButton label="添加术语" size="xs" color="primary" variant="soft" icon="i-lucide-plus" @click="addGlossaryRow" />
@@ -364,25 +373,25 @@
           </SettingsSection>
         </div>
 
-        <div v-show="activeTab === 'advanced'" class="space-y-4">
-          <SettingsAdvancedSection :config="config" @update:config="applyConfigPatch" />
+        <div v-if="activeTab === 'advanced'" class="space-y-4">
+          <LazySettingsAdvancedSection :config="config" @update:config="applyConfigPatch" />
         </div>
 
         <div v-if="activeTab === 'storage'" class="space-y-4">
-          <SettingsStoragePanel />
-          <SettingsBackupPanel :config="config" @update:config="applyConfigPatch" />
+          <LazySettingsStoragePanel />
+          <LazySettingsBackupPanel :config="config" @update:config="applyConfigPatch" />
         </div>
 
         <div v-if="activeTab === 'health'" class="space-y-4">
-          <SettingsHealthPanel />
+          <LazySettingsHealthPanel />
         </div>
       </div>
     </div>
 
     <AppStickyBar>
       <template #info>
-        <p v-if="hasUnsavedChanges" class="text-xs font-medium text-amber-600 dark:text-amber-400">有未保存的更改</p>
-        <p v-else class="text-xs text-gray-500 dark:text-gray-400">设置修改后需要保存才会生效。</p>
+        <p v-if="hasUnsavedChanges" class="app-pill app-pill-warning">有未保存的更改</p>
+        <p v-else class="app-caption">保存后生效</p>
       </template>
       <template #actions>
         <UButton label="取消" color="neutral" variant="ghost" @click="handleClose" />
@@ -393,7 +402,7 @@
     <UModal v-model:open="closeConfirmOpen" title="放弃未保存的更改？" description="当前设置尚未保存，关闭后会丢失本次修改。">
       <template #content>
         <div class="space-y-4 p-5">
-          <div class="rounded-xl border border-amber-100 bg-amber-50/80 p-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+          <div class="app-info-warning p-3 text-sm leading-6">
             你可以先保存修改，或确认放弃本次更改。
           </div>
           <div class="flex items-center justify-end gap-3">
@@ -412,45 +421,79 @@
 import { LANGUAGE_OPTIONS } from '~~/shared/languages'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
+import { buildSettingsSnapshot, CROSS_PAGE_SETTINGS_KEYS } from '~~/shared/settingsSnapshot'
 import { useSimpleMode } from '../composables/useSimpleMode'
 import SettingsAiSection from './SettingsAiSection.vue'
 import SettingsDefaultSection from './SettingsDefaultSection.vue'
-import SettingsIntelligenceSection from './SettingsIntelligenceSection.vue'
-import SettingsAdvancedSection from './SettingsAdvancedSection.vue'
-import SettingsBackupPanel from './SettingsBackupPanel.vue'
-import SettingsHealthPanel from './SettingsHealthPanel.vue'
 
 const emit = defineEmits(['close', 'saved', 'dirty'])
 const route = useRoute()
 const isGuideOpen = ref(false)
 const { simpleMode } = useSimpleMode()
-const requestedTab = String(route.query.tab || '')
-const activeTab = ref<'ai' | 'asr' | 'ocr' | 'defaults' | 'intelligence' | 'styles' | 'glossary' | 'advanced' | 'storage' | 'health'>(
-  ['ai', 'asr', 'ocr', 'defaults', 'intelligence', 'styles', 'glossary', 'advanced', 'storage', 'health'].includes(requestedTab)
-    ? requestedTab as any
-    : 'ai'
-)
-const SETTINGS_TABS = [
-  { label: 'AI 连接', icon: 'i-lucide-plug', value: 'ai' as const },
-  { label: '语音识别', icon: 'i-lucide-mic', value: 'asr' as const },
-  { label: '图像字幕 OCR', icon: 'i-lucide-scan-text', value: 'ocr' as const },
-  { label: '翻译默认', icon: 'i-lucide-sliders-horizontal', value: 'defaults' as const },
-  { label: '智能增强', icon: 'i-lucide-brain-circuit', value: 'intelligence' as const },
-  { label: '翻译风格', icon: 'i-lucide-wand-sparkles', value: 'styles' as const },
-  { label: '术语表', icon: 'i-lucide-book-a', value: 'glossary' as const },
-  { label: '高级设置', icon: 'i-lucide-settings-2', value: 'advanced' as const },
-  { label: '存储与缓存', icon: 'i-lucide-hard-drive', value: 'storage' as const },
-  { label: '系统体检', icon: 'i-lucide-stethoscope', value: 'health' as const }
+type SettingsTabValue = 'ai' | 'asr' | 'ocr' | 'defaults' | 'intelligence' | 'styles' | 'glossary' | 'advanced' | 'storage' | 'health'
+type SettingsGroupValue = 'connection' | 'translation' | 'intelligence' | 'system'
+
+const SETTINGS_TABS: Array<{ label: string, icon: string, value: SettingsTabValue, group: SettingsGroupValue }> = [
+  { label: 'AI 连接', icon: 'i-lucide-plug', value: 'ai', group: 'connection' },
+  { label: '语音识别', icon: 'i-lucide-mic', value: 'asr', group: 'connection' },
+  { label: '图像字幕 OCR', icon: 'i-lucide-scan-text', value: 'ocr', group: 'connection' },
+  { label: '翻译默认', icon: 'i-lucide-sliders-horizontal', value: 'defaults', group: 'translation' },
+  { label: '智能增强', icon: 'i-lucide-brain-circuit', value: 'intelligence', group: 'intelligence' },
+  { label: '翻译风格', icon: 'i-lucide-wand-sparkles', value: 'styles', group: 'translation' },
+  { label: '术语表', icon: 'i-lucide-book-a', value: 'glossary', group: 'translation' },
+  { label: '高级设置', icon: 'i-lucide-settings-2', value: 'advanced', group: 'system' },
+  { label: '存储与缓存', icon: 'i-lucide-hard-drive', value: 'storage', group: 'system' },
+  { label: '系统体检', icon: 'i-lucide-stethoscope', value: 'health', group: 'system' }
 ]
-const SIMPLE_MODE_HIDDEN_TABS = new Set(['advanced', 'storage', 'health'])
-const settingsTabs = computed(() => (
+const SETTINGS_GROUPS: Array<{ label: string, icon: string, value: SettingsGroupValue }> = [
+  { label: '连接', icon: 'i-lucide-cable', value: 'connection' },
+  { label: '翻译', icon: 'i-lucide-languages', value: 'translation' },
+  { label: '智能增强', icon: 'i-lucide-brain-circuit', value: 'intelligence' },
+  { label: '系统', icon: 'i-lucide-settings-2', value: 'system' }
+]
+const SIMPLE_MODE_HIDDEN_TABS = new Set<SettingsTabValue>(['advanced', 'storage', 'health'])
+const requestedTab = String(route.query.tab || '')
+const initialTab = SETTINGS_TABS.find(tab => tab.value === requestedTab)?.value ?? 'ai'
+const activeTab = ref<SettingsTabValue>(initialTab)
+const activeGroup = ref<SettingsGroupValue>(SETTINGS_TABS.find(tab => tab.value === initialTab)?.group ?? 'connection')
+const visibleTabs = computed(() => (
   simpleMode.value
     ? SETTINGS_TABS.filter(tab => !SIMPLE_MODE_HIDDEN_TABS.has(tab.value))
     : SETTINGS_TABS
 ))
+const settingsGroups = computed(() => SETTINGS_GROUPS
+  .map(group => ({ ...group, tabs: visibleTabs.value.filter(tab => tab.group === group.value) }))
+  .filter(group => group.tabs.length > 0))
+const settingsGroupItems = computed(() => settingsGroups.value.map(({ label, icon, value }) => ({ label, icon, value })))
+const activeGroupTabs = computed(() => settingsGroups.value.find(group => group.value === activeGroup.value)?.tabs ?? [])
+const showTabNav = computed(() => activeGroupTabs.value.length > 1)
 
-watch(settingsTabs, (tabs) => {
-  if (!tabs.some(tab => tab.value === activeTab.value)) activeTab.value = 'ai'
+function selectSettingsGroup(value: string) {
+  const group = settingsGroups.value.find(item => item.value === value)
+  if (!group) return
+  activeGroup.value = group.value
+  if (!group.tabs.some(tab => tab.value === activeTab.value)) {
+    activeTab.value = group.tabs[0]!.value
+  }
+}
+
+function selectSettingsTab(value: string) {
+  const tab = visibleTabs.value.find(item => item.value === value)
+  if (!tab) return
+  activeTab.value = tab.value
+  activeGroup.value = tab.group
+}
+
+watch(visibleTabs, (tabs) => {
+  const current = tabs.find(tab => tab.value === activeTab.value)
+  if (!current) {
+    activeTab.value = 'ai'
+    activeGroup.value = 'connection'
+    return
+  }
+  if (!settingsGroups.value.some(group => group.value === activeGroup.value)) {
+    activeGroup.value = current.group
+  }
 }, { immediate: true })
 const builtinStylePresets = STYLE_PRESETS
 const { data } = await useAppConfigData()
@@ -464,15 +507,6 @@ function cloneConfig(value: any) {
   return cloned
 }
 const config = ref<any>(cloneConfig(data.value))
-const CROSS_PAGE_CONFIG_KEYS = new Set([
-  'mediaRoots',
-  'automationConcurrency',
-  'notificationEnabled',
-  'notificationLowConfidenceThreshold',
-  'integrationWebhookToken',
-  'integrationPathFrom',
-  'integrationPathTo'
-])
 const pending = ref(false)
 const testingAsr = ref(false)
 const testingOcr = ref(false)
@@ -645,53 +679,58 @@ const useManualModelInput = ref(false)
 const fetchingModels = ref(false)
 const modelError = ref('')
 const MODEL_INPUT_MODE_KEY = 'subx:settings:model-input-mode'
+function finiteOrDefault(value: any, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed !== 0 ? parsed : fallback
+}
+
 const asrUploadTimeoutMinutes = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.asrUploadTimeoutMs ?? 30 * 60 * 1000) / 60000)),
-  set: (value: any) => { config.value.asrUploadTimeoutMs = Math.max(1, Math.min(1440, Math.round(Number(value) || 30))) * 60000 }
+  set: (value: any) => { config.value.asrUploadTimeoutMs = Math.max(1, Math.round(finiteOrDefault(value, 30))) * 60000 }
 })
 const asrPollTimeoutSeconds = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.asrPollTimeoutMs ?? 30 * 1000) / 1000)),
-  set: (value: any) => { config.value.asrPollTimeoutMs = Math.max(1, Math.min(60, Math.round(Number(value) || 30))) * 1000 }
+  set: (value: any) => { config.value.asrPollTimeoutMs = Math.max(1, Math.round(finiteOrDefault(value, 30))) * 1000 }
 })
 const asrJobIdleTimeoutMinutes = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.asrJobIdleTimeoutMs ?? 30 * 60 * 1000) / 60000)),
-  set: (value: any) => { config.value.asrJobIdleTimeoutMs = Math.max(1, Math.min(1440, Math.round(Number(value) || 30))) * 60000 }
+  set: (value: any) => { config.value.asrJobIdleTimeoutMs = Math.max(1, Math.round(finiteOrDefault(value, 30))) * 60000 }
 })
 const asrChunkMinutes = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.asrChunkSeconds ?? 300) / 60)),
-  set: (value: any) => { config.value.asrChunkSeconds = Math.max(1, Math.min(60, Math.round(Number(value) || 5))) * 60 }
+  set: (value: any) => { config.value.asrChunkSeconds = Math.max(1, Math.round(finiteOrDefault(value, 5))) * 60 }
 })
 const asrJobAbsoluteTimeoutHours = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.asrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000) / 3600000)),
-  set: (value: any) => { config.value.asrJobAbsoluteTimeoutMs = Math.max(1, Math.min(168, Math.round(Number(value) || 6))) * 3600000 }
+  set: (value: any) => { config.value.asrJobAbsoluteTimeoutMs = Math.max(1, Math.round(finiteOrDefault(value, 6))) * 3600000 }
 })
 
 const ocrMaxHours = computed({
   get: () => Math.max(0.1, Number((Number(config.value?.ocrMaxSeconds ?? 14400) / 3600).toFixed(2))),
   set: (value: any) => {
-    const hours = Math.max(0.1, Math.min(24, Number(value) || 4))
+    const hours = Math.max(0.1, finiteOrDefault(value, 4))
     config.value.ocrMaxSeconds = Math.max(300, Math.round(hours * 3600))
   }
 })
 const ocrChunkMinutes = computed({
   get: () => Math.max(5, Math.round(Number(config.value?.ocrChunkSeconds ?? 1800) / 60)),
-  set: (value: any) => { config.value.ocrChunkSeconds = Math.max(5, Math.min(240, Math.round(Number(value) || 30))) * 60 }
+  set: (value: any) => { config.value.ocrChunkSeconds = Math.max(5, Math.round(finiteOrDefault(value, 30))) * 60 }
 })
 const ocrPgsripTimeoutMinutes = computed({
   get: () => Math.max(5, Math.round(Number(config.value?.ocrPgsripTimeoutSeconds ?? 7200) / 60)),
-  set: (value: any) => { config.value.ocrPgsripTimeoutSeconds = Math.max(5, Math.min(1440, Math.round(Number(value) || 120))) * 60 }
+  set: (value: any) => { config.value.ocrPgsripTimeoutSeconds = Math.max(5, Math.round(finiteOrDefault(value, 120))) * 60 }
 })
 const ocrFfmpegTimeoutMinutes = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.ocrFfmpegTimeoutSeconds ?? 3600) / 60)),
-  set: (value: any) => { config.value.ocrFfmpegTimeoutSeconds = Math.max(1, Math.min(1440, Math.round(Number(value) || 60))) * 60 }
+  set: (value: any) => { config.value.ocrFfmpegTimeoutSeconds = Math.max(1, Math.round(finiteOrDefault(value, 60))) * 60 }
 })
 const ocrJobIdleTimeoutMinutes = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.ocrJobIdleTimeoutMs ?? 60 * 60 * 1000) / 60000)),
-  set: (value: any) => { config.value.ocrJobIdleTimeoutMs = Math.max(1, Math.min(1440, Math.round(Number(value) || 60))) * 60000 }
+  set: (value: any) => { config.value.ocrJobIdleTimeoutMs = Math.max(1, Math.round(finiteOrDefault(value, 60))) * 60000 }
 })
 const ocrJobAbsoluteTimeoutHours = computed({
   get: () => Math.max(1, Math.round(Number(config.value?.ocrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000) / 3600000)),
-  set: (value: any) => { config.value.ocrJobAbsoluteTimeoutMs = Math.max(1, Math.min(168, Math.round(Number(value) || 6))) * 3600000 }
+  set: (value: any) => { config.value.ocrJobAbsoluteTimeoutMs = Math.max(1, Math.round(finiteOrDefault(value, 6))) * 3600000 }
 })
 
 const qualityThresholdPercent = computed({
@@ -711,83 +750,7 @@ const isInsecure = computed(() => {
   return window.location.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(window.location.hostname)
 })
 
-function buildConfigSnapshot(value: any) {
-  return JSON.stringify({
-    apiKey: String(value?.apiKey || ''),
-    apiBaseUrl: String(value?.apiBaseUrl || ''),
-    providerType: String(value?.providerType || 'openai-compatible'),
-    fallbackProviderEnabled: !!value?.fallbackProviderEnabled,
-    fallbackProviderType: String(value?.fallbackProviderType || 'openai-compatible'),
-    fallbackApiBaseUrl: String(value?.fallbackApiBaseUrl || ''),
-    fallbackApiKey: String(value?.fallbackApiKey || ''),
-    fallbackModel: String(value?.fallbackModel || ''),
-    asrEnabled: !!value?.asrEnabled,
-    asrBaseUrl: String(value?.asrBaseUrl || ''),
-    asrApiKey: String(value?.asrApiKey || ''),
-    asrModel: String(value?.asrModel || 'small'),
-    asrLanguage: String(value?.asrLanguage || 'auto'),
-    asrDevice: String(value?.asrDevice || 'auto'),
-    asrComputeType: String(value?.asrComputeType || 'int8'),
-    asrUploadTimeoutMs: Number(value?.asrUploadTimeoutMs ?? 30 * 60 * 1000),
-    asrPollTimeoutMs: Number(value?.asrPollTimeoutMs ?? 30 * 1000),
-    asrJobIdleTimeoutMs: Number(value?.asrJobIdleTimeoutMs ?? 30 * 60 * 1000),
-    asrJobAbsoluteTimeoutMs: Number(value?.asrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000),
-    asrChunkSeconds: Number(value?.asrChunkSeconds ?? 300),
-    asrChunkOverlapSeconds: Number(value?.asrChunkOverlapSeconds ?? 2),
-    asrResumeTtlHours: Number(value?.asrResumeTtlHours ?? 168),
-    asrVad: value?.asrVad !== false,
-    asrWordTimestamps: value?.asrWordTimestamps !== false,
-    asrKeepAudio: !!value?.asrKeepAudio,
-    asrEngine: String(value?.asrEngine || 'auto'),
-    asrPreprocess: String(value?.asrPreprocess || 'off'),
-    asrDiarization: !!value?.asrDiarization,
-    asrCloudEnabled: !!value?.asrCloudEnabled,
-    asrCloudBaseUrl: String(value?.asrCloudBaseUrl || ''),
-    asrCloudApiKey: String(value?.asrCloudApiKey || ''),
-    asrCloudModel: String(value?.asrCloudModel || ''),
-    asrCloudFallback: value?.asrCloudFallback !== false,
-    ocrEnabled: !!value?.ocrEnabled,
-    ocrBaseUrl: String(value?.ocrBaseUrl || ''),
-    ocrLanguage: String(value?.ocrLanguage || 'en'),
-    ocrApiKey: String(value?.ocrApiKey || ''),
-    ocrEngine: String(value?.ocrEngine || 'auto'),
-    ocrMinConfidence: Number(value?.ocrMinConfidence ?? 25),
-    ocrMaxSeconds: Number(value?.ocrMaxSeconds ?? 14400),
-    ocrChunkSeconds: Number(value?.ocrChunkSeconds ?? 1800),
-    ocrPgsripTimeoutSeconds: Number(value?.ocrPgsripTimeoutSeconds ?? 7200),
-    ocrFfmpegTimeoutSeconds: Number(value?.ocrFfmpegTimeoutSeconds ?? 3600),
-    ocrChunkRetries: Number(value?.ocrChunkRetries ?? 1),
-    ocrResumeTtlHours: Number(value?.ocrResumeTtlHours ?? 24),
-    ocrJobIdleTimeoutMs: Number(value?.ocrJobIdleTimeoutMs ?? 60 * 60 * 1000),
-    ocrJobAbsoluteTimeoutMs: Number(value?.ocrJobAbsoluteTimeoutMs ?? 6 * 60 * 60 * 1000),
-    defaultModel: String(value?.defaultModel || ''),
-    targetLanguage: String(value?.targetLanguage || ''),
-    outputMode: String(value?.outputMode || ''),
-    stylePreset: String(value?.stylePreset || ''),
-    subtitleFormat: String(value?.subtitleFormat || ''),
-    subtitleStylePreset: String(value?.subtitleStylePreset || ''),
-    subtitleStyle: value?.subtitleStyle || null,
-    bilingualLayout: String(value?.bilingualLayout || ''),
-    embyCompatibleOutput: !!value?.embyCompatibleOutput,
-    qualityCheckEnabled: !!value?.qualityCheckEnabled,
-    qualityCheckModel: String(value?.qualityCheckModel || ''),
-    qualityScoreThreshold: Number(value?.qualityScoreThreshold ?? 0.7),
-    qualityCheckMaxEntries: Number(value?.qualityCheckMaxEntries || 200),
-    chunkSize: Number(value?.chunkSize || 0),
-    concurrency: Number(value?.concurrency || 0),
-    maxRetries: Number(value?.maxRetries || 0),
-    logRetentionDays: Number(value?.logRetentionDays || 0),
-    autoBackupEnabled: !!value?.autoBackupEnabled,
-    autoBackupIntervalHours: Number(value?.autoBackupIntervalHours ?? 24),
-    autoBackupKeep: Number(value?.autoBackupKeep ?? 10),
-    translationMode: String(value?.translationMode || 'non_stream'),
-    streamUsage: !!value?.streamUsage,
-    glossary: value?.glossary || {},
-    customStylePresets: value?.customStylePresets || []
-  })
-}
-
-const currentSnapshot = computed(() => buildConfigSnapshot(config.value))
+const currentSnapshot = computed(() => buildSettingsSnapshot(config.value))
 const hasUnsavedChanges = computed(() => initialSnapshot.value !== '' && currentSnapshot.value !== initialSnapshot.value)
 
 watch(hasUnsavedChanges, value => emit('dirty', value), { immediate: true })
@@ -993,7 +956,7 @@ async function save() {
   pending.value = true
   try {
     const payload = Object.fromEntries(
-      Object.entries(config.value).filter(([key]) => !CROSS_PAGE_CONFIG_KEYS.has(key))
+      Object.entries(config.value).filter(([key]) => !CROSS_PAGE_SETTINGS_KEYS.has(key))
     )
     await $fetch('/api/config', { method: 'PUT', body: payload })
     clearNuxtData('app:config')

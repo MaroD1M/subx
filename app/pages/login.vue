@@ -1,39 +1,34 @@
 <template>
-  <div class="relative flex min-h-screen w-full items-center justify-center overflow-x-hidden bg-gray-50 py-10 dark:bg-gray-950">
-    <!-- Animated Background Orbs -->
-    <div class="absolute inset-0 z-0">
-      <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-400/20 dark:bg-primary-600/10 blur-[120px] rounded-full animate-blob"></div>
-      <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-sky-400/20 dark:bg-sky-600/10 blur-[120px] rounded-full animate-blob animation-delay-2000"></div>
-    </div>
-
-    <div class="relative z-10 w-full max-w-[420px] animate-in fade-in slide-in-from-bottom-8 duration-1000">
-      <!-- Logo & Brand -->
-      <div class="text-center mb-10 space-y-4">
-        <img src="/logo.svg" alt="SubX" class="mx-auto mb-2 h-20 w-20 rounded-[2rem] shadow-2xl shadow-primary-500/20 transition-transform duration-500 hover:scale-105" />
-        <div class="space-y-1">
-          <h1 class="text-3xl font-black tracking-tight text-gray-900 dark:text-white bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-500 dark:from-white dark:to-gray-400">SubX 安全验证</h1>
-          <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">本地部署的字幕提取与翻译入口</p>
+  <div class="flex min-h-screen w-full flex-col items-center justify-center overflow-x-hidden px-4 py-10 sm:px-6">
+    <div class="w-full max-w-[400px]">
+      <!-- Instance identity -->
+      <header class="mb-6 flex flex-col items-center text-center">
+        <img src="/logo.svg" alt="SubX" class="h-12 w-12 rounded-xl" />
+        <div class="mt-3 flex items-center justify-center gap-2">
+          <h1 class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">SubX</h1>
+          <span class="app-pill app-pill-neutral">v{{ appVersion }}</span>
         </div>
-      </div>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">本地部署 · 字幕提取与翻译</p>
+      </header>
 
       <!-- Insecure Connection Warning -->
       <ClientOnly>
-        <div v-if="isInsecure" class="mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/5 border border-amber-100 dark:border-amber-500/20 flex items-start gap-3">
-          <UIcon name="i-lucide-shield-alert" class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          <div class="space-y-1">
-            <p class="text-xs font-bold text-amber-700 dark:text-amber-400">{{ insecureTitle }}</p>
-            <p class="text-[10px] text-amber-600 dark:text-amber-500/80 leading-relaxed">{{ insecureHint }}</p>
+        <div v-if="isInsecure" class="mb-4 flex items-start gap-2.5 rounded-lg border border-amber-200/70 bg-amber-50/70 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <UIcon name="i-lucide-shield-alert" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div class="space-y-0.5">
+            <p class="text-xs font-medium text-amber-700 dark:text-amber-300">{{ insecureTitle }}</p>
+            <p class="text-[11px] leading-4 text-amber-600 dark:text-amber-400/80">{{ insecureHint }}</p>
           </div>
         </div>
       </ClientOnly>
 
       <!-- Main Card -->
-      <div class="glass-panel border-white/40 dark:border-white/5 rounded-[2rem] p-8 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.12)] backdrop-blur-2xl">
+      <div class="surface-card p-5 sm:p-6">
         <!-- Setup Mode -->
-        <form v-if="!hasPasskey" class="space-y-6" @submit.prevent="handleSetup">
-          <div class="space-y-2">
-            <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">初始化实例</h2>
-            <p class="text-xs text-neutral-500 leading-relaxed">检测到这是该 SubX 实例的首次启动。请设置一个高强度口令密钥以保护您的媒体库。</p>
+        <form v-if="!hasPasskey" class="space-y-5" @submit.prevent="handleSetup">
+          <div class="space-y-1.5">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">初始化实例</h2>
+            <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">首次启动。请设置一个高强度口令密钥，用于保护此实例的媒体库。</p>
           </div>
 
           <div class="space-y-4">
@@ -42,11 +37,12 @@
                 v-model="passkey"
                 :type="showPasskey ? 'text' : 'password'"
                 placeholder="设置 8 位以上强口令"
-                size="xl"
+                name="passkey"
+                size="lg"
                 icon="i-lucide-key-round"
                 class="w-full"
                 autocomplete="new-password"
-                :ui="{ trailing: 'pointer-events-auto', rounded: 'rounded-xl' }"
+                :ui="{ trailing: 'pointer-events-auto', rounded: 'rounded-lg' }"
               >
                 <template #trailing>
                   <UButton
@@ -68,37 +64,38 @@
                 v-model="confirmPasskey"
                 :type="showPasskey ? 'text' : 'password'"
                 placeholder="请再次填写"
-                size="xl"
+                name="confirm-passkey"
+                size="lg"
                 icon="i-lucide-lock"
                 class="w-full"
                 autocomplete="new-password"
-                :ui="{ rounded: 'rounded-xl' }"
+                :ui="{ rounded: 'rounded-lg' }"
               />
             </UFormField>
           </div>
 
-          <div v-if="error" role="alert" aria-live="assertive" class="p-3 rounded-xl bg-red-50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 flex items-start gap-2 animate-in fade-in zoom-in-95 duration-300">
-            <UIcon name="i-lucide-alert-circle" class="w-4 h-4 text-red-500 mt-0.5" />
-            <span class="text-xs text-red-600 dark:text-red-400 font-medium">{{ error }}</span>
+          <div v-if="error" role="alert" aria-live="assertive" class="flex items-start gap-2 rounded-lg border border-red-200/70 bg-red-50/70 px-3 py-2 dark:border-red-900/40 dark:bg-red-950/20">
+            <UIcon name="i-lucide-alert-circle" class="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+            <span class="text-xs font-medium leading-5 text-red-700 dark:text-red-300">{{ error }}</span>
           </div>
 
           <UButton
             label="启用安全防护并进入"
             color="primary"
             block
-            size="xl"
+            size="lg"
             icon="i-lucide-shield-plus"
             :loading="loading"
             type="submit"
-            class="shadow-lg shadow-primary-500/20 rounded-xl"
+            class="rounded-lg"
           />
         </form>
 
         <!-- Login Mode -->
-        <form v-else class="space-y-6" @submit.prevent="handleLogin">
-          <div class="space-y-2">
-            <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100">欢迎回来</h2>
-            <p class="text-xs text-neutral-500 leading-relaxed">您的内容已受到加密保护，请输入口令密钥以解锁工作区。</p>
+        <form v-else class="space-y-5" @submit.prevent="handleLogin">
+          <div class="space-y-1.5">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">欢迎回来</h2>
+            <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">请输入口令密钥以解锁工作区。</p>
           </div>
 
           <UFormField label="口令密钥" required>
@@ -106,11 +103,12 @@
               v-model="passkey"
               :type="showPasskey ? 'text' : 'password'"
               placeholder="••••••••"
-              size="xl"
+              name="passkey"
+              size="lg"
               icon="i-lucide-fingerprint"
               class="w-full"
               autocomplete="current-password"
-              :ui="{ trailing: 'pointer-events-auto', rounded: 'rounded-xl' }"
+              :ui="{ trailing: 'pointer-events-auto', rounded: 'rounded-lg' }"
             >
               <template #trailing>
                 <UButton
@@ -127,34 +125,33 @@
             </UInput>
           </UFormField>
 
-          <div v-if="error" role="alert" aria-live="assertive" class="p-3 rounded-xl bg-red-50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 flex items-start gap-2 animate-in fade-in zoom-in-95 duration-300">
-            <UIcon name="i-lucide-alert-circle" class="w-4 h-4 text-red-500 mt-0.5" />
-            <span class="text-xs text-red-600 dark:text-red-400 font-medium">{{ error }}</span>
+          <div v-if="error" role="alert" aria-live="assertive" class="flex items-start gap-2 rounded-lg border border-red-200/70 bg-red-50/70 px-3 py-2 dark:border-red-900/40 dark:bg-red-950/20">
+            <UIcon name="i-lucide-alert-circle" class="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+            <span class="text-xs font-medium leading-5 text-red-700 dark:text-red-300">{{ error }}</span>
           </div>
 
           <UButton
             label="解锁"
             color="primary"
             block
-            size="xl"
+            size="lg"
             icon="i-lucide-unlock"
             :loading="loading"
             type="submit"
-            class="shadow-lg shadow-primary-500/20 rounded-xl"
+            class="rounded-lg"
           />
         </form>
       </div>
 
-
-      <!-- Enhanced Footer -->
-      <div class="mt-10 flex flex-col items-center gap-4">
-        <div class="flex items-center gap-2 text-[11px] font-medium text-neutral-400 tracking-wider uppercase">
-          <UIcon name="i-lucide-binary" class="w-3.5 h-3.5" />
-          <span>本地会话 · 口令不出机器</span>
+      <!-- Local-first footer -->
+      <div class="mt-6 space-y-3 text-center">
+        <div class="flex items-center justify-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+          <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5 shrink-0" />
+          <span>本地优先 · 口令仅在本机校验，不上传云端</span>
         </div>
-        <div class="flex items-center gap-6">
-          <UButton icon="i-lucide-help-circle" variant="ghost" color="neutral" size="xs" label="获取帮助" class="text-neutral-500" type="button" @click="helpOpen = true" />
-          <UButton icon="i-lucide-github" variant="ghost" color="neutral" size="xs" label="GitHub" to="https://github.com/MaroD1M/subx" target="_blank" class="text-neutral-500" />
+        <div class="flex items-center justify-center gap-2">
+          <UButton icon="i-lucide-help-circle" variant="ghost" color="neutral" size="xs" label="获取帮助" class="text-gray-500 dark:text-gray-400" type="button" @click="helpOpen = true" />
+          <UButton icon="i-lucide-github" variant="ghost" color="neutral" size="xs" label="GitHub" to="https://github.com/MaroD1M/subx" target="_blank" class="text-gray-500 dark:text-gray-400" />
         </div>
       </div>
     </div>
@@ -209,6 +206,7 @@ definePageMeta({
 })
 
 const { authenticated, hasPasskey, check, setup, login } = useAuth()
+const appVersion = useRuntimeConfig().public.appVersion
 
 const passkey = ref('')
 const confirmPasskey = ref('')

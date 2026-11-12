@@ -20,16 +20,16 @@
         <UBadge v-if="issues.length" color="warning" variant="subtle">{{ issueCount }} 个问题</UBadge>
       </div>
 
-      <div v-if="meta" class="space-y-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
-        <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-          <UBadge :color="meta.cached ? 'neutral' : 'success'" variant="subtle">{{ meta.cached ? '缓存结果' : '新结果' }}</UBadge>
+      <div v-if="meta" class="space-y-1 app-meta">
+        <p class="app-toolbar-row gap-x-1.5 gap-y-1">
+          <span class="app-pill" :class="meta.cached ? 'app-pill-neutral' : 'app-pill-success'">{{ meta.cached ? '缓存结果' : '新结果' }}</span>
           <span v-if="meta.cachedAt">{{ formatTime(meta.cachedAt) }}</span>
           <span>· {{ meta.model || '未知模型' }}</span>
           <span>· 抽样 {{ meta.entryCount }} / {{ meta.totalEntries }} 条</span>
         </p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
+      <div class="app-toolbar-row">
         <UButton
           :label="state.result ? '重新校对' : '开始校对'"
           icon="i-lucide-sparkles"
@@ -72,7 +72,7 @@
         />
       </div>
 
-      <div v-if="meta?.stale" class="rounded-xl border border-amber-200 bg-amber-50/80 p-2.5 text-[11px] leading-5 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+      <div v-if="meta?.stale" class="rounded-xl border border-amber-200 bg-amber-50/80 p-2.5 text-xs leading-5 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
         字幕内容已变化，当前缓存建议可能过期。建议重新校对后再应用。
       </div>
     </div>
@@ -88,25 +88,25 @@
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="min-w-0">
               <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">{{ termsTitle }} {{ terms.length }} 条</p>
-              <p v-if="kind === 'consistency'" class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">来自一致性检查的统一译法建议，可加入术语表。</p>
-              <p v-if="mergedTermCount" class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">已省略与「术语提取建议」重复的 {{ mergedTermCount }} 条术语；批量加入时会统一合并。</p>
+              <p v-if="kind === 'consistency'" class="app-caption mt-0.5">来自一致性检查的统一译法建议，可加入术语表。</p>
+              <p v-if="mergedTermCount" class="app-caption mt-0.5">已省略与「术语提取建议」重复的 {{ mergedTermCount }} 条术语；批量加入时会统一合并。</p>
             </div>
             <UButton label="全部加入术语表" icon="i-lucide-plus" size="xs" color="primary" :loading="applyingTerms" :disabled="allTermsApplied" @click="emit('apply-terms')" />
           </div>
           <div class="space-y-2">
-            <div v-for="term in terms" :key="`${term.source}-${term.target}`" class="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/30">
+            <div v-for="term in terms" :key="`${term.source}-${term.target}`" class="surface-muted p-3">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
                   <p class="text-sm text-gray-800 dark:text-gray-100">
                     <span class="font-mono">{{ term.source }}</span>
-                    <span class="mx-1 text-gray-400">→</span>
+                    <span class="mx-1 text-gray-500 dark:text-gray-400">→</span>
                     <span class="font-semibold text-primary-700 dark:text-primary-300">{{ term.target }}</span>
                   </p>
-                  <p v-if="term.reason" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ term.reason }}</p>
-                  <p v-if="conflict(term)" class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">术语表已有：{{ conflict(term) }}（加入后会覆盖）</p>
-                  <p v-else-if="hasTerm(term)" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">术语表已存在相同译法</p>
+                  <p v-if="term.reason" class="app-caption mt-1">{{ term.reason }}</p>
+                  <p v-if="conflict(term)" class="mt-1 text-xs text-amber-700 dark:text-amber-300">术语表已有：{{ conflict(term) }}（加入后会覆盖）</p>
+                  <p v-else-if="hasTerm(term)" class="app-caption mt-1">术语表已存在相同译法</p>
                   <div v-if="term.subtitleIds?.length" class="mt-1 flex flex-wrap items-center gap-1">
-                    <span class="text-[11px] text-gray-400">相关字幕</span>
+                    <span class="app-caption">相关字幕</span>
                     <UButton
                       v-for="id in term.subtitleIds.slice(0, 5)"
                       :key="id"
@@ -117,7 +117,7 @@
                       :title="`定位到字幕 #${id}`"
                       @click="emit('focus-subtitle', String(id))"
                     />
-                    <span v-if="term.subtitleIds.length > 5" class="text-[11px] text-gray-400">+{{ term.subtitleIds.length - 5 }}</span>
+                    <span v-if="term.subtitleIds.length > 5" class="app-caption">+{{ term.subtitleIds.length - 5 }}</span>
                   </div>
                 </div>
                 <UButton :label="termActionLabel(term)" size="xs" color="primary" variant="ghost" :loading="applyingTerms" :disabled="hasTerm(term)" @click="emit('apply-term', term)" />
@@ -129,10 +129,10 @@
         <section v-if="issues.length" class="space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">一致性问题 {{ issues.length }} 条</p>
-            <span class="text-[11px] text-gray-500 dark:text-gray-400">只提示，不会自动修改字幕</span>
+            <span class="app-caption">只提示，不会自动修改字幕</span>
           </div>
           <div v-if="issueTypes.length > 1" class="space-y-1">
-            <p class="text-[11px] text-gray-500 dark:text-gray-400">按问题类型筛选</p>
+            <p class="app-caption">按问题类型筛选</p>
             <div class="flex flex-wrap gap-1.5">
               <UButton
                 v-for="item in issueTypes"
@@ -158,17 +158,17 @@
           </div>
         </section>
 
-        <section v-if="!terms.length && !issues.length" class="rounded-xl border border-dashed border-gray-200 p-6 text-center dark:border-gray-800">
+        <section v-if="!terms.length && !issues.length" class="app-empty border-dashed p-6">
           <UIcon name="i-lucide-circle-check-big" class="mx-auto h-6 w-6 text-success-500" />
           <p class="mt-2 text-sm font-medium text-gray-700 dark:text-gray-200">未发现可建议内容</p>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">缓存结果已保存，下次打开不会重复调用模型。</p>
+          <p class="app-caption mt-1">缓存结果已保存，下次打开不会重复调用模型。</p>
         </section>
       </template>
 
-      <div v-else class="rounded-xl border border-dashed border-gray-200 p-6 text-center dark:border-gray-800">
+      <div v-else class="app-empty border-dashed p-6">
         <UIcon name="i-lucide-sparkles" class="mx-auto h-6 w-6 text-primary-400" />
         <p class="mt-2 text-sm font-medium text-gray-700 dark:text-gray-200">还没有 AI 校对结果</p>
-        <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">点击「开始校对」生成；结果会缓存，重进页面或误点不会重复消耗 Token。</p>
+        <p class="app-caption mt-1">点击「开始校对」生成；结果会缓存，重进页面或误点不会重复消耗 Token。</p>
       </div>
     </div>
   </div>

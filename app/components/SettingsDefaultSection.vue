@@ -15,7 +15,7 @@
           <USelect :model-value="config.translationMode" :items="translationModeItems" class="w-full" @update:model-value="patch('translationMode', $event)" />
         </UFormField>
 
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+        <div class="app-field-row">
           <div class="space-y-0.5">
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Emby 兼容输出</p>
             <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">媒体目录只放一个主字幕，语言变体同步到 SubX/ 子目录。</p>
@@ -23,21 +23,21 @@
           <USwitch :model-value="config.embyCompatibleOutput" aria-label="启用 Emby 兼容输出" @update:model-value="patch('embyCompatibleOutput', $event)" />
         </div>
 
-        <div class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 space-y-3">
-          <div class="flex items-center justify-between gap-3">
+        <div class="space-y-3">
+          <div class="app-field-row">
             <div>
               <p class="text-sm font-medium text-gray-700 dark:text-gray-300">双模型质量校验</p>
               <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">翻译完成后用第二个模型逐条评分，低分条目自动进入核对。</p>
             </div>
             <USwitch :model-value="config.qualityCheckEnabled" aria-label="启用双模型质量校验" @update:model-value="patch('qualityCheckEnabled', $event)" />
           </div>
-          <div v-if="config.qualityCheckEnabled" class="grid gap-3 md:grid-cols-3">
+          <div v-if="config.qualityCheckEnabled" class="surface-muted grid gap-3 p-3 md:grid-cols-3">
             <UFormField label="校验模型">
               <UInput :model-value="config.qualityCheckModel" placeholder="例如 gpt-4o-mini" class="w-full" @update:model-value="patch('qualityCheckModel', $event)" />
             </UFormField>
             <UFormField label="低分阈值">
               <UInput :model-value="qualityThresholdPercent" type="number" min="0" max="100" class="w-full" @update:model-value="emit('update:qualityThresholdPercent', $event)">
-                <template #trailing><span class="text-xs text-gray-400">%</span></template>
+                <template #trailing><span class="text-xs text-gray-500 dark:text-gray-400">%</span></template>
               </UInput>
             </UFormField>
             <UFormField label="最多校验条数">

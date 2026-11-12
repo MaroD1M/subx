@@ -82,6 +82,9 @@
 - `7`：新增 `subtitle_style_json`
 - `8`：任务计时字段与历史任务回填
 - `9`：新增 `review_jobs` 后台重译任务表
+- `10`：新增系列档案 `series_profiles`
+- `11`：新增覆盖索引、自动补齐策略、翻译记忆、媒体元数据缓存和费用表
+- `12`：新增任务暂停请求字段 `pause_requested_at` 和覆盖扫描快照 `coverage_snapshots`
 
 SQLite 基线位于 `server/utils/schema.ts`，PostgreSQL 基线位于 `scripts/postgres-schema.sql`。`schemaDrift.test.ts` 会对比两边表和字段，修改任意一侧后必须同步另一侧。
 

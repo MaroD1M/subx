@@ -84,7 +84,9 @@ export default defineEventHandler(async (event) => {
       stepStartedAt: task.step_started_at ? toUtcIsoString(task.step_started_at) : undefined,
       finishedAt: task.finished_at ? toUtcIsoString(task.finished_at) : undefined,
       pausedAt: task.paused_at ? toUtcIsoString(task.paused_at) : undefined,
-      pausedTotalMs: Number(task.paused_total_ms || 0)
+      pausedTotalMs: Number(task.paused_total_ms || 0),
+      pauseRequested: Boolean(task.pause_requested_at),
+      pauseRequestedAt: task.pause_requested_at ? toUtcIsoString(task.pause_requested_at) : undefined
     }
   }))
 

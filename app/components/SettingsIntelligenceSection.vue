@@ -2,14 +2,14 @@
   <div class="space-y-4">
     <SettingsSection title="智能增强" description="简繁双输出、字幕质检、翻译记忆、预算与媒体元数据。">
       <div class="grid gap-3 md:grid-cols-2">
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+        <div class="app-field-row">
           <div class="space-y-0.5">
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">简繁双输出</p>
             <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">简体任务额外生成繁体，繁体任务额外生成简体。</p>
           </div>
           <USwitch :model-value="config.chineseVariantOutputEnabled" aria-label="启用简繁双输出" @update:model-value="patch('chineseVariantOutputEnabled', $event)" />
         </div>
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+        <div class="app-field-row">
           <div class="space-y-0.5">
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">字幕技术质检</p>
             <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">检查行长、CPS、时长、重叠和 SDH 残留。</p>
@@ -18,7 +18,7 @@
         </div>
       </div>
 
-      <div v-if="config.subtitleQualityEnabled" class="rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800">
+      <div v-if="config.subtitleQualityEnabled" class="surface-muted p-3 space-y-3">
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <UFormField label="单行字数上限">
             <UInputNumber :model-value="config.subtitleQualityMaxCharsPerLine" :min="8" :max="80" class="w-full" @update:model-value="patch('subtitleQualityMaxCharsPerLine', toNumber($event))" />
@@ -39,10 +39,10 @@
             <UInputNumber :model-value="config.subtitleQualityGapMs" :min="0" :max="2000" :step="10" class="w-full" @update:model-value="patch('subtitleQualityGapMs', toNumber($event))" />
           </UFormField>
         </div>
-        <div class="mt-3 flex items-center justify-between gap-3 rounded-xl bg-gray-50/70 px-3 py-2 dark:bg-gray-900/40">
+        <div class="app-field-row mt-3">
           <div>
             <p class="text-xs font-medium text-gray-700 dark:text-gray-200">自动换行修正</p>
-            <p class="text-[10px] text-gray-500 dark:text-gray-400">只处理超长行，不改变译文内容。</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">只处理超长行，不改变译文内容。</p>
           </div>
           <USwitch :model-value="config.subtitleQualityAutoFixEnabled" aria-label="启用字幕自动换行修正" @update:model-value="patch('subtitleQualityAutoFixEnabled', $event)" />
         </div>
@@ -54,7 +54,7 @@
         <UBadge color="neutral" variant="subtle">{{ memoryStats.total.toLocaleString() }} 条</UBadge>
       </template>
       <div class="space-y-3">
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+        <div class="app-field-row">
           <div class="space-y-0.5">
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">启用翻译记忆</p>
             <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">命中时直接复用已确认译法，不重复调用模型。</p>
@@ -80,11 +80,11 @@
         </div>
         <p v-else class="text-xs text-gray-500 dark:text-gray-400">还没有翻译记忆。核对导出后会自动学习人工修改；也可以从已有双语字幕批量学习。</p>
 
-        <div v-if="memoryStats.topTerms?.length" class="rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+        <div v-if="memoryStats.topTerms?.length" class="surface-muted p-3">
           <p class="text-xs font-medium text-gray-700 dark:text-gray-200">高频术语候选</p>
-          <p class="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">来自翻译记忆；加入后只影响后续任务。</p>
+          <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">来自翻译记忆；加入后只影响后续任务。</p>
           <div class="mt-2 grid gap-1.5 sm:grid-cols-2">
-            <div v-for="term in memoryStats.topTerms" :key="`${term.sourceText}-${term.translatedText}`" class="flex items-center justify-between gap-2 rounded-lg bg-white/80 px-2 py-1.5 text-[11px] dark:bg-gray-950/40">
+            <div v-for="term in memoryStats.topTerms" :key="`${term.sourceText}-${term.translatedText}`" class="flex items-center justify-between gap-2 rounded-lg bg-white/80 px-2 py-1.5 text-xs dark:bg-gray-950/40">
               <span class="min-w-0 truncate text-gray-600 dark:text-gray-300" :title="term.sourceText">{{ term.sourceText }} → {{ term.translatedText }}</span>
               <UButton label="加入" size="xs" color="primary" variant="ghost" @click="addMemoryTerm(term)" />
             </div>
@@ -95,10 +95,10 @@
 
     <SettingsSection title="成本预算" description="按 token 记录翻译开销，超预算时暂停自动任务。">
       <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/40">
+        <div class="app-field-row">
           <div>
             <p class="text-xs font-medium text-gray-700 dark:text-gray-200">启用月度预算</p>
-            <p class="text-[10px] text-gray-500 dark:text-gray-400">自动任务会遵守上限</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">自动任务会遵守上限</p>
           </div>
           <USwitch :model-value="config.costBudgetEnabled" aria-label="启用月度预算" @update:model-value="patch('costBudgetEnabled', $event)" />
         </div>
@@ -112,7 +112,7 @@
           <UInputNumber :model-value="config.costPriceCompletionPer1M" :min="0" :max="1000000" :step="0.01" class="w-full" @update:model-value="patch('costPriceCompletionPer1M', toNumber($event))" />
         </UFormField>
       </div>
-      <div class="mt-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+      <div class="surface-muted mt-3 p-3">
         <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 dark:text-gray-300">
           <span>本月已用 <strong class="text-gray-900 dark:text-white">${{ cost.spentUsd.toFixed(4) }}</strong> · {{ cost.totalTokens.toLocaleString() }} tokens</span>
           <UButton label="刷新" size="xs" color="neutral" variant="ghost" icon="i-lucide-refresh-cw" @click="loadCost" />
@@ -125,7 +125,7 @@
 
     <SettingsSection title="媒体元数据" description="可选接入 TMDB，用剧名、集名和简介增强翻译上下文。">
       <div class="space-y-3">
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+        <div class="app-field-row">
           <div class="space-y-0.5">
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">启用 TMDB 元数据</p>
             <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">只发送片名/季集编号，不发送媒体文件。</p>
@@ -143,7 +143,7 @@
             <UButton label="检测" icon="i-lucide-plug" color="neutral" variant="soft" :loading="testingMetadata" @click="testMetadata" />
           </div>
         </div>
-        <p class="text-[11px] leading-5 text-gray-500 dark:text-gray-400">TMDB Key 加密保存；同一影片的结果会缓存 30 天，批量任务不会反复请求。</p>
+        <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">TMDB Key 加密保存；同一影片的结果会缓存 30 天，批量任务不会反复请求。</p>
       </div>
     </SettingsSection>
   </div>

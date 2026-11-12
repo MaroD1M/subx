@@ -87,9 +87,10 @@ test('generate documentation preview images', async ({ page, browser }) => {
   await expect(page.getByRole('heading', { name: '翻译历史' })).toBeVisible()
   await expect(page.getByRole('button', { name: '进入核对' }).first()).toBeVisible()
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
-  const diagnosticsResponse = page.waitForResponse(item => item.url().includes('/api/tasks/diagnostics/overview') && item.status() === 200).catch(() => null)
+  const overviewResponse = page.waitForResponse(item => item.url().includes('/api/operations/overview') && item.status() === 200)
   await page.locator('summary').click()
-  await diagnosticsResponse
+  await overviewResponse
+  await page.getByRole('button', { name: '诊断风险' }).click()
   await expect(page.getByText('高风险标签')).toBeVisible()
   await page.locator('summary').click()
   await capture(page, 'preview-history.png')

@@ -169,7 +169,8 @@ export default defineEventHandler(() => {
       '/api/asr/models-download-resume': { post: { summary: '继续 ASR 模型下载', responses: { '200': { description: 'OK' } } } },
       '/api/asr/models-download-cancel': { post: { summary: '取消 ASR 模型下载并清理部分文件', responses: { '200': { description: 'OK' } } } },
       '/api/asr/models-delete': { post: { summary: '卸载 ASR 模型', responses: { '200': { description: 'OK' } } } },
-      '/api/library/coverage': { get: { summary: '媒体库字幕覆盖检查', parameters: [{ name: 'rootId', in: 'query', required: true, schema: { type: 'string' } }, { name: 'targetLanguage', in: 'query', schema: { type: 'string' } }, { name: 'refresh', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/library/coverage': { get: { summary: '读取媒体库字幕覆盖缓存，refresh=1 时重新扫描', parameters: [{ name: 'rootId', in: 'query', required: true, schema: { type: 'string' } }, { name: 'targetLanguage', in: 'query', schema: { type: 'string' } }, { name: 'includeEmbedded', in: 'query', schema: { type: 'string' } }, { name: 'refresh', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/library/coverage/scan': { post: { summary: '手动扫描媒体库字幕覆盖并写入缓存', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['rootId'], properties: { rootId: { type: 'string' }, targetLanguage: { type: 'string' }, includeEmbedded: { type: 'boolean' } } } } } }, responses: { '200': { description: 'OK' } } } },
       '/api/library/coverage-policy': {
         get: { summary: '查询媒体库自动补齐策略', parameters: [{ name: 'rootId', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } },
         put: { summary: '保存媒体库自动补齐策略', responses: { '200': { description: 'OK' } } }

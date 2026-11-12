@@ -2,20 +2,25 @@
   <AppContainer size="wide" class="space-y-6">
     <PageHeader
       title="翻译历史"
-      description="查看任务结果、运行与诊断总览、失败原因与历史日志。"
+      description="查看任务结果、失败原因与历史日志，进入详情后可继续、核对或重新翻译。"
       :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '历史', icon: 'i-lucide-history' }]"
-    >
-      <template #actions>
-        <UInput v-model="searchQuery" icon="i-lucide-search" placeholder="搜索文件路径" class="w-56" />
-        <USelect v-model="statusFilter" :items="statusOptions" class="w-32" aria-label="状态筛选" />
-        <UButton label="清空历史" variant="ghost" color="error" icon="i-lucide-trash-2" @click="isClearModalOpen = true" />
-      </template>
-    </PageHeader>
+    />
 
-    <OperationsOverviewPanel :task-total="data?.total" />
+    <div class="app-toolbar-card">
+      <div class="app-toolbar-row">
+        <UInput v-model="searchQuery" icon="i-lucide-search" size="sm" placeholder="搜索文件路径" class="w-full sm:w-64" aria-label="搜索文件路径" />
+        <USelect v-model="statusFilter" :items="statusOptions" size="sm" class="w-full sm:w-32" aria-label="状态筛选" />
+        <span class="app-pill app-pill-neutral whitespace-nowrap">共 {{ data?.total || 0 }} 条</span>
+      </div>
+      <div class="app-toolbar-row">
+        <UButton v-if="searchQuery || statusFilter !== 'all'" label="清空筛选" icon="i-lucide-filter-x" size="sm" color="neutral" variant="ghost" @click="clearFilters" />
+        <UButton label="清空历史" icon="i-lucide-trash-2" size="sm" color="error" variant="ghost" @click="isClearModalOpen = true" />
+      </div>
+    </div>
 
-    <div v-if="isDesktop" class="history-table surface-card overflow-hidden rounded-2xl p-2" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
-      <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group cursor-default transition-colors duration-150 hover:bg-primary-50/60 dark:hover:bg-primary-950/20' }">
+    <div class="surface-card overflow-hidden">
+      <div class="history-table hidden p-2 lg:block" style="animation: panel-fade 360ms ease-out both; animation-delay: 80ms;">
+        <UTable :data="tasks" :columns="columns" :loading="pending" :ui="{ table: 'w-full table-fixed', td: 'align-middle', th: 'whitespace-nowrap', tr: 'group cursor-default transition-colors duration-150 hover:bg-primary-50/60 dark:hover:bg-primary-950/20' }">
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
             <div class="flex items-center gap-2">
@@ -31,22 +36,22 @@
                 @click="copyPath(row.original.filePath)"
               />
             </div>
-            <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-              <UBadge :color="outputModeColor(row.original.outputMode)" variant="subtle" size="sm">{{ outputModeLabel(row.original.outputMode) }}</UBadge>
-              <UBadge color="neutral" variant="subtle" size="sm">{{ subtitleFormatLabel(row.original.subtitleFormat || row.original.subtitle_format) }}</UBadge>
+            <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <span class="app-pill" :class="outputModePillClass(row.original.outputMode)">{{ outputModeLabel(row.original.outputMode) }}</span>
+              <span class="app-pill app-pill-neutral">{{ subtitleFormatLabel(row.original.subtitleFormat || row.original.subtitle_format) }}</span>
               <span class="whitespace-nowrap">{{ targetLanguageLabel(row.original.targetLanguage) }}</span>
             </div>
           </div>
         </template>
 
         <template #status-cell="{ row }">
-          <AppStatusBadge :status="row.original.status" />
+          <AppStatusBadge :status="statusBadgeStatus(row.original)" :label="statusBadgeLabel(row.original)" />
         </template>
 
         <template #progress-cell="{ row }">
-          <div class="min-w-[62px] text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-            <span>{{ isActiveStatus(row.original.status) || row.original.status === 'paused' ? `${row.original.progress}%` : row.original.status === 'review' ? '待核对' : '—' }}</span>
-            <p v-if="(isActiveStatus(row.original.status) || row.original.status === 'paused') && row.original.stepMessage" class="max-w-[180px] truncate text-[10px] font-normal text-gray-400 dark:text-gray-500">{{ row.original.stepMessage }}</p>
+          <div class="min-w-[88px] whitespace-nowrap">
+            <span class="text-sm font-medium tabular-nums text-gray-700 dark:text-gray-300">{{ isActiveStatus(row.original.status) || row.original.status === 'paused' || row.original.pauseRequested ? `${row.original.progress}%` : row.original.status === 'review' ? '待核对' : '—' }}</span>
+            <p v-if="(isActiveStatus(row.original.status) || row.original.status === 'paused' || row.original.pauseRequested) && row.original.stepMessage" class="mt-0.5 max-w-[180px] truncate text-xs font-normal text-gray-400 dark:text-gray-500">{{ row.original.stepMessage }}</p>
           </div>
         </template>
 
@@ -55,126 +60,122 @@
         </template>
 
         <template #actions-cell="{ row }">
-          <div class="flex items-center justify-center gap-0.5">
-            <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" title="查看详情" aria-label="查看详情" :to="`/task/${row.original.taskId}`" />
-            <UButton
-              v-if="row.original.reviewAvailable"
-              icon="i-lucide-list-checks"
-              variant="ghost"
-              color="primary"
-              size="xs"
-              title="进入核对"
-              aria-label="进入核对"
-              @click="openReview(row.original.taskId)"
-            />
-            <UButton
-              v-if="row.original.status === 'paused'"
-              icon="i-lucide-play"
-              variant="ghost"
-              color="primary"
-              size="xs"
-              :loading="resumingTaskId === row.original.taskId"
-              title="继续任务"
-              aria-label="继续任务"
-              @click="resumeTask(row.original.taskId)"
-            />
-            <UButton
-              v-if="['error', 'cancelled', 'review', 'done'].includes(row.original.status)"
-              icon="i-lucide-refresh-cw"
-              variant="ghost"
-              color="warning"
-              size="xs"
-              :loading="retryingTaskId === row.original.taskId"
-              title="重新翻译"
-              aria-label="重新翻译"
-              @click="retryTask(row.original.taskId)"
-            />
-            <a v-if="row.original.status === 'done' && row.original.subtitle_format !== 'ass'" :href="`/api/tasks/${row.original.taskId}/download?format=srt`" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-primary-700 hover:text-primary-800 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors" title="下载 SRT" aria-label="下载 SRT">
-              <UIcon name="i-lucide-file-text" class="w-4 h-4" />
-            </a>
-            <a v-if="row.original.status === 'done' && row.original.subtitle_format !== 'srt'" :href="`/api/tasks/${row.original.taskId}/download?format=ass`" class="inline-flex w-7 h-7 items-center justify-center rounded-lg text-success-500 hover:text-success-700 dark:hover:text-success-300 hover:bg-success-50 dark:hover:bg-success-900/20 transition-colors" title="下载 ASS" aria-label="下载 ASS">
-              <UIcon name="i-lucide-file-code" class="w-4 h-4" />
-            </a>
-            <UButton v-if="!isActiveStatus(row.original.status)" icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" :loading="deletingTaskId === row.original.taskId" title="删除记录" aria-label="删除记录" @click="deleteTask(row.original.taskId)" />
+          <div class="flex items-center justify-center gap-1">
+            <div class="inline-flex items-center gap-0.5 rounded-lg border border-gray-100 bg-gray-50/70 p-0.5 dark:border-gray-800 dark:bg-gray-900/40">
+              <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" title="查看详情" aria-label="查看详情" :to="`/task/${row.original.taskId}`" />
+              <UButton
+                v-if="row.original.reviewAvailable"
+                icon="i-lucide-list-checks"
+                variant="ghost"
+                color="primary"
+                size="xs"
+                title="进入核对"
+                aria-label="进入核对"
+                @click="openReview(row.original.taskId)"
+              />
+              <UButton
+                v-if="row.original.status === 'paused' && !row.original.pauseRequested"
+                icon="i-lucide-play"
+                variant="ghost"
+                color="primary"
+                size="xs"
+                :loading="resumingTaskId === row.original.taskId"
+                title="继续任务"
+                aria-label="继续任务"
+                @click="resumeTask(row.original.taskId)"
+              />
+              <UButton
+                v-if="['error', 'cancelled', 'review', 'done'].includes(row.original.status)"
+                icon="i-lucide-refresh-cw"
+                variant="ghost"
+                color="warning"
+                size="xs"
+                :loading="retryingTaskId === row.original.taskId"
+                title="重新翻译"
+                aria-label="重新翻译"
+                @click="retryTask(row.original.taskId)"
+              />
+            </div>
+            <UDropdownMenu v-if="rowActionItems(row.original).length" :items="rowActionItems(row.original)" size="sm">
+              <UButton icon="i-lucide-ellipsis" variant="ghost" color="neutral" size="xs" title="更多操作" aria-label="更多操作" />
+            </UDropdownMenu>
           </div>
         </template>
         <template #empty>
-          <div class="py-10 text-center text-sm text-gray-500 dark:text-gray-400">当前筛选下暂无任务</div>
+          <div class="app-caption py-10 text-center">当前筛选下暂无任务</div>
         </template>
       </UTable>
-    </div>
+      </div>
 
-    <div v-else class="space-y-3">
-      <div v-if="pending" class="rounded-2xl border border-gray-200/80 bg-white p-4 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-950/60">
-        正在加载任务...
-      </div>
-      <div v-else-if="!tasks.length" class="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-950/40 dark:text-gray-400">
-        当前筛选下暂无任务
-      </div>
-      <template v-else>
-      <article v-for="task in tasks" :key="task.taskId" class="rounded-2xl border border-gray-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-950/60 dark:hover:border-primary-900/50">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p class="break-all text-sm font-semibold text-gray-900 dark:text-white">{{ fileName(task.filePath) }}</p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ task.rootName || '默认媒体库' }} · {{ formatDate(task.createdAt) }}</p>
-            <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-              <UBadge :color="outputModeColor(task.outputMode)" variant="subtle" size="sm">{{ outputModeLabel(task.outputMode) }}</UBadge>
-              <UBadge color="neutral" variant="subtle" size="sm">{{ subtitleFormatLabel(task.subtitleFormat || task.subtitle_format) }}</UBadge>
-              <span>{{ targetLanguageLabel(task.targetLanguage) }}</span>
+      <div class="divide-y divide-gray-100 dark:divide-gray-800 lg:hidden">
+        <div v-if="pending" class="p-4 text-sm text-gray-500 dark:text-gray-400">
+          正在加载任务...
+        </div>
+        <div v-else-if="!tasks.length" class="p-8 text-center">
+          <UIcon name="i-lucide-history" class="mx-auto h-7 w-7 text-gray-300 dark:text-gray-600" />
+          <p class="app-caption mt-2">当前筛选下暂无任务</p>
+        </div>
+        <article v-for="task in tasks" :key="task.taskId" class="p-3 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-900/30 sm:p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="break-all text-sm font-semibold text-gray-900 dark:text-white">{{ fileName(task.filePath) }}</p>
+              <p class="app-meta mt-1">{{ task.rootName || '默认媒体库' }} · {{ formatDate(task.createdAt) }}</p>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <span class="app-pill" :class="outputModePillClass(task.outputMode)">{{ outputModeLabel(task.outputMode) }}</span>
+                <span class="app-pill app-pill-neutral">{{ subtitleFormatLabel(task.subtitleFormat || task.subtitle_format) }}</span>
+                <span>{{ targetLanguageLabel(task.targetLanguage) }}</span>
+              </div>
+              <p v-if="task.content_title" class="mt-1 line-clamp-1 text-xs text-primary-700 dark:text-primary-400">{{ task.content_title }}</p>
             </div>
-            <p v-if="task.content_title" class="mt-1 text-xs text-primary-700">{{ task.content_title }}</p>
+            <AppStatusBadge :status="statusBadgeStatus(task)" :label="statusBadgeLabel(task)" class="shrink-0" />
           </div>
-          <AppStatusBadge :status="task.status" class="shrink-0" />
-        </div>
 
-        <div v-if="isActiveStatus(task.status) || task.status === 'paused'" class="mt-3 space-y-1.5">
-          <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
-            <span class="truncate">{{ task.stepMessage || '处理进度' }}</span>
-            <span class="shrink-0">{{ task.progress }}%</span>
+          <div v-if="isActiveStatus(task.status) || task.status === 'paused' || task.pauseRequested" class="mt-3 space-y-1.5">
+            <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+              <span class="min-w-0 truncate">{{ task.stepMessage || '处理进度' }}</span>
+              <span class="shrink-0 font-medium tabular-nums text-gray-700 dark:text-gray-300">{{ task.progress }}%</span>
+            </div>
+            <div class="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+              <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${task.progress}%` }" />
+            </div>
           </div>
-          <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-            <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${task.progress}%` }" />
+          <p v-else-if="task.status === 'review'" class="app-meta mt-2 font-medium text-warning-600 dark:text-warning-400">等待人工核对</p>
+          <p v-else-if="task.error" class="mt-2 line-clamp-2 text-xs text-error-600 dark:text-error-400">{{ task.error }}</p>
+
+          <div class="mt-3 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
+            <UButton label="详情" icon="i-lucide-eye" size="xs" color="neutral" variant="soft" :to="`/task/${task.taskId}`" />
+            <UButton v-if="task.reviewAvailable" label="核对" icon="i-lucide-list-checks" size="xs" color="warning" variant="soft" @click="openReview(task.taskId)" />
+            <UButton v-if="task.status === 'paused' && !task.pauseRequested" label="继续" icon="i-lucide-play" size="xs" color="primary" variant="soft" :loading="resumingTaskId === task.taskId" @click="resumeTask(task.taskId)" />
+            <UButton v-if="['error', 'cancelled', 'review', 'done'].includes(task.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="retryingTaskId === task.taskId" @click="retryTask(task.taskId)" />
+            <UDropdownMenu v-if="rowActionItems(task).length" :items="rowActionItems(task)" size="sm" class="ml-auto">
+              <UButton label="更多" icon="i-lucide-ellipsis" size="xs" color="neutral" variant="ghost" title="更多操作" aria-label="更多操作" />
+            </UDropdownMenu>
           </div>
-        </div>
-        <p v-else-if="task.status === 'review'" class="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">等待人工核对</p>
-        <p v-else-if="task.error" class="mt-2 line-clamp-2 text-xs text-red-600 dark:text-red-400">{{ task.error }}</p>
+        </article>
+      </div>
 
-        <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
-          <UButton label="详情" icon="i-lucide-eye" size="xs" color="neutral" variant="soft" :to="`/task/${task.taskId}`" />
-          <UButton v-if="task.reviewAvailable" label="核对" icon="i-lucide-list-checks" size="xs" color="warning" variant="soft" @click="openReview(task.taskId)" />
-          <UButton v-if="task.status === 'paused'" label="继续" icon="i-lucide-play" size="xs" color="primary" variant="soft" :loading="resumingTaskId === task.taskId" @click="resumeTask(task.taskId)" />
-          <UButton v-if="['error', 'cancelled', 'review', 'done'].includes(task.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="retryingTaskId === task.taskId" @click="retryTask(task.taskId)" />
-          <a v-if="task.status === 'done' && task.subtitle_format !== 'ass'" :href="`/api/tasks/${task.taskId}/download?format=srt`" class="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/20">
-            <UIcon name="i-lucide-file-text" class="h-3.5 w-3.5" /> SRT
-          </a>
-          <a v-if="task.status === 'done' && task.subtitle_format !== 'srt'" :href="`/api/tasks/${task.taskId}/download?format=ass`" class="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20">
-            <UIcon name="i-lucide-file-code" class="h-3.5 w-3.5" /> ASS
-          </a>
-          <UButton v-if="!isActiveStatus(task.status)" label="删除" icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" :loading="deletingTaskId === task.taskId" @click="deleteTask(task.taskId)" />
+      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-3 py-2.5 dark:border-gray-800 sm:px-4">
+        <p class="app-meta">
+          共 {{ data?.total || 0 }} 条，第 {{ page }} / {{ totalPages }} 页
+        </p>
+        <div class="flex flex-wrap items-center justify-end gap-1.5">
+          <USelect v-model="pageSize" :items="pageSizeItems" size="xs" class="w-24" aria-label="每页条数" />
+          <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="page <= 1" @click="page -= 1" />
+          <UButton
+            v-for="pageNumber in pageNumbers"
+            :key="pageNumber"
+            :label="String(pageNumber)"
+            size="xs"
+            :color="pageNumber === page ? 'primary' : 'neutral'"
+            :variant="pageNumber === page ? 'solid' : 'ghost'"
+            @click="page = pageNumber"
+          />
+          <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="page >= totalPages" @click="page += 1" />
         </div>
-      </article>
-      </template>
-    </div>
-
-    <div class="flex flex-wrap items-center justify-between gap-3 px-1">
-      <p class="text-xs text-gray-500 dark:text-gray-400">
-        共 {{ data?.total || 0 }} 条，第 {{ page }} / {{ totalPages }} 页
-      </p>
-      <div class="flex flex-wrap items-center justify-end gap-1.5">
-        <USelect v-model="pageSize" :items="pageSizeItems" size="xs" class="w-24" aria-label="每页条数" />
-        <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="page <= 1" @click="page -= 1" />
-        <UButton
-          v-for="pageNumber in pageNumbers"
-          :key="pageNumber"
-          :label="String(pageNumber)"
-          size="xs"
-          :color="pageNumber === page ? 'primary' : 'neutral'"
-          :variant="pageNumber === page ? 'solid' : 'ghost'"
-          @click="page = pageNumber"
-        />
-        <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="page >= totalPages" @click="page += 1" />
       </div>
     </div>
+
+    <OperationsOverviewPanel :task-total="data?.total" />
 
     <UModal v-model:open="isClearModalOpen" title="确认清空历史记录" description="此操作将永久删除已完成和失败任务及其日志、核对数据，不可撤销；不会清空全局翻译缓存。">
       <template #body>
@@ -213,19 +214,6 @@ const deletingTaskId = ref('')
 const toast = useToast()
 const { confirm } = useConfirm()
 const timeZone = useTimeZone()
-
-const isDesktop = ref(true)
-let desktopMediaQuery = null
-
-function handleDesktopChange(event) {
-  isDesktop.value = event.matches
-}
-
-onMounted(() => {
-  desktopMediaQuery = window.matchMedia('(min-width: 768px)')
-  isDesktop.value = desktopMediaQuery.matches
-  desktopMediaQuery.addEventListener('change', handleDesktopChange)
-})
 
 const page = ref(1)
 const pageSize = ref(50)
@@ -397,6 +385,40 @@ function openReview(taskId) {
   navigateTo(`/review/${taskId}`)
 }
 
+function clearFilters() {
+  searchQuery.value = ''
+  statusFilter.value = 'all'
+}
+
+function downloadSubtitle(taskId, format) {
+  if (typeof window === 'undefined') return
+  window.location.assign(`/api/tasks/${taskId}/download?format=${format}`)
+}
+
+function rowActionItems(task) {
+  const items = []
+  const format = String(task?.subtitle_format || task?.subtitleFormat || 'srt')
+  if (task?.status === 'done') {
+    if (format !== 'ass') {
+      items.push({ label: '下载 SRT', icon: 'i-lucide-file-text', onSelect: () => downloadSubtitle(task.taskId, 'srt') })
+    }
+    if (format !== 'srt') {
+      items.push({ label: '下载 ASS', icon: 'i-lucide-file-code', onSelect: () => downloadSubtitle(task.taskId, 'ass') })
+    }
+  }
+  if (!isActiveStatus(task?.status)) {
+    if (items.length) items.push({ type: 'separator' })
+    items.push({
+      label: '删除记录',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      loading: deletingTaskId.value === task?.taskId,
+      onSelect: () => deleteTask(task.taskId)
+    })
+  }
+  return items
+}
+
 async function copyPath(filePath) {
   try {
     await navigator.clipboard.writeText(String(filePath || ''))
@@ -417,6 +439,18 @@ function formatDate(value) {
 
 function isActiveStatus(status) {
   return ['queued', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(String(status || ''))
+}
+
+function isPausePending(task) {
+  return Boolean(task?.pauseRequested) && task?.status !== 'paused'
+}
+
+function statusBadgeStatus(task) {
+  return isPausePending(task) ? 'paused' : task?.status
+}
+
+function statusBadgeLabel(task) {
+  return isPausePending(task) ? '暂停中' : undefined
 }
 
 const outputModeLabels = {
@@ -443,10 +477,10 @@ function outputModeLabel(value) {
   return outputModeLabels[String(value || 'translated')] || value || '仅译文'
 }
 
-function outputModeColor(value) {
-  if (value === 'bilingual') return 'success'
-  if (value === 'original') return 'warning'
-  return 'primary'
+function outputModePillClass(value) {
+  if (value === 'bilingual') return 'app-pill-success'
+  if (value === 'original') return 'app-pill-warning'
+  return 'app-pill-primary'
 }
 
 function subtitleFormatLabel(value) {
@@ -465,29 +499,6 @@ const columns = [
   { id: 'actions', header: '操作' }
 ]
 
-onBeforeUnmount(() => {
-  desktopMediaQuery?.removeEventListener('change', handleDesktopChange)
-})
-
-function statusColor(status) {
-  switch (status) {
-    case 'done': return 'success'
-    case 'cancelled': return 'warning'
-    case 'error': return 'error'
-    case 'review': return 'info'
-    case 'translating':
-    case 'probing':
-    case 'extracting':
-    case 'extracting_audio':
-    case 'transcribing':
-    case 'ocr':
-    case 'parsing':
-    case 'exporting':
-      return 'primary'
-    case 'queued': return 'neutral'
-    default: return 'neutral'
-  }
-}
 </script>
 
 <style scoped>

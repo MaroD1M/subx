@@ -28,28 +28,28 @@
         应用内自动备份只支持 SQLite。PostgreSQL 请使用 pg_dump。自动备份不包含任务日志；需要排查日志时使用命令行备份脚本。
       </p>
 
-      <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2 text-xs text-gray-500 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-400">
-        <span>备份目录：<span class="break-all font-mono text-[11px]">{{ rootPath || '-' }}</span></span>
+      <div class="surface-muted flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+        <span>备份目录：<span class="break-all font-mono text-xs">{{ rootPath || '-' }}</span></span>
         <span>共 {{ backups.length }} 份</span>
       </div>
 
       <div v-if="loading && !backups.length" class="py-6 text-center text-xs text-gray-500 dark:text-gray-400">
         <UIcon name="i-lucide-loader-2" class="mr-1 inline h-4 w-4 animate-spin" />正在读取备份...
       </div>
-      <div v-else-if="!backups.length" class="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+      <div v-else-if="!backups.length" class="app-empty text-xs text-gray-500 dark:text-gray-400">
         还没有备份。启用自动备份，或点击“立即备份”创建第一份。
       </div>
-      <div v-else class="divide-y divide-gray-100 rounded-xl border border-gray-100 dark:divide-gray-800 dark:border-gray-800">
+      <div v-else class="divide-y divide-gray-100 rounded-lg border border-gray-100 dark:divide-gray-800 dark:border-gray-800">
         <div v-for="backup in backups" :key="backup.name" class="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
             <p class="break-all text-sm font-medium text-gray-800 dark:text-gray-200">{{ backup.name }}</p>
-            <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
               {{ formatDate(backup.createdAt) }} · schema v{{ backup.schemaVersion }} · {{ backup.includesSecret ? '含密钥' : '不含密钥' }}
             </p>
           </div>
           <div class="text-left sm:text-right">
             <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ formatStorageBytes(backup.sizeBytes) }}</p>
-            <p class="text-[11px] text-gray-400 dark:text-gray-500">恢复请使用 npm run restore</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">恢复请使用 npm run restore</p>
           </div>
         </div>
       </div>

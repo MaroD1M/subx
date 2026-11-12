@@ -22,6 +22,36 @@ describe('ASR long job timeout configuration', () => {
     })
   })
 
+  it('preserves very large configured timeouts instead of applying upper caps', () => {
+    const timeouts = resolveAsrTimeouts({
+      baseUrl: 'http://asr.test',
+      uploadTimeoutMs: 100000 * 60 * 1000,
+      pollTimeoutMs: 100000 * 1000,
+      jobIdleTimeoutMs: 400 * 24 * 60 * 60 * 1000,
+      jobAbsoluteTimeoutMs: 100000 * 60 * 60 * 1000
+    })
+    expect(timeouts).toEqual({
+      upload: 100000 * 60 * 1000,
+      poll: 100000 * 1000,
+      idle: 400 * 24 * 60 * 60 * 1000,
+      absolute: 100000 * 60 * 60 * 1000
+    })
+  })
+
+  it('falls back to defaults for non-finite timeout values', () => {
+    const timeouts = resolveAsrTimeouts({
+      baseUrl: 'http://asr.test',
+      uploadTimeoutMs: Number.POSITIVE_INFINITY,
+      pollTimeoutMs: Number.NaN,
+      jobIdleTimeoutMs: Number.NEGATIVE_INFINITY,
+      jobAbsoluteTimeoutMs: Number.NaN
+    })
+    expect(Number.isFinite(timeouts.upload)).toBe(true)
+    expect(Number.isFinite(timeouts.poll)).toBe(true)
+    expect(Number.isFinite(timeouts.idle)).toBe(true)
+    expect(Number.isFinite(timeouts.absolute)).toBe(true)
+  })
+
   it('keeps safe lower bounds for invalid values', () => {
     const timeouts = resolveAsrTimeouts({
       baseUrl: 'http://asr.test',

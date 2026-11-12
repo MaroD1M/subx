@@ -444,6 +444,28 @@ describe('core API integration', () => {
     expect([400, 403, 404]).toContain(traversal.status)
   })
 
+  it('serves coverage cache only after an explicit scan', async () => {
+    const before = await apiFetch('/api/library/coverage?rootId=default&targetLanguage=zh-CN&includeEmbedded=0', { headers: { cookie } })
+    expect(before.status).toBe(200)
+    expect(await before.json()).toMatchObject({ hasCache: false, cachedAt: null })
+
+    const scan = await apiFetch('/api/library/coverage/scan', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: 'default', targetLanguage: 'zh-CN', includeEmbedded: false })
+    })
+    expect(scan.status).toBe(200)
+    const scanned = await scan.json() as any
+    expect(scanned.hasCache).toBe(true)
+    expect(scanned.cachedAt).toBeTruthy()
+
+    const after = await apiFetch('/api/library/coverage?rootId=default&targetLanguage=zh-CN&includeEmbedded=0', { headers: { cookie } })
+    expect(after.status).toBe(200)
+    const cached = await after.json() as any
+    expect(cached.hasCache).toBe(true)
+    expect(cached.files.length).toBe(scanned.files.length)
+  })
+
   it('retries a completed task and rejects cancelling a terminal task', async () => {
     const retried = await apiFetch('/api/task', {
       method: 'POST',
@@ -718,6 +740,38 @@ describe('core API integration', () => {
     expect(String((await config.json() as any).integrationWebhookToken)).toContain('****')
   })
 
+  it('roundtrips very large ASR and OCR timeout values without upper caps', async () => {
+    const timeouts = {
+      asrUploadTimeoutMs: 100000 * 60 * 1000,
+      asrPollTimeoutMs: 100000 * 1000,
+      asrJobIdleTimeoutMs: 100000 * 60 * 1000,
+      asrJobAbsoluteTimeoutMs: 100000 * 60 * 60 * 1000,
+      asrChunkSeconds: 100000 * 60,
+      asrResumeTtlHours: 100000,
+      ocrMaxSeconds: 100000 * 60,
+      ocrChunkSeconds: 100000 * 60,
+      ocrPgsripTimeoutSeconds: 100000 * 60,
+      ocrFfmpegTimeoutSeconds: 100000 * 60,
+      ocrJobIdleTimeoutMs: 100000 * 60 * 1000,
+      ocrJobAbsoluteTimeoutMs: 100000 * 60 * 60 * 1000,
+      ocrResumeTtlHours: 100000
+    }
+
+    const saved = await apiFetch('/api/config', {
+      method: 'PUT',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify(timeouts)
+    })
+    expect(saved.status).toBe(200)
+
+    const config = await apiFetch('/api/config', { headers: { cookie } })
+    expect(config.status).toBe(200)
+    const body = await config.json() as any
+    for (const [key, value] of Object.entries(timeouts)) {
+      expect(body[key]).toBe(value)
+    }
+  })
+
   it('rejects oversized API request bodies', async () => {
     const response = await apiFetch('/api/config', {
       method: 'PUT',
@@ -844,10 +898,30 @@ describe('core API integration', () => {
 
     const paused = await apiFetch('/api/tasks/pause-api-task/pause', { method: 'POST', headers: { cookie } })
     expect(paused.status).toBe(200)
-    expect(await paused.json()).toMatchObject({ success: true, status: 'paused' })
+    const pausePayload = await paused.json() as any
+    expect(pausePayload.success).toBe(true)
+    expect(['paused', 'pausing']).toContain(pausePayload.status)
+    if (pausePayload.status === 'pausing') {
+      expect(pausePayload.pending).toBe(true)
+      expect(pausePayload.pauseRequested).toBe(true)
+      const db = new Database(dbPath)
+      db.pragma('busy_timeout = 5000')
+      db.prepare("UPDATE tasks SET status = 'paused', pause_requested_at = NULL WHERE task_id = ?").run('pause-api-task')
+      db.prepare("UPDATE task_jobs SET status = 'paused' WHERE task_id = ?").run('pause-api-task')
+      db.close()
+    } else {
+      expect(pausePayload.pending).toBe(false)
+      expect(pausePayload.pauseRequested).toBe(false)
+    }
 
-    const afterPause = await apiFetch('/api/tasks/pause-api-task', { headers: { cookie } })
-    expect((await afterPause.json() as any).task.status).toBe('paused')
+    let pausedStatus = ''
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const response = await apiFetch('/api/tasks/pause-api-task', { headers: { cookie } })
+      pausedStatus = (await response.json() as any).task.status
+      if (pausedStatus === 'paused') break
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    expect(pausedStatus).toBe('paused')
 
     const resumed = await apiFetch('/api/tasks/pause-api-task/resume', { method: 'POST', headers: { cookie } })
     expect(resumed.status).toBe(200)

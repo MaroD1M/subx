@@ -23,10 +23,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const db = useDb()
-  const task = db.prepare('SELECT status, source_type, asr_checkpoint_key FROM tasks WHERE task_id = ?').get(id) as {
+  const task = db.prepare('SELECT status, source_type, asr_checkpoint_key, pause_requested_at FROM tasks WHERE task_id = ?').get(id) as {
     status?: string
     source_type?: string
     asr_checkpoint_key?: string | null
+    pause_requested_at?: string | null
   } | undefined
 
   const run = db.prepare(`
@@ -126,7 +127,9 @@ export default defineEventHandler(async (event) => {
       doneChunks: rows.length,
       totalSegments: merged?.segments.length || 0,
       segments: partialSegments,
-      updatedAt
+      updatedAt,
+      pauseRequested: Boolean(task?.pause_requested_at),
+      pauseRequestedAt: task?.pause_requested_at ? toUtcIsoString(task.pause_requested_at) : null
     }
   }
 })

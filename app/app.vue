@@ -1,7 +1,7 @@
 <template>
   <UApp>
     <NuxtLoadingIndicator color="#0f766e" :height="2" />
-    <div class="min-h-screen bg-gray-50/50 dark:bg-gray-950">
+    <div class="min-h-screen">
       <a
         v-if="!isLoginPage"
         href="#main-content"
@@ -19,18 +19,18 @@
         />
 
         <div class="flex min-w-0 flex-1 flex-col">
-          <header class="sticky top-0 z-40 border-b border-gray-200/80 bg-white/90 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/90 xl:hidden">
+          <header class="sticky top-0 z-40 border-b border-gray-200/80 bg-[var(--bg-canvas)] dark:border-gray-800 xl:hidden">
             <AppContainer class="flex h-14 items-center justify-between px-4 sm:px-6">
               <NuxtLink to="/" class="flex min-w-0 items-center gap-2" aria-label="SubX 首页">
-                <img src="/logo.svg" alt="" class="h-8 w-8 rounded-xl shadow-sm" />
-                <span class="text-lg font-black text-primary-700 dark:text-primary-400">SubX</span>
+                <img src="/logo.svg" alt="" class="h-8 w-8 rounded-lg" />
+                <span class="text-lg font-bold text-gray-900 dark:text-white">SubX</span>
                 <span class="version-badge version-ok">v{{ appVersion }}</span>
               </NuxtLink>
               <div class="flex items-center gap-1">
                 <UButton v-if="authenticated" icon="i-lucide-log-out" variant="ghost" color="neutral" size="sm" title="登出" aria-label="登出" @click="handleLogout" />
                 <UButton icon="i-lucide-github" variant="ghost" color="neutral" size="sm" aria-label="打开 GitHub 项目页" to="https://github.com/MaroD1M/subx" target="_blank" />
                 <UButton
-                  :icon="colorMode.value === 'dark' ? 'i-lucide-moon' : 'i-lucide-sun'"
+                  :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
                   variant="ghost"
                   color="neutral"
                   size="sm"

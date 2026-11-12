@@ -62,13 +62,27 @@ export class TaskQueue {
     }
   }
 
-  pause(taskId: string) {
+  pause(taskId: string): { paused: boolean, pending: boolean } {
     try {
-      const info = useDb().prepare("UPDATE task_jobs SET status='paused', updated_at=datetime('now') WHERE task_id = ? AND status IN ('queued', 'running')").run(taskId)
-      this.runtimeConfigs.delete(taskId)
-      return info.changes > 0
+      const db = useDb()
+      const row = db.prepare('SELECT status FROM task_jobs WHERE task_id = ?').get(taskId) as { status?: string } | undefined
+      const status = String(row?.status || '')
+      if (status === 'paused') {
+        this.runtimeConfigs.delete(taskId)
+        return { paused: true, pending: false }
+      }
+      if (status === 'queued') {
+        db.prepare("UPDATE task_jobs SET status='paused', updated_at=datetime('now') WHERE task_id = ? AND status='queued'").run(taskId)
+        this.runtimeConfigs.delete(taskId)
+        return { paused: true, pending: false }
+      }
+      if (status === 'running') {
+        this.runtimeConfigs.delete(taskId)
+        return { paused: false, pending: true }
+      }
+      return { paused: false, pending: false }
     } catch {
-      return false
+      return { paused: false, pending: false }
     }
   }
 
@@ -96,12 +110,19 @@ export class TaskQueue {
   async recoverInterrupted() {
     const db = useDb()
     const staleSeconds = Math.max(60, Number(process.env.SUBX_WORKER_STALE_SECONDS || 120))
+    const pausedJobs = db.prepare(`
+      UPDATE task_jobs
+      SET status='paused', locked_by=NULL, locked_at=NULL, heartbeat_at=NULL, updated_at=datetime('now')
+      WHERE status='running'
+        AND task_id IN (SELECT task_id FROM tasks WHERE status='paused')
+    `).run()
     const recovered = db.prepare(`
       UPDATE task_jobs
       SET status='queued', locked_by=NULL, locked_at=NULL, heartbeat_at=NULL,
           next_run_at=datetime('now'), updated_at=datetime('now')
       WHERE status='running'
         AND (heartbeat_at IS NULL OR heartbeat_at < datetime('now', ?))
+        AND task_id NOT IN (SELECT task_id FROM tasks WHERE status='paused')
     `).run(`-${staleSeconds} seconds`)
 
     const activeStatuses = ['queued', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting']
@@ -119,8 +140,8 @@ export class TaskQueue {
         AND status IN (${activeStatuses.map(() => '?').join(',')})
     `).run(...activeStatuses)
 
-    if (recovered.changes > 0 || created.changes > 0 || failedJobs.changes > 0) {
-      logger.warn({ recovered: recovered.changes, created: created.changes, failed: failedJobs.changes }, 'task queue recovered interrupted jobs')
+    if (pausedJobs.changes > 0 || recovered.changes > 0 || created.changes > 0 || failedJobs.changes > 0) {
+      logger.warn({ paused: pausedJobs.changes, recovered: recovered.changes, created: created.changes, failed: failedJobs.changes }, 'task queue recovered interrupted jobs')
     }
     void this.kick()
   }
@@ -165,6 +186,10 @@ export class TaskQueue {
         }
 
         const currentTask = this.runner.getTask(taskId)
+        if (currentTask?.status === 'paused') {
+          useDb().prepare("UPDATE task_jobs SET status='paused', updated_at=datetime('now') WHERE task_id = ?").run(taskId)
+          continue
+        }
         if (isTerminalStatus(currentTask?.status)) {
           useDb().prepare("UPDATE task_jobs SET status='done', updated_at=datetime('now') WHERE task_id = ?").run(taskId)
           continue

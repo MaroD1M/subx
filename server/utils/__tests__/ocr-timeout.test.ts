@@ -17,6 +17,18 @@ describe('OCR long-video timeout configuration', () => {
     })
   })
 
+  it('preserves very large configured timeouts instead of applying upper caps', () => {
+    const idle = 400 * 24 * 60 * 60 * 1000
+    const absolute = 100000 * 60 * 60 * 1000
+    expect(resolveOcrTimeouts({
+      idleTimeoutMs: idle,
+      absoluteTimeoutMs: absolute
+    })).toEqual({
+      idle,
+      absolute: Math.max(idle, absolute)
+    })
+  })
+
   it('keeps safe lower bounds and never lets absolute be shorter than idle', () => {
     const timeouts = resolveOcrTimeouts({
       idleTimeoutMs: 0,

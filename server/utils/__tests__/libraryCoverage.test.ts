@@ -9,7 +9,9 @@ import {
   deriveCoverageStatus,
   deriveSeriesKey,
   deriveSeriesLabel,
-  deriveSeriesTitle
+  deriveSeriesTitle,
+  getCachedLibraryCoverage,
+  scanLibraryCoverage
 } from '../libraryCoverage'
 
 const mockState = vi.hoisted(() => ({
@@ -24,6 +26,8 @@ const mockState = vi.hoisted(() => ({
     size: number
   }>,
   tasks: [] as any[],
+  coverageIndex: [] as any[],
+  snapshots: new Map<string, any>(),
   embeddedTracks: {} as Record<string, any[]>,
   probeCalls: [] as string[],
   probeFailures: new Set<string>()
@@ -57,13 +61,78 @@ vi.mock('../config', () => ({
   }
 }))
 
-vi.mock('../db', () => ({
-  useDb: vi.fn(() => ({
-    prepare: vi.fn(() => ({
-      all: vi.fn(() => mockState.tasks)
+vi.mock('../db', () => {
+  const snapshotKey = (rootId: unknown, targetLanguage: unknown, includeEmbedded: unknown) => (
+    `${String(rootId)}\u0000${String(targetLanguage)}\u0000${Number(includeEmbedded) ? 1 : 0}`
+  )
+  return {
+    useDb: vi.fn(() => ({
+      exec: vi.fn(() => {}),
+      prepare: vi.fn((sql: string) => {
+        const text = String(sql).replace(/\s+/g, ' ').trim()
+        return {
+          all: (...params: any[]) => {
+            if (/FROM tasks\b/i.test(text)) return mockState.tasks
+            if (/FROM library_coverage_index/i.test(text)) {
+              const [rootId, targetLanguage] = params
+              return mockState.coverageIndex.filter(row => (
+                row.root_id === rootId && row.target_language === targetLanguage
+              ))
+            }
+            return []
+          },
+          get: (...params: any[]) => {
+            if (/FROM coverage_snapshots/i.test(text)) {
+              const [rootId, targetLanguage, includeEmbedded] = params
+              return mockState.snapshots.get(snapshotKey(rootId, targetLanguage, includeEmbedded))
+            }
+            return undefined
+          },
+          run: (...params: any[]) => {
+            if (/DELETE FROM library_coverage_index/i.test(text)) {
+              const [rootId, targetLanguage] = params
+              mockState.coverageIndex = mockState.coverageIndex.filter(row => (
+                !(row.root_id === rootId && row.target_language === targetLanguage)
+              ))
+              return { changes: 1 }
+            }
+            if (/INSERT INTO library_coverage_index/i.test(text)) {
+              const [
+                root_id, target_language, path, status, task_id, task_status, subtitle_path,
+                subtitle_source, matched_language, embedded_track_title, file_mtime, scanned_at
+              ] = params
+              const row = {
+                root_id, target_language, path, status, task_id, task_status, subtitle_path,
+                subtitle_source, matched_language, embedded_track_title, file_mtime, scanned_at
+              }
+              const index = mockState.coverageIndex.findIndex(item => (
+                item.root_id === root_id
+                && item.target_language === target_language
+                && item.path === path
+              ))
+              if (index >= 0) mockState.coverageIndex[index] = row
+              else mockState.coverageIndex.push(row)
+              return { changes: 1 }
+            }
+            if (/INSERT INTO coverage_snapshots/i.test(text)) {
+              const [root_id, target_language, include_embedded, scanned_at, truncated, result_json] = params
+              mockState.snapshots.set(snapshotKey(root_id, target_language, include_embedded), {
+                root_id,
+                target_language,
+                include_embedded,
+                scanned_at,
+                truncated,
+                result_json
+              })
+              return { changes: 1 }
+            }
+            return { changes: 0 }
+          }
+        }
+      })
     }))
-  }))
-}))
+  }
+})
 
 vi.mock('../video', () => ({
   VideoService: {
@@ -104,6 +173,8 @@ beforeEach(() => {
   mockState.targetLanguage = 'zh-CN'
   mockState.files = []
   mockState.tasks = []
+  mockState.coverageIndex = []
+  mockState.snapshots.clear()
   mockState.embeddedTracks = {}
   mockState.probeCalls = []
   mockState.probeFailures = new Set()
@@ -413,5 +484,129 @@ describe('buildLibraryCoverage', () => {
     const result = await buildLibraryCoverage('root-embedded-failure')
     expect(result.files[0]!.status).toBe('missing')
     expect(result.files[0]!.subtitleSource).toBeUndefined()
+  })
+})
+
+describe('coverage snapshot caching', () => {
+  it('returns null before an explicit scan', async () => {
+    mockState.files = [videoEntry('Movies/Unscanned.Movie.mkv')]
+
+    await expect(getCachedLibraryCoverage('root-snapshot-none')).resolves.toBeNull()
+  })
+
+  it('reads files and hasCache after a scan', async () => {
+    const directory = join(workDir, 'Movies')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Snapshot.Movie.mkv'), '')
+
+    mockState.files = [videoEntry('Movies/Snapshot.Movie.mkv')]
+
+    const scanned = await scanLibraryCoverage('root-snapshot')
+    expect(scanned.hasCache).toBe(true)
+
+    const cached = await getCachedLibraryCoverage('root-snapshot')
+    expect(cached).not.toBeNull()
+    expect(cached!.hasCache).toBe(true)
+    expect(cached!.cachedAt).toBeTruthy()
+    expect(cached!.files).toHaveLength(1)
+    expect(cached!.files[0]!.path).toBe('Movies/Snapshot.Movie.mkv')
+    expect(cached!.summary.total).toBe(1)
+  })
+
+  it('keeps snapshots separate for includeEmbedded variants', async () => {
+    const directory = join(workDir, 'Embedded Snapshot')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Embedded.Snapshot.E01.mkv'), '')
+
+    const path = 'Embedded Snapshot/Embedded.Snapshot.E01.mkv'
+    mockState.files = [videoEntry(path)]
+    mockState.embeddedTracks[path] = [
+      { index: 1, codec: 'subrip', language: 'chi', title: 'Simplified', isForced: false }
+    ]
+
+    const withEmbedded = await scanLibraryCoverage('root-snapshot-embedded', { includeEmbedded: true })
+    expect(withEmbedded.files[0]!.status).toBe('done')
+    expect(withEmbedded.files[0]!.subtitleSource).toBe('embedded')
+
+    const cachedWithEmbedded = await getCachedLibraryCoverage('root-snapshot-embedded', { includeEmbedded: true })
+    expect(cachedWithEmbedded!.files[0]!.status).toBe('done')
+    expect(cachedWithEmbedded!.files[0]!.subtitleSource).toBe('embedded')
+
+    const withoutEmbedded = await scanLibraryCoverage('root-snapshot-embedded', {
+      includeEmbedded: false,
+      refresh: true
+    })
+    expect(withoutEmbedded.files[0]!.status).toBe('missing')
+
+    const cachedWithoutEmbedded = await getCachedLibraryCoverage('root-snapshot-embedded', { includeEmbedded: false })
+    expect(cachedWithoutEmbedded!.files[0]!.status).toBe('missing')
+
+    const cachedWithEmbeddedAgain = await getCachedLibraryCoverage('root-snapshot-embedded', { includeEmbedded: true })
+    expect(cachedWithEmbeddedAgain!.files[0]!.status).toBe('done')
+    expect(cachedWithEmbeddedAgain!.files[0]!.subtitleSource).toBe('embedded')
+    expect(mockState.snapshots.size).toBe(2)
+  })
+
+  it('overlays newer coverage index task status onto a cached snapshot', async () => {
+    const directory = join(workDir, 'Movies')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Overlay.Movie.mkv'), '')
+
+    const path = 'Movies/Overlay.Movie.mkv'
+    mockState.files = [videoEntry(path)]
+
+    const scanned = await scanLibraryCoverage('root-snapshot-overlay')
+    expect(scanned.files[0]!.status).toBe('missing')
+
+    const row = mockState.coverageIndex.find(item => (
+      item.root_id === 'root-snapshot-overlay' && item.path === path
+    ))
+    expect(row).toBeTruthy()
+    row.status = 'processing'
+    row.task_id = 'task-new'
+    row.task_status = 'transcribing'
+    row.scanned_at = new Date(Date.now() + 1000).toISOString()
+
+    const cached = await getCachedLibraryCoverage('root-snapshot-overlay')
+    expect(cached!.files[0]!.status).toBe('processing')
+    expect(cached!.files[0]!.taskId).toBe('task-new')
+    expect(cached!.files[0]!.taskStatus).toBe('transcribing')
+    expect(cached!.summary).toMatchObject({ total: 1, processing: 1, missing: 0 })
+    expect(cached!.series[0]!.files[0]!.status).toBe('processing')
+
+    row.task_status = 'error'
+    const failed = await getCachedLibraryCoverage('root-snapshot-overlay')
+    expect(failed!.files[0]!.status).toBe('failed')
+  })
+
+  it('does not leak embedded coverage across includeEmbedded variants', async () => {
+    const directory = join(workDir, 'Variant Leak')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'Variant.Leak.E01.mkv'), '')
+
+    const path = 'Variant Leak/Variant.Leak.E01.mkv'
+    mockState.files = [videoEntry(path)]
+    mockState.embeddedTracks[path] = [
+      { index: 1, codec: 'subrip', language: 'chi', title: 'Simplified', isForced: false }
+    ]
+
+    await scanLibraryCoverage('root-variant-leak', { includeEmbedded: true })
+    await scanLibraryCoverage('root-variant-leak', { includeEmbedded: false, refresh: true })
+
+    const row = mockState.coverageIndex.find(item => item.root_id === 'root-variant-leak' && item.path === path)
+    expect(row).toBeTruthy()
+    row.task_id = 'task-variant-leak'
+    row.task_status = 'done'
+    row.status = 'missing'
+
+    const cachedWithEmbedded = await getCachedLibraryCoverage('root-variant-leak', { includeEmbedded: true })
+    expect(cachedWithEmbedded!.files[0]!.status).toBe('done')
+    expect(cachedWithEmbedded!.files[0]!.subtitleSource).toBe('embedded')
+    expect(cachedWithEmbedded!.files[0]!.taskId).toBe('task-variant-leak')
+
+    const cachedWithoutEmbedded = await getCachedLibraryCoverage('root-variant-leak', { includeEmbedded: false })
+    expect(cachedWithoutEmbedded!.files[0]!.status).toBe('missing')
+    expect(cachedWithoutEmbedded!.files[0]!.subtitleSource).toBeUndefined()
+    expect(cachedWithoutEmbedded!.files[0]!.taskId).toBe('task-variant-leak')
   })
 })

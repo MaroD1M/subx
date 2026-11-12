@@ -1,6 +1,7 @@
 import { ConfigService } from '../utils/config'
 import { useDb } from '../utils/db'
 import { validateMediaRoots } from '../utils/mediaRoots'
+import { clearEmbeddedSubtitleCache, clearLibraryCoverageCache } from '../utils/libraryCoverage'
 import { configUpdateSchema, parseBody } from '../utils/validation'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
@@ -104,6 +105,13 @@ const ALLOWED_KEYS = new Set([
   'costPriceCompletionPer1M'
 ])
 
+function lowerBoundedNumber(value: unknown, fallback: number, minimum: number, integer = false) {
+  const parsed = value === null || value === undefined || value === '' ? Number.NaN : Number(value)
+  const numeric = Number.isFinite(parsed) ? parsed : fallback
+  const bounded = Math.max(minimum, numeric)
+  return integer ? Math.floor(bounded) : bounded
+}
+
 export default defineEventHandler(async (event) => {
   const body = await parseBody(event, configUpdateSchema)
 
@@ -130,10 +138,19 @@ export default defineEventHandler(async (event) => {
       continue
     }
     if (key === 'mediaRoots') {
+      const previousConfig = await ConfigService.getConfig()
+      const previousRoots = new Map((previousConfig.mediaRoots || []).map(root => [String(root.id), root]))
       const roots = validateMediaRoots(value)
       await ConfigService.updateConfig(key, roots)
       try {
         const rootMap = new Map(roots.map(root => [root.id, root]))
+        const changedRootIds = new Set<string>()
+        for (const root of roots) {
+          const previous = previousRoots.get(String(root.id))
+          if (!previous || previous.path !== root.path || previous.name !== root.name) {
+            changedRootIds.add(String(root.id))
+          }
+        }
         const db = useDb()
         const watchFolders = db.prepare('SELECT id, root_id FROM watch_folders').all() as any[]
         for (const folder of watchFolders) {
@@ -156,10 +173,24 @@ export default defineEventHandler(async (event) => {
             if (rootId && !rootIds.has(rootId)) removedRootIds.add(rootId)
           }
         } catch { /* older schema */ }
+        try {
+          const snapshotRoots = db.prepare('SELECT DISTINCT root_id FROM coverage_snapshots').all() as Array<{ root_id?: string }>
+          for (const row of snapshotRoots) {
+            const rootId = String(row.root_id || '')
+            if (rootId && !rootIds.has(rootId)) removedRootIds.add(rootId)
+          }
+        } catch { /* older schema */ }
         for (const rootId of removedRootIds) {
           try { db.prepare('DELETE FROM library_coverage_index WHERE root_id = ?').run(rootId) } catch { /* older schema */ }
           try { db.prepare('DELETE FROM coverage_auto_fill_policies WHERE root_id = ?').run(rootId) } catch { /* older schema */ }
+          try { db.prepare('DELETE FROM coverage_snapshots WHERE root_id = ?').run(rootId) } catch { /* older schema */ }
         }
+        for (const rootId of changedRootIds) {
+          try { db.prepare('DELETE FROM library_coverage_index WHERE root_id = ?').run(rootId) } catch { /* older schema */ }
+          try { db.prepare('DELETE FROM coverage_snapshots WHERE root_id = ?').run(rootId) } catch { /* older schema */ }
+        }
+        clearLibraryCoverageCache()
+        clearEmbeddedSubtitleCache()
         const profileRoots = db.prepare('SELECT DISTINCT root_id FROM series_profiles WHERE root_id IS NOT NULL').all() as Array<{ root_id?: string }>
         for (const row of profileRoots) {
           const rootId = String(row.root_id || '')
@@ -248,19 +279,19 @@ export default defineEventHandler(async (event) => {
       continue
     }
     if (key === 'ocrMaxSeconds') {
-      await ConfigService.updateConfig(key, Math.max(300, Math.min(24 * 60 * 60, Number(value) || 14400)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 14400, 300))
       continue
     }
     if (key === 'ocrChunkSeconds') {
-      await ConfigService.updateConfig(key, Math.max(300, Math.min(4 * 60 * 60, Number(value) || 1800)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 1800, 300))
       continue
     }
     if (key === 'ocrPgsripTimeoutSeconds') {
-      await ConfigService.updateConfig(key, Math.max(300, Math.min(24 * 60 * 60, Number(value) || 7200)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 7200, 300))
       continue
     }
     if (key === 'ocrFfmpegTimeoutSeconds') {
-      await ConfigService.updateConfig(key, Math.max(60, Math.min(24 * 60 * 60, Number(value) || 3600)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 3600, 60))
       continue
     }
     if (key === 'ocrChunkRetries') {
@@ -268,35 +299,35 @@ export default defineEventHandler(async (event) => {
       continue
     }
     if (key === 'ocrResumeTtlHours') {
-      await ConfigService.updateConfig(key, Math.max(1, Math.min(168, Math.floor(Number(value) || 24))))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 24, 1, true))
       continue
     }
     if (key === 'ocrJobIdleTimeoutMs') {
-      await ConfigService.updateConfig(key, Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(value) || 60 * 60 * 1000)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 60 * 60 * 1000, 60_000))
       continue
     }
     if (key === 'ocrJobAbsoluteTimeoutMs') {
-      await ConfigService.updateConfig(key, Math.max(10 * 60 * 1000, Math.min(7 * 24 * 60 * 60 * 1000, Number(value) || 6 * 60 * 60 * 1000)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 6 * 60 * 60 * 1000, 10 * 60 * 1000))
       continue
     }
     if (key === 'asrUploadTimeoutMs') {
-      await ConfigService.updateConfig(key, Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(value) || 30 * 60 * 1000)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 30 * 60 * 1000, 60_000))
       continue
     }
     if (key === 'asrPollTimeoutMs') {
-      await ConfigService.updateConfig(key, Math.max(1_000, Math.min(60_000, Number(value) || 30_000)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 30_000, 1_000))
       continue
     }
     if (key === 'asrJobIdleTimeoutMs') {
-      await ConfigService.updateConfig(key, Math.max(60_000, Math.min(24 * 60 * 60 * 1000, Number(value) || 30 * 60 * 1000)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 30 * 60 * 1000, 60_000))
       continue
     }
     if (key === 'asrJobAbsoluteTimeoutMs') {
-      await ConfigService.updateConfig(key, Math.max(10 * 60 * 1000, Math.min(7 * 24 * 60 * 60 * 1000, Number(value) || 6 * 60 * 60 * 1000)))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 6 * 60 * 60 * 1000, 10 * 60 * 1000))
       continue
     }
     if (key === 'asrChunkSeconds') {
-      await ConfigService.updateConfig(key, Math.max(60, Math.min(3600, Math.floor(Number(value) || 300))))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 300, 60, true))
       continue
     }
     if (key === 'asrChunkOverlapSeconds') {
@@ -304,7 +335,7 @@ export default defineEventHandler(async (event) => {
       continue
     }
     if (key === 'asrResumeTtlHours') {
-      await ConfigService.updateConfig(key, Math.max(1, Math.min(8760, Math.floor(Number(value) || 168))))
+      await ConfigService.updateConfig(key, lowerBoundedNumber(value, 168, 1, true))
       continue
     }
     await ConfigService.updateConfig(key, value)

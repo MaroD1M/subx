@@ -38,11 +38,13 @@ def pgsrip_track_flag(is_forced: bool) -> str:
     return "forced" if is_forced else "full"
 
 
-def clamp_int(value: Any, fallback: int, minimum: int, maximum: int) -> int:
+def clamp_int(value: Any, fallback: int, minimum: int, maximum: int | None = None) -> int:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
         return fallback
+    if maximum is None:
+        return max(minimum, parsed)
     return max(minimum, min(maximum, parsed))
 
 

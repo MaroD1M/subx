@@ -54,6 +54,18 @@ export function removeTaskArtifacts(taskId: string) {
     } catch { /* ignore */ }
 }
 
+function readLatestTaskProgress(taskId: string): { progress: number, stepProgress: number | null } {
+    try {
+        const row = useDb().prepare('SELECT progress, step_progress, step_message FROM tasks WHERE task_id = ?').get(taskId) as { progress?: number, step_progress?: number | null, step_message?: string | null } | undefined
+        return {
+            progress: Number(row?.progress ?? 0),
+            stepProgress: row?.step_progress == null ? null : Number(row.step_progress)
+        }
+    } catch {
+        return { progress: 0, stepProgress: null }
+    }
+}
+
 export const TaskService = {
     async createTask(task: Partial<TranslationTask>): Promise<TranslationTask> {
         const db = useDb()
@@ -156,13 +168,15 @@ export const TaskService = {
             stepStartedAt: task.step_started_at ? toUtcIsoString(task.step_started_at) : undefined,
             finishedAt: task.finished_at ? toUtcIsoString(task.finished_at) : undefined,
             pausedAt: task.paused_at ? toUtcIsoString(task.paused_at) : undefined,
-            pausedTotalMs: Number(task.paused_total_ms || 0)
+            pausedTotalMs: Number(task.paused_total_ms || 0),
+            pauseRequested: Boolean(task.pause_requested_at),
+            pauseRequestedAt: task.pause_requested_at ? toUtcIsoString(task.pause_requested_at) : undefined
         }
     },
 
     async updateStatus(taskId: string, status: TaskStatus, progress: number, data: any = {}) {
         const db = useDb()
-        const existing = db.prepare('SELECT status, progress, total_chunks, step_progress, step_message, error, started_at, step_started_at, finished_at, paused_at, paused_total_ms FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, total_chunks?: number, step_progress?: number, step_message?: string | null, error?: string | null, started_at?: string | null, step_started_at?: string | null, finished_at?: string | null, paused_at?: string | null, paused_total_ms?: number } | undefined
+        const existing = db.prepare('SELECT status, progress, total_chunks, step_progress, step_message, error, started_at, step_started_at, finished_at, paused_at, paused_total_ms, pause_requested_at FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, total_chunks?: number, step_progress?: number, step_message?: string | null, error?: string | null, started_at?: string | null, step_started_at?: string | null, finished_at?: string | null, paused_at?: string | null, paused_total_ms?: number, pause_requested_at?: string | null } | undefined
         const currentStatus = String(existing?.status || '')
 
         if ((currentStatus === 'cancelled' || currentStatus === 'done' || currentStatus === 'error') && status !== currentStatus) {
@@ -214,8 +228,9 @@ export const TaskService = {
             }
         }
 
-        const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, done_chunks = COALESCE(?, done_chunks), step_progress = ?, step_message = ?, error = ?, started_at = ?, step_started_at = ?, finished_at = ?, paused_at = ?, paused_total_ms = ?, updated_at = datetime(\'now\') WHERE task_id = ? AND status = ?')
-        const info = stmt.run(status, progress, completedChunks, stepProgress, stepMessage, nextError, startedAt, stepStartedAt, finishedAt, pausedAt, pausedTotalMs, taskId, currentStatus)
+        const clearPauseRequest = terminalStatus ? 1 : 0
+        const stmt = db.prepare('UPDATE tasks SET status = ?, progress = ?, done_chunks = COALESCE(?, done_chunks), step_progress = ?, step_message = ?, error = ?, started_at = ?, step_started_at = ?, finished_at = ?, paused_at = ?, paused_total_ms = ?, pause_requested_at = CASE WHEN ? = 1 THEN NULL ELSE pause_requested_at END, updated_at = datetime(\'now\') WHERE task_id = ? AND status = ?')
+        const info = stmt.run(status, progress, completedChunks, stepProgress, stepMessage, nextError, startedAt, stepStartedAt, finishedAt, pausedAt, pausedTotalMs, clearPauseRequest, taskId, currentStatus)
         if (Number(info?.changes || 0) === 0) return
 
         const payload: any = {
@@ -229,7 +244,13 @@ export const TaskService = {
             stepStartedAt: stepStartedAt ? toUtcIsoString(stepStartedAt) : null,
             finishedAt: finishedAt ? toUtcIsoString(finishedAt) : null,
             pausedAt: pausedAt ? toUtcIsoString(pausedAt) : null,
-            pausedTotalMs
+            pausedTotalMs,
+            pauseRequested: terminalStatus
+                ? false
+                : (data.pauseRequested !== undefined ? Boolean(data.pauseRequested) : Boolean(existing?.pause_requested_at)),
+            pauseRequestedAt: terminalStatus
+                ? null
+                : (data.pauseRequestedAt ?? (existing?.pause_requested_at ? toUtcIsoString(existing.pause_requested_at) : null))
         }
 
         if (data.log) {
@@ -403,15 +424,22 @@ export const TaskService = {
 
         } catch (e: any) {
             if (e instanceof TaskPausedError) {
-                await this.updateStatus(taskId, 'paused', Number(taskForCleanup?.progress || 0), {
-                    stepMessage: '任务已暂停，已完成识别分段已保存',
-                    log: '任务已暂停，已完成识别分段已保存。',
+                try {
+                    useDb().prepare("UPDATE tasks SET pause_requested_at = NULL, updated_at = datetime('now') WHERE task_id = ?").run(taskId)
+                } catch { /* ignore pause flag cleanup failures */ }
+                const latest = readLatestTaskProgress(taskId)
+                await this.updateStatus(taskId, 'paused', latest.progress, {
+                    stepProgress: latest.stepProgress ?? undefined,
+                    stepMessage: '任务已暂停，当前识别分段已完成',
+                    log: '任务已暂停，当前识别分段已完成。',
                     level: 'warn'
                 })
                 return
             }
             if (e instanceof TaskCancelledError || isTaskCancelled(taskId)) {
-                await this.updateStatus(taskId, 'cancelled', Number(taskForCleanup?.progress || 0), {
+                const latest = readLatestTaskProgress(taskId)
+                await this.updateStatus(taskId, 'cancelled', latest.progress, {
+                    stepProgress: latest.stepProgress ?? undefined,
                     error: '用户取消任务',
                     stepMessage: '任务已取消',
                     log: '任务已取消，后台执行已停止。',
@@ -440,7 +468,9 @@ export const TaskService = {
                 }
             }, 'task failed')
 
-            await this.updateStatus(taskId, 'error', Number(taskForCleanup?.progress || 0), {
+            const latest = readLatestTaskProgress(taskId)
+            await this.updateStatus(taskId, 'error', latest.progress, {
+                stepProgress: latest.stepProgress ?? undefined,
                 error: `${classified.summary} (${safeMessage})`,
                 stepMessage: classified.summary,
                 log: `!!! 任务失败: ${classified.summary}${safeStack ? '\n堆栈信息: ' + safeStack.split('\n').slice(0, 3).join('\n') : ''}`

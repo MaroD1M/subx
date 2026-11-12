@@ -1,38 +1,40 @@
 <template>
   <div class="space-y-4">
-    <div class="surface-card p-4 sm:p-5 space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="app-section">
+      <div class="app-section-head">
         <div>
-          <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">API Token</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">用于自动化脚本、下载器或其他服务调用 SubX API。明文只在创建时显示一次。</p>
+          <p class="app-section-title">API Token</p>
+          <p class="app-caption">用于自动化脚本、下载器或其他服务调用 SubX API。明文只在创建时显示一次。</p>
         </div>
         <UButton label="创建 Token" icon="i-lucide-key-round" color="primary" variant="soft" @click="openTokenModal" />
       </div>
 
-      <div v-if="loadError" class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <span>Token 列表加载失败：{{ loadError }}</span>
-          <UButton label="重试" size="xs" color="error" variant="soft" @click="refresh()" />
-        </div>
-      </div>
-      <div v-else-if="!tokens.length" class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/60 p-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900/20 dark:text-gray-400">
-        还没有 API Token
-      </div>
-      <div v-else class="space-y-2">
-        <article v-for="token in tokens" :key="token.id" class="rounded-2xl border border-gray-200/80 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-900/30 sm:p-4">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="space-y-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ token.name }}</p>
-                <UBadge :color="token.revokedAt ? 'neutral' : 'success'" variant="subtle">{{ token.revokedAt ? '已撤销' : '有效' }}</UBadge>
-                <code class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ token.prefix }}…</code>
-              </div>
-              <p class="text-xs text-gray-500 dark:text-gray-400">权限：{{ token.scopes.join(', ') }}</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">过期：{{ token.expiresAt ? formatDate(token.expiresAt) : '永不过期' }} · 最近使用：{{ token.lastUsedAt ? formatDate(token.lastUsedAt) : '从未' }}</p>
-            </div>
-            <UButton v-if="!token.revokedAt" label="撤销" icon="i-lucide-ban" size="xs" color="error" variant="soft" @click="revokeToken(token)" />
+      <div class="app-section-body">
+        <div v-if="loadError" class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <span>Token 列表加载失败：{{ loadError }}</span>
+            <UButton label="重试" size="xs" color="error" variant="soft" @click="refresh()" />
           </div>
-        </article>
+        </div>
+        <div v-else-if="!tokens.length" class="app-empty text-sm text-gray-500 dark:text-gray-400">
+          还没有 API Token
+        </div>
+        <div v-else class="space-y-2">
+          <article v-for="token in tokens" :key="token.id" class="surface-muted p-3 sm:p-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ token.name }}</p>
+                  <span class="app-pill" :class="token.revokedAt ? 'app-pill-neutral' : 'app-pill-success'">{{ token.revokedAt ? '已撤销' : '有效' }}</span>
+                  <code class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ token.prefix }}…</code>
+                </div>
+                <p class="app-meta">权限：{{ token.scopes.join(', ') }}</p>
+                <p class="app-meta">过期：{{ token.expiresAt ? formatDate(token.expiresAt) : '永不过期' }} · 最近使用：{{ token.lastUsedAt ? formatDate(token.lastUsedAt) : '从未' }}</p>
+              </div>
+              <UButton v-if="!token.revokedAt" label="撤销" icon="i-lucide-ban" size="xs" color="error" variant="soft" @click="revokeToken(token)" />
+            </div>
+          </article>
+        </div>
       </div>
     </div>
 
@@ -42,7 +44,7 @@
           <UFormField label="名称"><UInput v-model="tokenForm.name" placeholder="例如：下载器回调" class="w-full" /></UFormField>
           <UFormField label="有效期天数（留空永不过期）"><UInput v-model.number="tokenForm.expiresInDays" type="number" min="1" max="3650" class="w-full" /></UFormField>
           <div class="space-y-2">
-            <p class="text-xs font-medium text-gray-600 dark:text-gray-300">权限</p>
+            <p class="app-meta font-medium">权限</p>
             <div class="flex flex-wrap gap-2" role="group" aria-label="API Token 权限选择">
               <UButton
                 v-for="scope in scopeOptions"
@@ -71,7 +73,10 @@
         <div class="space-y-3">
           <div class="break-all rounded-xl border border-amber-200 bg-amber-50 p-3 font-mono text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">{{ createdToken }}</div>
           <UButton label="复制 Token" icon="i-lucide-copy" color="primary" variant="soft" @click="copyCreatedToken" />
-          <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">示例：<code>curl -H "Authorization: Bearer &lt;token&gt;" {{ baseUrl }}/api/tasks</code></p>
+          <details class="rounded-lg border border-gray-100 px-2.5 py-1.5 dark:border-gray-800">
+            <summary class="cursor-pointer app-caption font-medium">调用示例</summary>
+            <p class="app-caption mt-1.5 break-all">示例：<code>curl -H "Authorization: Bearer &lt;token&gt;" {{ baseUrl }}/api/tasks</code></p>
+          </details>
         </div>
       </template>
       <template #footer>

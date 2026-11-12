@@ -1,10 +1,11 @@
 import { Agent, fetch as undiciFetch } from 'undici'
 import type { AsrResult } from '../asr/types'
+import { createLongTimeoutSignal } from '../longTimeout'
 
-const MAX_DISPATCH_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000
+// 0 表示不启用 undici 自身的超时，长任务超时由请求级 signal 控制。
 const ocrDispatcher = new Agent({
-  headersTimeout: MAX_DISPATCH_TIMEOUT_MS,
-  bodyTimeout: MAX_DISPATCH_TIMEOUT_MS
+  headersTimeout: 0,
+  bodyTimeout: 0
 })
 
 function ocrFetch(input: string, init: RequestInit = {}) {
@@ -58,11 +59,8 @@ function describeOcrError(error: any) {
 export function resolveOcrTimeouts(options: Pick<OcrOptions, 'idleTimeoutMs' | 'absoluteTimeoutMs'> = {}) {
   const envIdle = finiteNumber(process.env.OCR_JOB_IDLE_TIMEOUT_MS, OCR_DEFAULT_IDLE_TIMEOUT_MS)
   const envAbsolute = finiteNumber(process.env.OCR_JOB_ABSOLUTE_TIMEOUT_MS, OCR_DEFAULT_ABSOLUTE_TIMEOUT_MS)
-  const idle = Math.max(60_000, Math.min(24 * 60 * 60 * 1000, finiteNumber(options.idleTimeoutMs, envIdle)))
-  const absolute = Math.max(
-    10 * 60 * 1000,
-    Math.min(7 * 24 * 60 * 60 * 1000, finiteNumber(options.absoluteTimeoutMs, envAbsolute))
-  )
+  const idle = Math.max(60_000, finiteNumber(options.idleTimeoutMs, envIdle))
+  const absolute = Math.max(10 * 60 * 1000, finiteNumber(options.absoluteTimeoutMs, envAbsolute))
   return { idle, absolute: Math.max(idle, absolute) }
 }
 
@@ -245,16 +243,21 @@ export const OcrService = {
     signal?: AbortSignal,
     timeoutMs = OCR_DEFAULT_ABSOLUTE_TIMEOUT_MS
   ): Promise<AsrResult> {
-    const response = await ocrFetch(`${baseUrl}/v1/subtitles/ocr`, {
-      method: 'POST',
-      headers,
-      body,
-      signal: combineSignals([signal, AbortSignal.timeout(timeoutMs)])
-    })
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '')
-      throw new Error(`OCR 请求失败 (${response.status}): ${detail.slice(0, 500)}`)
+    const longTimeout = createLongTimeoutSignal(timeoutMs)
+    try {
+      const response = await ocrFetch(`${baseUrl}/v1/subtitles/ocr`, {
+        method: 'POST',
+        headers,
+        body,
+        signal: combineSignals([signal, longTimeout.signal])
+      })
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '')
+        throw new Error(`OCR 请求失败 (${response.status}): ${detail.slice(0, 500)}`)
+      }
+      return normalizeResult(await response.json() as AsrResult, options.language || 'unknown')
+    } finally {
+      longTimeout.cancel()
     }
-    return normalizeResult(await response.json() as AsrResult, options.language || 'unknown')
   }
 }

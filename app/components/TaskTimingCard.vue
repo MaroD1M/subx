@@ -1,36 +1,36 @@
 <template>
-  <div class="grid grid-cols-2 gap-2 rounded-2xl border border-gray-200/70 bg-gray-50/60 p-3 text-xs dark:border-gray-800 dark:bg-gray-900/30 sm:grid-cols-3 xl:grid-cols-6">
+  <div class="surface-muted grid grid-cols-2 gap-x-4 gap-y-2.5 px-3 py-2.5 sm:grid-cols-3 xl:grid-cols-6">
     <div class="min-w-0">
-      <p class="stat-label">{{ timingStartLabel }}</p>
-      <p class="mt-1 truncate font-medium text-gray-700 dark:text-gray-300" :title="timingStartText">{{ timingStartText }}</p>
-    </div>
-    <div class="min-w-0">
-      <p class="stat-label">{{ timingElapsedLabel }}</p>
-      <p class="mt-1 font-medium text-gray-700 dark:text-gray-300">{{ timingElapsedText }}</p>
-    </div>
-    <div v-if="showStageTiming" class="min-w-0">
-      <p class="stat-label">当前阶段</p>
-      <p class="mt-1 font-medium text-gray-700 dark:text-gray-300">{{ stageElapsedText }}</p>
-    </div>
-    <div v-if="!isTerminalTask && !isQueuedTask" class="min-w-0">
-      <p class="stat-label">当前阶段预计</p>
-      <p class="mt-1 font-medium text-gray-700 dark:text-gray-300">{{ timingStageEtaText }}</p>
+      <p class="app-meta font-medium">{{ timingStartLabel }}</p>
+      <p class="mt-0.5 truncate text-sm font-medium text-gray-700 dark:text-gray-300" :title="timingStartText">{{ timingStartText }}</p>
     </div>
     <div v-if="!isTerminalTask" class="min-w-0">
-      <p class="stat-label">预计剩余</p>
-      <p class="mt-1 font-medium text-gray-700 dark:text-gray-300">{{ timingEtaText }}</p>
+      <p class="app-meta font-medium">{{ timingElapsedLabel }}</p>
+      <p class="mt-0.5 text-sm font-medium text-gray-700 dark:text-gray-300">{{ timingElapsedText }}</p>
+    </div>
+    <div v-if="showStageTiming" class="min-w-0">
+      <p class="app-meta font-medium">{{ stageTimingLabel }}</p>
+      <p class="mt-0.5 text-sm font-medium text-gray-700 dark:text-gray-300">{{ stageElapsedText }}</p>
+    </div>
+    <div v-if="!isTerminalTask && !isQueuedTask" class="min-w-0">
+      <p class="app-meta font-medium">当前阶段预计</p>
+      <p class="mt-0.5 text-sm font-medium text-gray-700 dark:text-gray-300">{{ timingStageEtaText }}</p>
+    </div>
+    <div v-if="!isTerminalTask" class="min-w-0">
+      <p class="app-meta font-medium">预计剩余</p>
+      <p class="mt-0.5 text-sm font-medium text-gray-700 dark:text-gray-300">{{ timingEtaText }}</p>
     </div>
     <div v-if="timingEtaClock && !isTerminalTask" class="min-w-0">
-      <p class="stat-label">预计完成</p>
-      <p class="mt-1 font-medium text-gray-700 dark:text-gray-300">{{ timingEtaClock }}</p>
+      <p class="app-meta font-medium">预计完成</p>
+      <p class="mt-0.5 text-sm font-medium text-gray-700 dark:text-gray-300">{{ timingEtaClock }}</p>
     </div>
     <div v-if="isTerminalTask && timingFinishedText" class="min-w-0">
-      <p class="stat-label">完成时间</p>
-      <p class="mt-1 truncate font-medium text-gray-700 dark:text-gray-300" :title="timingFinishedText">{{ timingFinishedText }}</p>
+      <p class="app-meta font-medium">完成时间</p>
+      <p class="mt-0.5 truncate text-sm font-medium text-gray-700 dark:text-gray-300" :title="timingFinishedText">{{ timingFinishedText }}</p>
     </div>
     <div v-if="isTerminalTask && totalElapsedText" class="min-w-0">
-      <p class="stat-label">总耗时</p>
-      <p class="mt-1 font-medium text-gray-700 dark:text-gray-300">{{ totalElapsedText }}</p>
+      <p class="app-meta font-medium">总耗时</p>
+      <p class="mt-0.5 text-sm font-medium text-gray-700 dark:text-gray-300">{{ totalElapsedText }}</p>
     </div>
   </div>
 </template>
@@ -57,9 +57,23 @@ const progressSamples = ref<TaskProgressSample[]>([])
 const smoothedOverallEta = ref<number | null>(null)
 let timer: ReturnType<typeof setInterval> | null = null
 
-const isQueuedTask = computed(() => props.task.step === 'queued')
-const isPausedTask = computed(() => props.task.step === 'paused')
-const isTerminalTask = computed(() => ['done', 'error', 'cancelled', 'review'].includes(String(props.task.step || '')))
+const step = computed(() => String(props.task.step || ''))
+const isQueuedTask = computed(() => step.value === 'queued')
+const isPausedTask = computed(() => step.value === 'paused')
+const isPausePending = computed(() => Boolean(props.task.pauseRequested) && !isPausedTask.value)
+const isTerminalTask = computed(() => ['done', 'error', 'cancelled', 'review'].includes(step.value))
+const hasPausedHistory = computed(() => Number(props.task.pausedTotalMs || 0) > 0)
+const sourceType = computed(() => {
+  const explicit = String(props.task.sourceType || '')
+  if (explicit) return explicit
+  if (step.value === 'ocr') return 'ocr'
+  if (['transcribing', 'extracting_audio'].includes(step.value)) return 'asr'
+  return ''
+})
+const isRecognitionStage = computed(() => (
+  ['asr', 'ocr'].includes(sourceType.value)
+  && ['probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'paused'].includes(step.value)
+))
 const timingInput = computed(() => ({
   status: String(props.task.step || ''),
   progress: Number(props.task.progress || 0),
@@ -89,22 +103,25 @@ const timingStartText = computed(() => formatDateTime(props.task.startedAt || pr
 const timingElapsedLabel = computed(() => isQueuedTask.value && !props.task.startedAt ? '已等待' : isPausedTask.value ? '已进行（暂停中）' : '已进行')
 const timingElapsedText = computed(() => formatDuration(activeElapsedMs.value))
 const stageElapsedText = computed(() => formatDuration(stageElapsedMs.value))
+const stageTimingLabel = computed(() => hasPausedHistory.value ? '当前阶段（本次恢复后）' : '当前阶段')
 const showStageTiming = computed(() => Boolean(props.task.stepStartedAt) && !isTerminalTask.value && !isPausedTask.value)
 const timingEtaText = computed(() => {
   if (isQueuedTask.value) return '等待开始'
-  if (isPausedTask.value) return '已暂停'
+  if (isPausedTask.value || isPausePending.value) return '已暂停'
   if (isTerminalTask.value) return '—'
+  if (isRecognitionStage.value) return '翻译阶段开始后估算'
   const eta = overallEtaMs.value
   return eta == null ? '估算中' : `约 ${formatDuration(eta)}`
 })
 const timingStageEtaText = computed(() => {
   if (isQueuedTask.value) return '等待开始'
-  if (isPausedTask.value) return '已暂停'
+  if (isPausedTask.value || isPausePending.value) return '已暂停'
   if (isTerminalTask.value) return '—'
+  if (hasPausedHistory.value) return '—'
   return stageEtaMs.value == null ? '估算中' : `约 ${formatDuration(stageEtaMs.value)}`
 })
 const timingEtaClock = computed(() => {
-  if (isQueuedTask.value || isPausedTask.value || isTerminalTask.value) return ''
+  if (isQueuedTask.value || isPausedTask.value || isPausePending.value || isTerminalTask.value || isRecognitionStage.value) return ''
   const eta = overallEtaMs.value
   if (eta == null) return ''
   return formatDateTime(new Date(nowTick.value + eta), props.timeZone)

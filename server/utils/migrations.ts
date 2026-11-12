@@ -339,6 +339,36 @@ function ensureIntelligenceTables(db: any, dialect: MigrationDialect) {
   ensureIndex(db, dialect, 'cost_usage', 'idx_cost_usage_created', 'created_at')
 }
 
+function ensurePauseRequestAndCoverageSnapshots(db: any, dialect: MigrationDialect) {
+  ensureColumn(db, dialect, 'tasks', 'pause_requested_at', dialect === 'sqlite' ? 'TEXT' : 'TIMESTAMPTZ')
+  if (dialect === 'sqlite') {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS coverage_snapshots (
+        root_id TEXT NOT NULL,
+        target_language TEXT NOT NULL,
+        include_embedded INTEGER NOT NULL DEFAULT 1,
+        scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
+        truncated INTEGER NOT NULL DEFAULT 0,
+        result_json TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (root_id, target_language, include_embedded)
+      )
+    `)
+  } else {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS coverage_snapshots (
+        root_id TEXT NOT NULL,
+        target_language TEXT NOT NULL,
+        include_embedded INTEGER NOT NULL DEFAULT 1,
+        scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        truncated BOOLEAN NOT NULL DEFAULT FALSE,
+        result_json TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (root_id, target_language, include_embedded)
+      )
+    `)
+  }
+  ensureIndex(db, dialect, 'coverage_snapshots', 'idx_coverage_snapshots_scanned', 'scanned_at')
+}
+
 export const MIGRATIONS: Migration[] = [
   {
     version: 3,
@@ -461,6 +491,13 @@ export const MIGRATIONS: Migration[] = [
     name: 'coverage-fill-memory-metadata-cost',
     up(db, dialect) {
       ensureIntelligenceTables(db, dialect)
+    }
+  },
+  {
+    version: 12,
+    name: 'pause-request-and-coverage-snapshots',
+    up(db, dialect) {
+      ensurePauseRequestAndCoverageSnapshots(db, dialect)
     }
   },
 ]

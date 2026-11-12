@@ -3,6 +3,7 @@ import { basename, dirname, join } from 'path'
 import { Agent, fetch as undiciFetch, FormData as UndiciFormData } from 'undici'
 import type { SubtitleEntry } from '../../../types'
 import { useDb } from '../db'
+import { scheduleLongTimeout } from '../longTimeout'
 import { SubtitleService } from '../subtitle'
 import { VideoService } from '../video'
 import type { AsrOptions, AsrPersistedResult, AsrResult, AsrSegment, AsrWord } from './types'
@@ -19,6 +20,11 @@ function envNonNegativeInt(name: string, fallback: number) {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback
 }
 
+function finiteNumber(value: unknown, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 const DEFAULT_UPLOAD_TIMEOUT_MS = envDuration('ASR_UPLOAD_TIMEOUT_MS', 30 * 60 * 1000)
 const DEFAULT_POLL_TIMEOUT_MS = envDuration('ASR_POLL_TIMEOUT_MS', 30 * 1000)
 const DEFAULT_JOB_IDLE_TIMEOUT_MS = envDuration('ASR_JOB_IDLE_TIMEOUT_MS', 30 * 60 * 1000)
@@ -27,20 +33,20 @@ const DEFAULT_POLL_RETRIES = envNonNegativeInt('ASR_POLL_RETRIES', 3)
 const CLOUD_TIMEOUT_MS = 30 * 60 * 1000
 const CLOUD_MAX_BYTES = 24 * 1024 * 1024
 const JOB_POLL_MS = 1500
-const MAX_DISPATCH_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000
+// 0 表示不启用 undici 自身的超时，长任务超时由请求级 signal 控制。
 // undici fetch 默认 headersTimeout 只有 300 秒，长音频同步转写会在 5 分钟时被
 // 误判为网络超时。状态轮询另有更短的 per-request 超时，不依赖这个全局 dispatcher。
 const asrDispatcher = new Agent({
-  headersTimeout: MAX_DISPATCH_TIMEOUT_MS,
-  bodyTimeout: MAX_DISPATCH_TIMEOUT_MS
+  headersTimeout: 0,
+  bodyTimeout: 0
 })
 
 export function resolveAsrTimeouts(options: AsrOptions) {
   return {
-    upload: Math.max(60_000, Number(options.uploadTimeoutMs) || DEFAULT_UPLOAD_TIMEOUT_MS),
-    poll: Math.max(1_000, Number(options.pollTimeoutMs) || DEFAULT_POLL_TIMEOUT_MS),
-    idle: Math.max(60_000, Number(options.jobIdleTimeoutMs) || DEFAULT_JOB_IDLE_TIMEOUT_MS),
-    absolute: Math.max(10 * 60 * 1000, Number(options.jobAbsoluteTimeoutMs) || DEFAULT_JOB_ABSOLUTE_TIMEOUT_MS)
+    upload: Math.max(60_000, finiteNumber(options.uploadTimeoutMs, DEFAULT_UPLOAD_TIMEOUT_MS)),
+    poll: Math.max(1_000, finiteNumber(options.pollTimeoutMs, DEFAULT_POLL_TIMEOUT_MS)),
+    idle: Math.max(60_000, finiteNumber(options.jobIdleTimeoutMs, DEFAULT_JOB_IDLE_TIMEOUT_MS)),
+    absolute: Math.max(10 * 60 * 1000, finiteNumber(options.jobAbsoluteTimeoutMs, DEFAULT_JOB_ABSOLUTE_TIMEOUT_MS))
   }
 }
 
@@ -124,7 +130,7 @@ function normalizeLocalResult(data: any): AsrResult {
 async function transcribeLocal(baseUrl: string, fileName: string, audio: Blob, options: AsrOptions, engine: string, signal?: AbortSignal): Promise<AsrResult> {
   const timeouts = resolveAsrTimeouts(options)
   const timeout = new AbortController()
-  const timer = setTimeout(() => timeout.abort(), timeouts.absolute)
+  const cancelAbsoluteTimeout = scheduleLongTimeout(timeouts.absolute, () => timeout.abort())
   const headers: Record<string, string> = {}
   if (options.apiKey) headers.Authorization = `Bearer ${options.apiKey}`
   try {
@@ -146,7 +152,7 @@ async function transcribeLocal(baseUrl: string, fileName: string, audio: Blob, o
     }
     throw error
   } finally {
-    clearTimeout(timer)
+    cancelAbsoluteTimeout()
   }
 }
 
@@ -177,28 +183,34 @@ async function transcribeLocalJob(
   const timeouts = resolveAsrTimeouts(options)
 
   const uploadTimeout = new AbortController()
-  const uploadTimer = setTimeout(() => uploadTimeout.abort(), timeouts.upload)
-  let create: Response
+  const cancelUploadTimeout = scheduleLongTimeout(timeouts.upload, () => uploadTimeout.abort())
+  let createStatus = 0
+  let createDetail = ''
+  let created: any = null
   try {
-    create = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs`, {
+    const create = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs`, {
       method: 'POST',
       headers,
       body: buildAsrForm(fileName, audio, options, engine),
       signal: combineSignal(signal, uploadTimeout)
     })
+    createStatus = create.status
+    if (create.ok) {
+      created = await create.json() as any
+    } else {
+      createDetail = await create.text().catch(() => '')
+    }
   } catch (error: any) {
     if (signal?.aborted) throw new Error('任务已取消')
     if (uploadTimeout.signal.aborted) throw new Error(`ASR 音频上传超时（${Math.round(timeouts.upload / 60000)} 分钟），请检查 ASR 服务和网络`)
     throw new Error(`ASR 任务创建失败：${describeAsrError(error)}`)
   } finally {
-    clearTimeout(uploadTimer)
+    cancelUploadTimeout()
   }
-  if (create.status === 404 || create.status === 405) return null
-  if (!create.ok) {
-    const detail = await create.text().catch(() => '')
-    throw new Error(`ASR 任务创建失败 (${create.status}): ${detail.slice(0, 500)}`)
+  if (createStatus === 404 || createStatus === 405) return null
+  if (createStatus < 200 || createStatus >= 300) {
+    throw new Error(`ASR 任务创建失败 (${createStatus}): ${createDetail.slice(0, 500)}`)
   }
-  const created = await create.json() as any
   const jobId = String(created?.jobId || '')
   if (!jobId) return null
   options.onProgress?.(0, 'ASR 任务已创建，正在等待模型...')
@@ -236,14 +248,22 @@ async function transcribeLocalJob(
       await sleep(Math.max(50, Number(process.env.ASR_POLL_MS || JOB_POLL_MS)))
 
       const pollTimeout = new AbortController()
-      const pollTimer = setTimeout(() => pollTimeout.abort(), timeouts.poll)
-      let response: Response
+      const cancelPollTimeout = scheduleLongTimeout(timeouts.poll, () => pollTimeout.abort())
+      let responseStatus = 0
+      let responseDetail = ''
+      let job: any = null
       try {
-        response = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs/${jobId}`, {
+        const response = await asrFetch(`${baseUrl}/v1/audio/transcriptions/jobs/${jobId}`, {
           headers,
           signal: combineSignal(signal, pollTimeout)
         })
+        responseStatus = response.status
         pollFailures = 0
+        if (response.ok) {
+          job = await response.json() as any
+        } else {
+          responseDetail = await response.text().catch(() => '')
+        }
       } catch (error: any) {
         if (signal?.aborted) {
           await cancelRemoteJob(baseUrl, jobId, headers)
@@ -257,14 +277,12 @@ async function transcribeLocalJob(
         await cancelRemoteJob(baseUrl, jobId, headers)
         throw nonRetryableError(`ASR 任务状态获取失败：${describeAsrError(error)}`)
       } finally {
-        clearTimeout(pollTimer)
+        cancelPollTimeout()
       }
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '')
+      if (responseStatus < 200 || responseStatus >= 300) {
         await cancelRemoteJob(baseUrl, jobId, headers)
-        throw new Error(`ASR 任务状态获取失败 (${response.status}): ${detail.slice(0, 300)}`)
+        throw new Error(`ASR 任务状态获取失败 (${responseStatus}): ${responseDetail.slice(0, 300)}`)
       }
-      const job = await response.json() as any
       const progress = Number(job.progress)
       const message = String(job.message || '正在识别...')
       if (job.status === 'queued') {

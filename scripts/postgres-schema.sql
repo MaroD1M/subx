@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   finished_at TIMESTAMPTZ,
   paused_at TIMESTAMPTZ,
   paused_total_ms INTEGER NOT NULL DEFAULT 0,
+  pause_requested_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -347,6 +348,17 @@ CREATE TABLE IF NOT EXISTS library_coverage_index (
   scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (root_id, target_language, path)
 );
+
+CREATE TABLE IF NOT EXISTS coverage_snapshots (
+  root_id TEXT NOT NULL,
+  target_language TEXT NOT NULL,
+  include_embedded INTEGER NOT NULL DEFAULT 1,
+  scanned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  truncated BOOLEAN NOT NULL DEFAULT FALSE,
+  result_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (root_id, target_language, include_embedded)
+);
+CREATE INDEX IF NOT EXISTS idx_coverage_snapshots_scanned ON coverage_snapshots(scanned_at);
 
 CREATE TABLE IF NOT EXISTS coverage_auto_fill_policies (
   root_id TEXT PRIMARY KEY,

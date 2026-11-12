@@ -1,5 +1,7 @@
 import { apiError } from '../../utils/apiError'
-import { buildLibraryCoverage } from '../../utils/libraryCoverage'
+import { ConfigService } from '../../utils/config'
+import { getCachedLibraryCoverage, scanLibraryCoverage } from '../../utils/libraryCoverage'
+import { getMediaRoot } from '../../utils/mediaRoots'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event) as {
@@ -22,5 +24,32 @@ export default defineEventHandler(async (event) => {
     || String(includeEmbeddedValue || '').toLowerCase() === 'false'
   )
 
-  return buildLibraryCoverage(rootId, { targetLanguage, refresh, includeEmbedded })
+  if (refresh) {
+    return scanLibraryCoverage(rootId, { targetLanguage, refresh: true, includeEmbedded })
+  }
+
+  const cached = await getCachedLibraryCoverage(rootId, { targetLanguage, includeEmbedded })
+  if (cached) return cached
+
+  const resolvedLanguage = targetLanguage
+    || String((await ConfigService.getConfig()).targetLanguage || 'zh-CN').trim()
+    || 'zh-CN'
+  let rootName = '默认媒体库'
+  try {
+    rootName = (await getMediaRoot(rootId)).name
+  } catch { /* keep fallback name */ }
+
+  return {
+    rootId,
+    rootName,
+    targetLanguage: resolvedLanguage,
+    includeEmbedded,
+    scanned: 0,
+    truncated: false,
+    cachedAt: null,
+    hasCache: false,
+    summary: { total: 0, done: 0, review: 0, processing: 0, failed: 0, missing: 0 },
+    series: [],
+    files: []
+  }
 })

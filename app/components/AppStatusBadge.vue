@@ -1,7 +1,7 @@
 <template>
-  <UBadge :color="color" variant="subtle" size="sm" class="whitespace-nowrap">
+  <span class="app-pill whitespace-nowrap" :class="pillClass">
     {{ label || STATUS_LABELS[status] || status }}
-  </UBadge>
+  </span>
 </template>
 
 <script setup lang="ts">
@@ -35,30 +35,30 @@ const STATUS_LABELS: Record<string, string> = {
   sent: '已发送'
 }
 
-const STATUS_COLORS: Record<string, 'primary' | 'success' | 'warning' | 'error' | 'neutral' | 'info'> = {
-  queued: 'neutral',
-  pending: 'neutral',
-  received: 'info',
-  probing: 'info',
-  extracting: 'info',
-  extracting_audio: 'info',
-  transcribing: 'info',
-  paused: 'warning',
-  ocr: 'info',
-  parsing: 'info',
-  translating: 'primary',
-  exporting: 'primary',
-  processing: 'primary',
-  running: 'primary',
-  review: 'warning',
-  done: 'success',
-  error: 'error',
-  failed: 'error',
-  cancelled: 'neutral',
-  skipped: 'neutral',
-  ignored: 'neutral',
-  sent: 'success'
+const STATUS_PILLS: Record<string, string> = {
+  queued: 'app-pill-neutral',
+  pending: 'app-pill-neutral',
+  received: 'app-pill-info',
+  probing: 'app-pill-info',
+  extracting: 'app-pill-info',
+  extracting_audio: 'app-pill-info',
+  transcribing: 'app-pill-info',
+  paused: 'app-pill-warning',
+  ocr: 'app-pill-info',
+  parsing: 'app-pill-info',
+  translating: 'app-pill-primary',
+  exporting: 'app-pill-primary',
+  processing: 'app-pill-primary',
+  running: 'app-pill-primary',
+  review: 'app-pill-warning',
+  done: 'app-pill-success',
+  error: 'app-pill-error',
+  failed: 'app-pill-error',
+  cancelled: 'app-pill-neutral',
+  skipped: 'app-pill-neutral',
+  ignored: 'app-pill-neutral',
+  sent: 'app-pill-success'
 }
 
-const color = computed(() => STATUS_COLORS[props.status] || 'neutral')
+const pillClass = computed(() => STATUS_PILLS[props.status] || 'app-pill-neutral')
 </script>

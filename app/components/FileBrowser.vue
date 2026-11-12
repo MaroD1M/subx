@@ -1,10 +1,10 @@
 <template>
-  <div ref="layoutRef" class="relative flex min-h-[560px] flex-col gap-3 rounded-2xl border border-gray-200/80 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-gray-950/60 sm:p-4 lg:h-[calc(100vh-9rem)] lg:max-h-[1120px] lg:flex-row lg:gap-3.5 lg:overflow-hidden">
-    <div v-if="resizeMode" class="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-gray-900/85 px-2.5 py-1 text-[11px] font-medium text-white shadow-lg">
+  <div ref="layoutRef" class="relative flex min-h-[420px] flex-col gap-3 rounded-lg border border-gray-200/80 bg-white p-3 shadow-sm dark:border-gray-800 dark:bg-gray-950/60 sm:min-h-[560px] sm:p-4 lg:h-[calc(100dvh-9rem)] lg:max-h-[1120px] lg:flex-row lg:gap-3.5 lg:overflow-hidden">
+    <div v-if="resizeMode" class="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-gray-900/85 px-2.5 py-1 text-xs font-medium text-white shadow-lg">
       {{ resizeHint }}
     </div>
 
-    <div class="flex rounded-xl border border-gray-200/80 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/60 lg:hidden">
+    <div class="flex rounded-lg border border-gray-200/80 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/60 lg:hidden">
       <button
         type="button"
         class="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
@@ -28,24 +28,53 @@
       :class="activeMobileTab === 'files' ? 'flex' : 'hidden lg:flex'"
       :style="{ '--left-pane-width': `${leftPaneWidth}%` }"
     >
-      <div class="space-y-3 mb-3.5 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
-        <div class="flex flex-wrap items-center gap-2">
-          <UIcon name="i-lucide-folder" class="w-5 h-5 text-primary-700" />
-          <h3 class="text-[13px] font-semibold tracking-wide text-gray-700 dark:text-gray-300">文件浏览器</h3>
-          <div class="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+      <div class="mb-3.5 space-y-3 border-b border-gray-100/90 pb-3 dark:border-gray-800/70">
+        <div class="app-toolbar">
+          <div class="flex min-w-0 items-center gap-2">
+            <UIcon name="i-lucide-folder" class="h-5 w-5 shrink-0 text-primary-700" />
+            <div class="min-w-0">
+              <h3 class="app-section-title">文件浏览器</h3>
+              <p class="app-caption truncate">媒体库 · 目录树 · 文件选择</p>
+            </div>
+          </div>
+          <div class="app-toolbar-row sm:justify-end" role="toolbar" aria-label="文件浏览器操作">
             <UButton label="媒体库" icon="i-lucide-library-big" color="neutral" variant="soft" size="xs" to="/media-libraries" />
-            <UButton label="收起目录" icon="i-lucide-panel-left-close" color="neutral" variant="ghost" size="xs" title="收起全部目录" @click="collapseAllDirectories" />
-            <UButton label="刷新" icon="i-lucide-refresh-cw" color="neutral" variant="ghost" size="xs" :loading="loadingFiles" @click="refreshFiles" title="刷新文件" />
-            <UButton :label="batchMode ? '退出多选' : '多选'" icon="i-lucide-check-square" color="neutral" variant="ghost" size="xs" @click="toggleBatchMode" />
+            <UButton label="刷新" icon="i-lucide-refresh-cw" color="neutral" variant="soft" size="xs" :loading="loadingFiles" @click="refreshFiles" title="刷新文件" />
+            <UButton :label="batchMode ? '退出多选' : '多选'" icon="i-lucide-check-square" color="neutral" :variant="batchMode ? 'soft' : 'ghost'" size="xs" @click="toggleBatchMode" />
             <UButton v-if="batchMode" :label="selectedFileCount ? `批量加入队列 (${selectedFileCount})` : '批量加入队列'" icon="i-lucide-list-plus" color="primary" variant="soft" size="xs" :disabled="!selectedFileCount" :loading="batchLaunching" @click="startBatchTasks" />
             <UButton v-if="batchMode && selectedFileCount" label="清空选择" icon="i-lucide-x" color="neutral" variant="ghost" size="xs" @click="clearFileSelection" />
-            <UButton icon="i-lucide-folder-plus" color="neutral" variant="ghost" size="xs" title="新建文件夹" aria-label="新建文件夹" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" @click="createFolder" />
-            <UButton icon="i-lucide-pencil" color="neutral" variant="ghost" size="xs" title="重命名" aria-label="重命名" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" :disabled="!selectedNode || !canMutateSelected" @click="renameNode" />
-            <UButton icon="i-lucide-trash-2" color="error" variant="ghost" size="xs" title="删除" aria-label="删除" class="text-gray-400 hover:text-red-600" :disabled="!selectedNode || !canMutateSelected" @click="deleteNode" />
+            <UPopover :content="{ align: 'end' }">
+              <UButton label="文件操作" icon="i-lucide-ellipsis" color="neutral" variant="ghost" size="xs" title="收起目录、新建、重命名或删除" />
+              <template #content>
+                <div class="w-48 space-y-1 p-2">
+                  <UButton label="收起目录" icon="i-lucide-panel-left-close" color="neutral" variant="ghost" size="xs" class="w-full justify-start" title="收起全部目录" @click="collapseAllDirectories" />
+                  <UButton label="新建文件夹" icon="i-lucide-folder-plus" color="neutral" variant="ghost" size="xs" class="w-full justify-start" @click="createFolder" />
+                  <UButton label="重命名" icon="i-lucide-pencil" color="neutral" variant="ghost" size="xs" class="w-full justify-start" :disabled="!selectedNode || !canMutateSelected" @click="renameNode" />
+                  <UButton label="删除" icon="i-lucide-trash-2" color="error" variant="ghost" size="xs" class="w-full justify-start" :disabled="!selectedNode || !canMutateSelected" @click="deleteNode" />
+                </div>
+              </template>
+            </UPopover>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(180px,220px)_minmax(0,1fr)] items-end">
+        <ol class="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400" aria-label="翻译流程">
+          <li class="flex items-center gap-1.5" :class="workflowStage === 1 ? 'font-medium text-primary-700 dark:text-primary-400' : ''">
+            <span class="flex h-5 w-5 items-center justify-center rounded-full border border-current text-xs leading-none">1</span>
+            选文件
+          </li>
+          <li aria-hidden="true" class="text-gray-400 dark:text-gray-500">→</li>
+          <li class="flex items-center gap-1.5" :class="workflowStage === 2 ? 'font-medium text-primary-700 dark:text-primary-400' : ''">
+            <span class="flex h-5 w-5 items-center justify-center rounded-full border border-current text-xs leading-none">2</span>
+            选轨道/设置
+          </li>
+          <li aria-hidden="true" class="text-gray-400 dark:text-gray-500">→</li>
+          <li class="flex items-center gap-1.5" :class="workflowStage === 3 ? 'font-medium text-primary-700 dark:text-primary-400' : ''">
+            <span class="flex h-5 w-5 items-center justify-center rounded-full border border-current text-xs leading-none">3</span>
+            开始翻译
+          </li>
+        </ol>
+
+        <div class="grid grid-cols-1 items-end gap-2 lg:grid-cols-[minmax(180px,220px)_minmax(0,1fr)]">
           <UFormField label="当前媒体库" class="min-w-0">
             <USelect v-model="activeRootId" :items="rootItems" class="w-full" :disabled="!rootItems.length" @update:model-value="handleRootChange" />
           </UFormField>
@@ -59,11 +88,11 @@
         <UButton label="清除筛选" size="xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="searchQuery = ''" />
       </div>
 
-      <div v-if="batchMode" class="mb-3 space-y-2.5 rounded-xl border border-primary-100 bg-primary-50/50 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
+      <div v-if="batchMode" class="mb-3 space-y-2.5 rounded-lg border border-primary-100 bg-primary-50/50 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
             <p class="text-xs font-semibold text-primary-800 dark:text-primary-200">批量轨道策略</p>
-            <p class="text-[11px] leading-relaxed text-primary-800/75 dark:text-primary-200/75">目录勾选只加入视频文件；同名外挂字幕会由视频自动匹配，不会单独重复入队。</p>
+            <p class="app-caption text-primary-800 dark:text-primary-200">目录勾选只加入视频文件；同名外挂字幕会由视频自动匹配，不会单独重复入队。</p>
           </div>
           <UBadge color="primary" variant="subtle" size="sm" class="shrink-0">{{ selectedFileCount }} 个文件</UBadge>
         </div>
@@ -75,25 +104,25 @@
             <USelect v-model="batchPolicy.audioLanguage" :items="trackLanguageOptions" class="w-full" />
           </UFormField>
         </div>
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-primary-100/70 bg-white/70 px-3 py-2 dark:border-primary-900/30 dark:bg-gray-950/30">
+        <div class="app-field-row rounded-lg border-primary-100/70 bg-white/70 dark:border-primary-900/30 dark:bg-gray-950/30">
           <div class="min-w-0">
             <p class="text-xs font-medium text-gray-700 dark:text-gray-200">同集多版本自动去重</p>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400">同一目录下相同 SxxExx 只保留体积最大的版本。</p>
+            <p class="app-caption">同一目录下相同 SxxExx 只保留体积最大的版本。</p>
           </div>
           <USwitch v-model="batchPolicy.dedupeEpisodes" aria-label="同集多版本自动去重" />
         </div>
-        <details class="rounded-xl border border-primary-100/70 bg-white/60 p-2 dark:border-primary-900/30 dark:bg-gray-950/30">
-          <summary class="cursor-pointer text-[11px] font-medium text-gray-600 dark:text-gray-300">高级轨道选项</summary>
+        <details class="rounded-lg border border-primary-100/70 bg-white/60 p-2 dark:border-primary-900/30 dark:bg-gray-950/30">
+          <summary class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300">高级轨道选项</summary>
           <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <label class="flex items-center justify-between gap-2 rounded-lg bg-gray-50/70 px-2.5 py-2 text-[11px] text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+            <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
               <span>优先默认轨</span>
               <USwitch v-model="batchPolicy.preferDefault" aria-label="优先默认轨" />
             </label>
-            <label class="flex items-center justify-between gap-2 rounded-lg bg-gray-50/70 px-2.5 py-2 text-[11px] text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+            <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
               <span>允许强制轨</span>
               <USwitch v-model="batchPolicy.allowForcedSubtitle" aria-label="允许强制字幕轨" />
             </label>
-            <label class="flex items-center justify-between gap-2 rounded-lg bg-gray-50/70 px-2.5 py-2 text-[11px] text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+            <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
               <span>无字幕时 ASR</span>
               <USwitch v-model="batchPolicy.fallbackToAsr" aria-label="无字幕时自动语音识别" />
             </label>
@@ -156,98 +185,103 @@
       @keydown="handleSplitterKeydown"
     />
 
-    <div ref="rightPaneRef" class="surface-card flex min-w-0 flex-1 flex-col p-3 stagger-fade-in" :class="activeMobileTab === 'settings' ? 'flex' : 'hidden lg:flex'" style="animation-delay: 70ms;">
-      <div class="flex items-center justify-end mb-2.5 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
+    <div ref="rightPaneRef" class="surface-card flex min-w-0 flex-1 flex-col overflow-hidden stagger-fade-in" :class="activeMobileTab === 'settings' ? 'flex' : 'hidden lg:flex'" style="animation-delay: 70ms;">
+      <div class="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100/90 px-3 py-2 dark:border-gray-800/70">
+        <p class="app-caption font-medium text-gray-600 dark:text-gray-300">当前文件与设置</p>
         <UButton label="恢复默认宽度" size="xs" variant="ghost" color="neutral" icon="i-lucide-rotate-ccw" @click="resetLayout" />
       </div>
 
-      <div v-if="selectedFile" class="h-full flex flex-col min-h-0">
-        <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100/90 dark:border-gray-800/70">
-          <UIcon :name="isSubtitleFile ? 'i-lucide-file-text' : 'i-lucide-video'" class="w-5 h-5 text-sky-500" />
-          <div class="min-w-0">
-            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate" :title="selectedFile.name">{{ isSubtitleFile ? '字幕文件已就绪：' : '字幕轨道：' }}{{ selectedFile.name }}</h3>
-            <p class="text-[11px] text-gray-500 dark:text-gray-400 truncate" :title="selectedFile.path">{{ selectedFile.rootName || activeRootName }} · {{ selectedFile.path }}</p>
+      <div v-if="selectedFile" class="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+        <div class="space-y-3 p-3">
+          <div class="app-stat flex items-start gap-2.5">
+            <UIcon :name="isSubtitleFile ? 'i-lucide-file-text' : 'i-lucide-video'" class="mt-0.5 h-5 w-5 shrink-0 text-sky-500" />
+            <div class="min-w-0 flex-1">
+              <h3 class="app-section-title truncate" :title="selectedFile.name">{{ isSubtitleFile ? '字幕文件已就绪：' : '字幕轨道：' }}{{ selectedFile.name }}</h3>
+              <p class="app-meta truncate" :title="selectedFile.path">{{ selectedFile.rootName || activeRootName }} · {{ selectedFile.path }}</p>
+            </div>
+            <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              <UBadge v-if="isSubtitleFile" color="primary" variant="subtle" size="sm">外挂字幕</UBadge>
+              <UBadge v-else-if="useAsr" color="primary" variant="subtle" size="sm">语音识别</UBadge>
+              <UBadge v-else-if="selectedTrackIndex !== null" color="neutral" variant="subtle" size="sm">轨道 #{{ selectedTrackIndex }}</UBadge>
+            </div>
           </div>
-        </div>
 
-        <div class="mb-3 flex rounded-xl border border-gray-200/80 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/60">
-          <button
-            type="button"
-            class="flex-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors sm:text-xs"
-            :class="rightTab === 'tracks' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
-            @click="rightTab = 'tracks'"
-          >
-            字幕与轨道
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors sm:text-xs"
-            :class="rightTab === 'settings' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
-            @click="rightTab = 'settings'"
-          >
-            翻译设置
-          </button>
-          <button
-            type="button"
-            class="flex-1 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors sm:text-xs"
-            :class="rightTab === 'output' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
-            @click="rightTab = 'output'"
-          >
-            字幕输出
-          </button>
-        </div>
-
-        <div class="flex-1 min-h-0 flex flex-col">
-          <div v-show="rightTab === 'tracks'" class="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 ring-1 ring-inset ring-white/35 dark:border-gray-700/80 dark:bg-gray-900/40 dark:ring-white/10">
-            <div v-if="isSubtitleFile" class="h-full flex flex-col min-h-0">
-              <div v-if="pendingSubtitle" class="flex flex-col items-center justify-center flex-1">
-                <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
-                <p class="text-xs text-neutral-500">正在读取字幕内容...</p>
+          <div class="flex rounded-lg border border-gray-200/80 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/60">
+            <button
+              type="button"
+              class="flex-1 rounded-md px-2 py-2 text-xs font-medium transition-colors"
+              :class="rightTab === 'tracks' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
+              @click="rightTab = 'tracks'"
+            >
+              字幕与轨道
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-md px-2 py-2 text-xs font-medium transition-colors"
+              :class="rightTab === 'settings' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
+              @click="rightTab = 'settings'"
+            >
+              翻译设置
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-md px-2 py-2 text-xs font-medium transition-colors"
+              :class="rightTab === 'output' ? 'bg-white text-primary-700 shadow-sm dark:bg-gray-950 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
+              @click="rightTab = 'output'"
+            >
+              字幕输出
+            </button>
+          </div>
+          <div v-if="rightTab === 'tracks'" class="surface-muted p-3">
+            <div v-if="isSubtitleFile" class="space-y-2">
+              <div v-if="pendingSubtitle" class="flex min-h-[140px] flex-col items-center justify-center">
+                <UIcon name="i-lucide-loader-2" class="mb-2 h-6 w-6 animate-spin text-sky-500" />
+                <p class="app-caption">正在读取字幕内容...</p>
               </div>
-              <div v-else-if="subtitlePreview.length" class="relative flex-1 min-h-0">
-                <div class="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-gray-50/75 dark:from-gray-900/70 to-transparent pointer-events-none z-10" />
-                <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-gray-50/45 dark:from-gray-900/45 to-transparent pointer-events-none z-10" />
-                <div class="h-full overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                  <div v-for="entry in subtitlePreview" :key="entry.id" class="p-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 shadow-sm">
-                    <div class="flex items-center justify-between mb-1">
-                      <span class="text-[10px] font-mono text-sky-500 bg-sky-50 dark:bg-sky-950 px-1.5 py-0.5 rounded leading-none">{{ entry.startTime }}</span>
-                      <span class="text-[9px] text-neutral-400">#{{ entry.id }}</span>
+              <div v-else-if="subtitlePreview.length" class="relative">
+                <div class="pointer-events-none absolute inset-x-0 top-0 z-10 h-3 bg-gradient-to-b from-gray-50/75 to-transparent dark:from-gray-900/70" />
+                <div class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-2 bg-gradient-to-t from-gray-50/45 to-transparent dark:from-gray-900/45" />
+                <div class="max-h-[420px] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                  <div v-for="entry in subtitlePreview" :key="entry.id" class="rounded-lg border border-gray-100 bg-white p-2.5 shadow-sm dark:border-gray-700/50 dark:bg-gray-800">
+                    <div class="mb-1 flex items-center justify-between">
+                      <span class="rounded bg-sky-50 px-1.5 py-0.5 font-mono text-xs leading-none text-sky-500 dark:bg-sky-950">{{ entry.startTime }}</span>
+                      <span class="text-xs text-neutral-400">#{{ entry.id }}</span>
                     </div>
-                    <p class="text-xs text-gray-700 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">{{ entry.text }}</p>
+                    <p class="whitespace-pre-wrap text-xs leading-relaxed text-gray-700 dark:text-gray-200">{{ entry.text }}</p>
                   </div>
-                  <div v-if="totalSubtitleEntries > subtitlePreview.length" class="py-2 text-center text-[11px] text-gray-400">仅预览前 {{ subtitlePreview.length }} 条，共 {{ totalSubtitleEntries }} 条</div>
+                  <div v-if="totalSubtitleEntries > subtitlePreview.length" class="py-2 text-center text-xs text-gray-500 dark:text-gray-400">仅预览前 {{ subtitlePreview.length }} 条，共 {{ totalSubtitleEntries }} 条</div>
                 </div>
               </div>
-              <div v-else class="flex flex-col items-center justify-center flex-1 text-neutral-400 text-xs">字幕预览为空</div>
+              <div v-else class="flex min-h-[140px] flex-col items-center justify-center text-xs text-neutral-400">字幕预览为空</div>
             </div>
 
-            <div v-else-if="pendingTracks" class="flex flex-col items-center justify-center h-full">
-              <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-sky-500 mb-2" />
-              <p class="text-xs text-neutral-500">正在分析视频轨道...</p>
+            <div v-else-if="pendingTracks" class="flex min-h-[160px] flex-col items-center justify-center">
+              <UIcon name="i-lucide-loader-2" class="mb-2 h-6 w-6 animate-spin text-sky-500" />
+              <p class="app-caption">正在分析视频轨道...</p>
             </div>
 
-            <div v-else-if="tracks.length" class="flex min-h-0 flex-1 flex-col space-y-2">
-              <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+            <div v-else-if="tracks.length" class="space-y-2">
+              <div class="app-caption flex items-center justify-between">
                 <span>可处理轨道 {{ tracks.filter((t: any) => t.isSupported || (appConfig?.ocrEnabled && isBitmapCodec(t.codec))).length }} / {{ tracks.length }}</span>
                 <span v-if="selectedTrackIndex !== null && !useAsr">当前选择 #{{ selectedTrackIndex }}</span>
                 <span v-else-if="useAsr" class="text-primary-600 dark:text-primary-400">已切换为语音识别</span>
               </div>
-              <div class="flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar" :class="{ 'opacity-60': useAsr }">
+              <div class="max-h-[360px] overflow-y-auto pr-1 custom-scrollbar" :class="{ 'opacity-60': useAsr }">
                 <URadioGroup v-model="selectedTrackIndex" :items="trackOptions" :disabled="useAsr" />
               </div>
             </div>
 
-            <div v-else class="flex min-h-0 flex-1 flex-col items-center justify-center text-neutral-400 text-xs">
+            <div v-else class="flex min-h-[140px] flex-col items-center justify-center text-center text-xs text-neutral-400">
               <template v-if="useAsr">已启用语音识别，将从所选音频轨道生成字幕</template>
               <template v-else>{{ audioTracks.length ? '未发现文本字幕，可使用语音识别' : '未发现可处理的文本字幕或音频轨道' }}</template>
             </div>
 
-            <div v-if="!isSubtitleFile && bitmapTracks.length && !appConfig?.ocrEnabled && !hasSupportedSubtitle" class="mt-3 shrink-0 rounded-xl border border-amber-100 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <div v-if="!isSubtitleFile && bitmapTracks.length && !appConfig?.ocrEnabled && !hasSupportedSubtitle" class="mt-3 rounded-lg border border-amber-100 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
               <p class="text-xs font-semibold text-amber-800 dark:text-amber-200">发现图像字幕</p>
-              <p class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">PGS / VobSub / DVD 需要先在「设置 → 图像字幕 OCR」启用 OCR；单镜像已内置 OCR 服务。</p>
+              <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">PGS / VobSub / DVD 需要先在「设置 → 图像字幕 OCR」启用 OCR；单镜像已内置 OCR 服务。</p>
             </div>
 
-            <div v-if="!isSubtitleFile && audioTracks.length" class="mt-3 shrink-0 rounded-xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-500/5">
+            <div v-if="!isSubtitleFile && audioTracks.length" class="mt-3 rounded-lg border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-500/5">
               <div class="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <div class="flex flex-wrap items-center gap-1.5">
@@ -255,9 +289,9 @@
                     <UBadge v-if="useAsr" color="primary" variant="subtle" size="sm">已启用</UBadge>
                     <UBadge v-else-if="hasSupportedSubtitle" color="neutral" variant="subtle" size="sm">可选</UBadge>
                   </div>
-                  <p class="text-[11px] text-primary-700/80 dark:text-primary-300/80">{{ asrHint }}</p>
-                  <p v-if="!appConfig?.asrEnabled" class="mt-1 text-[11px] text-amber-600 dark:text-amber-400">请先在设置中启用语音识别。</p>
-                  <p v-else-if="!useAsr && !hasSupportedSubtitle && !bitmapTracks.length" class="mt-1 text-[11px] text-amber-600 dark:text-amber-400">当前视频没有可用的文本/图像字幕轨；关闭语音识别后无法创建任务。</p>
+                  <p class="text-xs text-primary-800 dark:text-primary-200">{{ asrHint }}</p>
+                  <p v-if="!appConfig?.asrEnabled" class="mt-1 text-xs text-amber-600 dark:text-amber-400">请先在设置中启用语音识别。</p>
+                  <p v-else-if="!useAsr && !hasSupportedSubtitle && !bitmapTracks.length" class="mt-1 text-xs text-amber-600 dark:text-amber-400">当前视频没有可用的文本/图像字幕轨；关闭语音识别后无法创建任务。</p>
                 </div>
                 <USwitch v-model="useAsr" :disabled="!audioTracks.length || !appConfig?.asrEnabled" aria-label="使用语音识别" />
               </div>
@@ -265,75 +299,72 @@
             </div>
           </div>
 
-          <div v-show="rightTab === 'settings'" class="mt-2 flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 dark:border-gray-700/80 dark:bg-gray-900/30">
-            <p v-if="simpleMode" class="mb-2 flex items-center gap-1.5 rounded-xl border border-primary-100 bg-primary-50/60 px-3 py-2 text-[11px] leading-5 text-primary-700 dark:border-primary-900/40 dark:bg-primary-500/5 dark:text-primary-300">
+          <div v-if="rightTab === 'settings'" class="surface-muted p-3">
+            <p v-if="simpleMode" class="mb-2 flex items-center gap-1.5 rounded-lg border border-primary-100 bg-primary-50/60 px-3 py-2 text-xs leading-5 text-primary-700 dark:border-primary-900/40 dark:bg-primary-500/5 dark:text-primary-300">
               <UIcon name="i-lucide-wand-sparkles" class="h-3.5 w-3.5 shrink-0" />
               简洁模式已开启，高级选项已隐藏
             </p>
-            <div class="relative flex-1 min-h-0">
-              <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
-                <div class="space-y-3 p-0.5">
+            <div class="space-y-4">
+              <div class="space-y-3 p-0.5">
 
-                  <template v-if="!simpleMode">
-                    <UFormField label="翻译风格">
-                      <USelect v-model="options.stylePreset" :items="styleOptions" class="w-full" :disabled="options.outputMode === 'original'" />
-                    </UFormField>
-                    <div v-if="currentStyle" class="flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 transition-all">
-                      <UIcon :name="currentStyle.icon || 'i-lucide-wand-sparkles'" class="w-5 h-5 text-primary-700 shrink-0 mt-0.5" />
-                      <div class="space-y-0.5 min-w-0">
-                        <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ currentStyle.name }}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ currentStyle.description }}</p>
-                      </div>
-                    </div>
-                  </template>
-                  <UFormField label="目标语言">
-                    <USelect v-model="options.targetLanguage" :items="LANGUAGE_OPTIONS" class="w-full" :disabled="options.outputMode === 'original'" />
+                <template v-if="!simpleMode">
+                  <UFormField label="翻译风格">
+                    <USelect v-model="options.stylePreset" :items="styleOptions" class="w-full" :disabled="options.outputMode === 'original'" />
                   </UFormField>
-                  <p v-if="options.outputMode === 'original'" class="text-[11px] text-amber-600 dark:text-amber-400">已选择仅导出原字幕：将跳过 AI 翻译，仅导出所选字幕轨道。可在「字幕输出」调整格式与样式。</p>
+                  <div v-if="currentStyle" class="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 transition-all dark:border-gray-700/50 dark:bg-gray-800/50">
+                    <UIcon :name="currentStyle.icon || 'i-lucide-wand-sparkles'" class="mt-0.5 h-5 w-5 shrink-0 text-primary-700" />
+                    <div class="min-w-0 space-y-0.5">
+                      <p class="text-xs font-semibold text-gray-800 dark:text-gray-200">{{ currentStyle.name }}</p>
+                      <p class="app-caption">{{ currentStyle.description }}</p>
+                    </div>
+                  </div>
+                </template>
+                <UFormField label="目标语言">
+                  <USelect v-model="options.targetLanguage" :items="LANGUAGE_OPTIONS" class="w-full" :disabled="options.outputMode === 'original'" />
+                </UFormField>
+                <p v-if="options.outputMode === 'original'" class="text-xs text-amber-600 dark:text-amber-400">已选择仅导出原字幕：将跳过 AI 翻译，仅导出所选字幕轨道。可在「字幕输出」调整格式与样式。</p>
 
-                  <button
-                    v-if="!simpleMode"
-                    type="button"
-                    class="flex w-full items-center justify-between rounded-xl border border-gray-200/80 bg-gray-50/70 px-3 py-2 text-left text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:bg-gray-900"
-                    @click="showAdvancedOptions = !showAdvancedOptions"
-                  >
-                    <span>高级设置（作品背景 / 追加要求）</span>
-                    <UIcon :name="showAdvancedOptions ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="h-4 w-4 text-gray-400" />
-                  </button>
+                <button
+                  v-if="!simpleMode"
+                  type="button"
+                  class="flex w-full items-center justify-between rounded-lg border border-gray-200/80 bg-gray-50/70 px-3 py-2 text-left text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:bg-gray-900"
+                  @click="showAdvancedOptions = !showAdvancedOptions"
+                >
+                  <span>高级设置（作品背景 / 追加要求）</span>
+                  <UIcon :name="showAdvancedOptions ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="h-4 w-4 text-gray-400" />
+                </button>
+              </div>
+
+              <div v-if="!simpleMode && showAdvancedOptions" class="space-y-3 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
+                <div v-if="showSeriesMemory" class="flex flex-wrap items-center gap-2 rounded-lg border border-primary-100 bg-primary-50/60 px-3 py-2 dark:border-primary-900/40 dark:bg-primary-500/5">
+                  <UIcon name="i-lucide-brain" class="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" />
+                  <span class="text-xs font-semibold text-primary-800 dark:text-primary-200">系列记忆</span>
+                  <UBadge v-if="seriesProfileLoading" color="neutral" variant="subtle" size="sm">加载中</UBadge>
+                  <UBadge v-else-if="seriesProfile" color="primary" variant="subtle" size="sm">已应用</UBadge>
+                  <UBadge v-else color="neutral" variant="subtle" size="sm">暂无</UBadge>
+                  <span v-if="seriesProfile?.title || seriesInferredTitle" class="min-w-0 flex-1 truncate text-xs text-primary-800 dark:text-primary-200" :title="seriesProfile?.title || seriesInferredTitle">
+                    {{ seriesProfile?.title || seriesInferredTitle }}
+                  </span>
+                  <UButton label="编辑系列记忆" icon="i-lucide-pencil" color="primary" variant="soft" size="xs" class="ml-auto shrink-0" @click="openSeriesMemoryDialog" />
+                </div>
+                <div class="grid grid-cols-1 gap-3">
+                  <UFormField label="片名 / 剧集名">
+                    <UInput v-model="options.contentTitle" placeholder="例如：权力的游戏 S01E01" class="w-full" :disabled="options.outputMode === 'original'" />
+                  </UFormField>
+                  <UFormField label="剧情背景 / 人物关系">
+                    <UTextarea v-model="options.contentBackground" :rows="3" autoresize :maxrows="6" placeholder="例如：本集发生在北境，琼恩与守夜人首次相遇；主要人物有..." class="w-full" :disabled="options.outputMode === 'original'" />
+                  </UFormField>
+                  <UFormField label="额外翻译要求">
+                    <UTextarea v-model="options.customInstructions" :rows="2" autoresize :maxrows="5" placeholder="例如：角色名保持与术语表一致；不要使用网络流行语。" class="w-full" :disabled="options.outputMode === 'original'" />
+                  </UFormField>
                 </div>
 
-                <div v-if="!simpleMode && showAdvancedOptions" class="space-y-3 pt-1" :class="{ 'opacity-70': options.outputMode === 'original' }">
-                  <div v-if="showSeriesMemory" class="flex flex-wrap items-center gap-2 rounded-xl border border-primary-100 bg-primary-50/60 px-3 py-2 dark:border-primary-900/40 dark:bg-primary-500/5">
-                    <UIcon name="i-lucide-brain" class="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" />
-                    <span class="text-xs font-semibold text-primary-800 dark:text-primary-200">系列记忆</span>
-                    <UBadge v-if="seriesProfileLoading" color="neutral" variant="subtle" size="sm">加载中</UBadge>
-                    <UBadge v-else-if="seriesProfile" color="primary" variant="subtle" size="sm">已应用</UBadge>
-                    <UBadge v-else color="neutral" variant="subtle" size="sm">暂无</UBadge>
-                    <span v-if="seriesProfile?.title || seriesInferredTitle" class="min-w-0 flex-1 truncate text-[11px] text-primary-700/80 dark:text-primary-300/80" :title="seriesProfile?.title || seriesInferredTitle">
-                      {{ seriesProfile?.title || seriesInferredTitle }}
-                    </span>
-                    <UButton label="编辑系列记忆" icon="i-lucide-pencil" color="primary" variant="soft" size="xs" class="ml-auto shrink-0" @click="openSeriesMemoryDialog" />
-                  </div>
-                  <div class="grid grid-cols-1 gap-3">
-                    <UFormField label="片名 / 剧集名">
-                      <UInput v-model="options.contentTitle" placeholder="例如：权力的游戏 S01E01" class="w-full" :disabled="options.outputMode === 'original'" />
-                    </UFormField>
-                    <UFormField label="剧情背景 / 人物关系">
-                      <UTextarea v-model="options.contentBackground" :rows="3" autoresize :maxrows="6" placeholder="例如：本集发生在北境，琼恩与守夜人首次相遇；主要人物有..." class="w-full" :disabled="options.outputMode === 'original'" />
-                    </UFormField>
-                    <UFormField label="额外翻译要求">
-                      <UTextarea v-model="options.customInstructions" :rows="2" autoresize :maxrows="5" placeholder="例如：角色名保持与术语表一致；不要使用网络流行语。" class="w-full" :disabled="options.outputMode === 'original'" />
-                    </UFormField>
-                  </div>
-
-                </div>
               </div>
             </div>
-
           </div>
 
-          <div v-show="rightTab === 'output'" class="mt-2 flex flex-1 min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-gray-50/50 p-3 dark:border-gray-700/80 dark:bg-gray-900/30">
-            <div class="h-full overflow-y-auto pr-1 custom-scrollbar space-y-4">
+          <div v-if="rightTab === 'output'" class="surface-muted p-3">
+            <div class="space-y-4">
               <div class="space-y-3">
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <UFormField label="输出模式">
@@ -358,29 +389,29 @@
               </div>
             </div>
           </div>
+        </div>
 
-          <div class="mt-3 shrink-0 rounded-xl border border-gray-200/85 bg-white/95 px-3 py-3 shadow-sm backdrop-blur dark:border-gray-800/80 dark:bg-gray-900/90">
-            <div class="flex gap-2.5">
-              <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" :disabled="!canStartTask" @click="startTask(true)" />
-              <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" :disabled="!canStartTask" @click="startTask(false)" />
-            </div>
+        <div class="sticky bottom-0 z-20 border-t border-gray-200/85 bg-white/95 px-3 py-3 shadow-sm backdrop-blur dark:border-gray-800/80 dark:bg-gray-900/90">
+          <div class="flex gap-2.5">
+            <UButton :label="launching ? '正在加入队列...' : '加入队列'" color="neutral" variant="soft" size="sm" class="flex-1 justify-center" icon="i-lucide-list-plus" :loading="launching" :disabled="!canStartTask" @click="startTask(true)" />
+            <UButton :label="launching ? '正在创建任务...' : (options.outputMode === 'original' ? '导出字幕' : '开始翻译')" color="primary" size="sm" class="flex-1 justify-center" icon="i-lucide-sparkles" :loading="launching" :disabled="!canStartTask" @click="startTask(false)" />
           </div>
         </div>
       </div>
 
-      <div v-else class="flex h-full flex-col items-center justify-center px-6 py-8 text-center">
+      <div v-else class="flex flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8 text-center">
         <div class="max-w-md space-y-5">
-          <div class="mx-auto w-fit rounded-2xl bg-primary-50 p-4 dark:bg-primary-500/10">
+          <div class="mx-auto w-fit rounded-lg bg-primary-50 p-4 dark:bg-primary-500/10">
             <UIcon name="i-lucide-file-video-2" class="h-10 w-10 text-primary-600 dark:text-primary-400" />
           </div>
           <div class="space-y-2">
             <h4 class="text-lg font-semibold text-gray-800 dark:text-gray-100">选择一个视频开始</h4>
-            <p class="text-sm leading-6 text-gray-500 dark:text-gray-400">从左侧文件树选择视频或字幕文件后，这里会显示字幕轨道、语音识别、图像字幕 OCR 和翻译设置。</p>
+            <p class="app-caption">从左侧文件树选择视频或字幕文件后，这里会显示字幕轨道、语音识别、图像字幕 OCR 和翻译设置。</p>
           </div>
           <div class="grid gap-2 text-left text-xs text-gray-500 dark:text-gray-400 sm:grid-cols-3">
-            <div class="rounded-xl border border-gray-200/80 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40"><span class="font-semibold text-primary-700 dark:text-primary-400">1.</span> 选择文件</div>
-            <div class="rounded-xl border border-gray-200/80 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40"><span class="font-semibold text-primary-700 dark:text-primary-400">2.</span> 确认字幕来源</div>
-            <div class="rounded-xl border border-gray-200/80 bg-gray-50/70 p-3 dark:border-gray-800 dark:bg-gray-900/40"><span class="font-semibold text-primary-700 dark:text-primary-400">3.</span> 开始翻译</div>
+            <div class="app-stat"><span class="font-semibold text-primary-700 dark:text-primary-400">1.</span> 选文件</div>
+            <div class="app-stat"><span class="font-semibold text-primary-700 dark:text-primary-400">2.</span> 选轨道/设置</div>
+            <div class="app-stat"><span class="font-semibold text-primary-700 dark:text-primary-400">3.</span> 开始翻译</div>
           </div>
         </div>
       </div>
@@ -390,7 +421,7 @@
     <UModal v-model:open="folderDialogOpen" :title="folderDialogMode === 'create' ? '新建文件夹' : '重命名'" :description="folderDialogMode === 'create' ? '请输入新文件夹名称。' : '请输入新的文件名或目录名。'">
       <template #content>
         <div class="p-5 space-y-4">
-          <div class="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3 text-xs text-gray-500 dark:text-gray-400 break-all">
+          <div class="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/40 p-3 text-xs text-gray-500 dark:text-gray-400 break-all">
             {{ folderDialogMode === 'create' ? `创建位置：${activeRootPath}` : `当前对象：${selectedNode?.name || '-'}` }}
           </div>
           <UFormField :label="folderDialogMode === 'create' ? '文件夹名称' : '新名称'" required>
@@ -407,7 +438,7 @@
     <UModal v-model:open="deleteDialogOpen" title="确认删除" description="删除后不可恢复，请确认是否继续。">
       <template #content>
         <div class="p-5 space-y-4">
-          <div class="flex items-start gap-3 rounded-xl border border-red-100 dark:border-red-900/40 bg-red-50/80 dark:bg-red-950/20 p-3">
+          <div class="flex items-start gap-3 rounded-lg border border-red-100 dark:border-red-900/40 bg-red-50/80 dark:bg-red-950/20 p-3">
             <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
             <div class="space-y-1 min-w-0">
               <p class="text-sm font-medium text-red-700 dark:text-red-300">即将删除：{{ selectedNode?.name || '-' }}</p>
@@ -424,7 +455,7 @@
     <UModal v-model:open="seriesMemoryOpen" title="编辑系列记忆" description="为当前系列保存标题、背景、摘要与术语表，后续剧集可自动复用。">
       <template #content>
         <div class="space-y-4 p-5">
-          <div class="rounded-xl border border-gray-100 bg-gray-50/70 p-3 text-xs text-gray-500 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-400 break-all">
+          <div class="rounded-lg border border-gray-100 bg-gray-50/70 p-3 text-xs text-gray-500 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-400 break-all">
             {{ seriesProfile?.title || seriesInferredTitle || selectedFile?.name || '当前视频' }}
           </div>
           <UFormField label="系列标题">
@@ -461,14 +492,16 @@
 </template>
 
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { LANGUAGE_OPTIONS } from '~~/shared/languages'
 import { createSubtitleStyle, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '~~/shared/subtitleStyles'
 import type { FileNode, SubtitleOutputStyle } from '~~/types'
 import FileSearchResults from './FileSearchResults.vue'
-import SubtitleStyleEditor from './SubtitleStyleEditor.vue'
 import { useSeriesProfile, type SeriesProfile } from '../composables/useSeriesProfile'
 import { useSimpleMode } from '../composables/useSimpleMode'
+
+const SubtitleStyleEditor = defineAsyncComponent(() => import('./SubtitleStyleEditor.vue'))
 
 const toast = useToast()
 const { data: appConfig } = await useAppConfigData()
@@ -996,6 +1029,11 @@ const canStartTask = computed(() => {
   const track = tracks.value.find((item: any) => item.index === selectedTrackIndex.value)
   if (!track) return false
   return Boolean(track.isSupported || (isBitmapCodec(track.codec) && appConfig.value?.ocrEnabled))
+})
+
+const workflowStage = computed(() => {
+  if (!selectedFile.value) return 1
+  return canStartTask.value ? 3 : 2
 })
 
 const isSubtitleFile = computed(() => {
