@@ -1,10 +1,10 @@
 # SubX 部署文档
 
-> 适用版本：v2.9.3
+> 适用版本：v2.10.0
 
 本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理、拆分部署、升级备份和常见问题。使用说明请参阅 [usage.md](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
-## 1. v2.9.3 架构
+## 1. v2.10.0 架构
 
 从 v2.5.0 开始，主应用镜像 `ghcr.io/marod1m/subx` 同时包含：
 
@@ -25,7 +25,7 @@ OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下�
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.9.3
+    image: ghcr.io/marod1m/subx:v2.10.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -112,7 +112,7 @@ http://<主机IP>:3000
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.9.3
+    image: ghcr.io/marod1m/subx:v2.10.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -297,11 +297,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.9.3
+# 默认拉取 v2.10.0
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.9.3
+./scripts/pull-image.sh --tag v2.10.0
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
@@ -419,7 +419,7 @@ docker compose --profile asr up -d asr
 http://subx-asr:8000
 ```
 
-独立镜像：`ghcr.io/marod1m/subx-asr:v2.9.3`。模型目录为 `./data/models/asr`。
+独立镜像：`ghcr.io/marod1m/subx-asr:v2.10.0`。模型目录为 `./data/models/asr`。
 
 ### 8.2 独立 OCR 容器
 
@@ -517,7 +517,7 @@ OCR 内部健康检查：
 
 ## 12. 升级与备份
 
-升级到 v2.9.3：
+升级到 v2.10.0：
 
 ```bash
 docker compose pull
@@ -526,12 +526,14 @@ docker compose up -d --force-recreate
 
 升级说明：
 
-- v2.9.3 新增智能增强能力；从 v2.9.2 升级会自动执行数据库迁移 v12（暂停请求、覆盖快照、覆盖索引、自动补齐、翻译记忆、元数据缓存和费用表），从 v2.9.1 升级会执行 v11 / v12，从 v2.9.0 升级会执行 v10 / v11 / v12，从 v2.8.6 及更早版本升级会依次执行 v9 / v10 / v11 / v12。
-- 覆盖检查新增自动补齐策略、持久化覆盖索引、运行时段、单次上限、dry-run 预览和预算限流。
-- 翻译历史新增合并的「运行与诊断」折叠面板，首页不再展示运行概览。
-- 新增简繁双输出、字幕技术质检、翻译记忆、TMDB 元数据和成本预算。
-- 修复多 Worker 自动补齐重复执行、截断扫描覆盖完整索引、预算耗尽无法预览和 TMDB 批量超时等问题。
-- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.9.3。
+- 从 v2.9.3 升级会自动执行数据库迁移 v12（暂停请求、覆盖快照、覆盖索引、自动补齐、翻译记忆、元数据缓存和费用表）；更早版本会依次补执行 v9 / v10 / v11 / v12。
+- 覆盖检查改为手动扫描 + 持久化快照，首次进入需要手动点一次「扫描覆盖」生成缓存。
+- 暂停任务改为“暂停中 → 已暂停”两阶段，当前识别分段结束后才真正暂停。
+- TMDB 自动搜索默认关闭；可在「设置 → 智能增强 → 媒体元数据」开启，或在文件浏览器手动搜索。
+- 设置页改为四个分组并按需加载，未保存修改仍会统一提示。
+- ASR/OCR 工作时限取消固定上限，长任务可按设备性能调大。
+- 历史、任务、自动化、核对、登录和移动端导航完成统一视觉与信息层级优化。
+- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.10.0。
 - 建议升级前执行备份，升级后进入「设置 → 系统体检」检查服务状态。
 
 备份：
@@ -657,7 +659,7 @@ docker exec -it subx curl -fsS http://127.0.0.1:8000/health
 
 ### 镜像太大 / 拉取很慢
 
-- v2.9.3 单镜像包含 Python、FFmpeg、Tesseract 语言包、OCR 依赖和内置中文字体；不同架构和版本体积会有差异，建议至少预留 2–3 GB 磁盘。
+- v2.10.0 单镜像包含 Python、FFmpeg、Tesseract 语言包、OCR 依赖和内置中文字体；不同架构和版本体积会有差异，建议至少预留 2–3 GB 磁盘。
 - 使用 `./scripts/pull-image.sh` 查看 Docker 原生进度；Ctrl+C 暂停后重新执行可续传。
 - 配置 Docker Daemon 代理（见第 5 节）。
 - 只需要主应用时，可继续使用旧版精简镜像和独立 sidecar，但不再推荐。
