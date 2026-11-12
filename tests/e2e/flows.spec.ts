@@ -86,6 +86,55 @@ test('subtitle output tab uses shared labels and sends a structured style', asyn
   expect(taskBody.subtitleStyle.translated.fontSize).toBeGreaterThan(0)
 })
 
+test('subtitle background color reaches real preview and task output style', async ({ page }) => {
+  await page.route('**/api/tracks**', route => route.fulfill({
+    json: {
+      tracks: [{ index: 2, codec: 'subrip', language: 'eng', title: 'English', isDefault: true, isSupported: true }],
+      audioTracks: [{ index: 1, codec: 'aac', language: 'eng', channels: 2, isDefault: true }],
+      duration: 120
+    }
+  }))
+  const previewBodies: any[] = []
+  await page.route('**/api/preview/frame', async route => {
+    previewBodies.push(route.request().postDataJSON())
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lZ9WAAAAAElFTkSuQmCC', 'base64')
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/png',
+      body: png,
+      headers: { 'X-Preview-Width': '1920', 'X-Preview-Height': '1080', 'X-Preview-Time': '1', 'X-Preview-Duration': '120' }
+    })
+  })
+  let taskBody: any = null
+  await page.route('**/api/task', async route => {
+    taskBody = route.request().postDataJSON()
+    await route.fulfill({ json: { taskId: 'background-color-test', taskIds: ['background-color-test'] } })
+  })
+
+  await page.goto('/')
+  const tree = page.getByRole('tree', { name: '文件目录树' })
+    await tree.getByText('Shows', { exact: true }).click()
+    await tree.getByText('Demo Show', { exact: true }).click()
+    await tree.getByText('Demo.Show.S01E02.mkv', { exact: true }).click()
+    await page.getByRole('button', { name: '字幕输出' }).click()
+    await page.getByRole('combobox', { name: '字幕格式' }).click()
+    await page.getByRole('option', { name: 'ASS', exact: true }).click()
+
+    const backgroundSwitch = page.getByRole('switch', { name: '启用字幕背景框' })
+    if (!(await backgroundSwitch.isChecked())) await backgroundSwitch.click()
+    const previewSwitch = page.getByRole('switch', { name: '实景预览' })
+    if (!(await previewSwitch.isChecked())) await previewSwitch.click()
+    await expect(page.getByText('1920 × 1080 实景预览')).toBeVisible()
+
+    const colorInput = page.getByLabel('字幕背景颜色十六进制值')
+    await colorInput.fill('#E04242')
+    await colorInput.press('Tab')
+    await expect.poll(() => previewBodies.some(body => body?.subtitleStyle?.background?.color === '#E04242'), { timeout: 5000 }).toBe(true)
+
+    await page.getByRole('button', { name: '开始翻译' }).click()
+    await expect.poll(() => taskBody?.subtitleStyle?.background?.color, { timeout: 5000 }).toBe('#E04242')
+})
+
 test('media library cards support drag sorting', async ({ page }) => {
   await page.goto('/media-libraries')
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))

@@ -93,6 +93,20 @@ describe('structured ASS output', () => {
     expect(parsed.events.dialogue[1].Style).toBe('SubX-Original')
   })
 
+  it('writes background color, opacity and padding into ASS styles', () => {
+    const style = createSubtitleStyle('bilingual_simple', 'bilingual')
+    style.background = { enabled: true, color: '#E04242', opacity: 45, padding: 6 }
+
+    const content = SubtitleService.buildStyledAssContent(entries, 'bilingual', 'translated_first', style)
+    const parsed = parseAss(content) as any
+    for (const name of ['SubX-Translated', 'SubX-Original']) {
+      const item = parsed.styles.style.find((styleItem: any) => styleItem.Name === name)
+      expect(item.BackColour).toBe('&H8C4242E0')
+      expect(Number(item.BorderStyle)).toBe(3)
+      expect(Number(item.Outline)).toBe(6)
+    }
+  })
+
   it('switches line order and margins for original-first layout', () => {
     const style = createSubtitleStyle('bilingual_cinema', 'bilingual')
     const content = SubtitleService.buildStyledAssContent(entries, 'bilingual', 'original_first', style)

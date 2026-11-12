@@ -135,6 +135,7 @@
       </div>
     </div>
 
+    <p class="text-[11px] leading-4 text-gray-500 dark:text-gray-400">背景颜色会与透明度叠加；内边距较小时背景框较窄。实景预览与实际导出使用同一套 ASS 样式。</p>
     <div class="grid gap-3 rounded-2xl border border-gray-200/80 p-3 dark:border-gray-800 sm:grid-cols-3">
       <UFormField label="双语行距">
         <UInputNumber v-model="draft.lineGap" :min="0" :max="120" :step="1" :disabled="outputMode !== 'bilingual' || typographyDisabled" />
@@ -162,6 +163,7 @@
         <div v-if="hasPreviewSource" class="flex items-center gap-2">
           <UButton v-if="realPreviewEnabled && realPreviewImageUrl" label="原图" icon="i-lucide-external-link" size="xs" color="neutral" variant="ghost" @click="openRealPreview" />
           <UButton v-if="realPreviewEnabled && realPreviewImageUrl" label="下载" icon="i-lucide-download" size="xs" color="neutral" variant="ghost" @click="downloadRealPreview" />
+          <UButton v-if="realPreviewEnabled" label="刷新预览" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="realPreviewLoading" @click="refreshRealPreview" />
           <USwitch v-model="realPreviewEnabled" :disabled="!canRealPreview" aria-label="实景预览" />
           <span class="text-xs text-gray-600 dark:text-gray-300">实景预览</span>
         </div>
@@ -253,6 +255,12 @@ const ColorField = defineComponent({
         disabled: fieldProps.disabled,
         'aria-label': `${fieldProps.label}十六进制值`,
         class: 'h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 font-mono text-xs uppercase text-gray-700 outline-none focus:border-primary-400 disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:disabled:bg-gray-900/50',
+        onInput: (event: Event) => {
+          const value = (event.target as HTMLInputElement).value.trim()
+          if (/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value)) {
+            fieldEmit('update:modelValue', value.startsWith('#') ? value.toUpperCase() : `#${value.toUpperCase()}`)
+          }
+        },
         onChange: (event: Event) => fieldEmit('update:modelValue', (event.target as HTMLInputElement).value.toUpperCase())
       })
     ])
@@ -409,6 +417,11 @@ async function requestRealPreview(time?: number) {
 
 function onPreviewTimeCommit() {
   void requestRealPreview(previewTime.value)
+}
+
+function refreshRealPreview() {
+  if (!realPreviewEnabled.value) return
+  void requestRealPreview(previewDuration.value > 0 ? previewTime.value : undefined)
 }
 
 function formatPreviewTime(seconds: number) {

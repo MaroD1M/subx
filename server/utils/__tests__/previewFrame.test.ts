@@ -37,6 +37,22 @@ describe('preview frame helpers', () => {
     expect(content).toContain('这是译文示例字幕。')
   })
 
+  it('carries background color and padding into the preview ASS', () => {
+    const style = createSubtitleStyle('mono_clean', 'translated')
+    style.background = { enabled: true, color: '#E04242', opacity: 45, padding: 6 }
+
+    const content = buildPreviewAssContent({
+      outputMode: 'translated',
+      bilingualLayout: 'translated_first',
+      subtitleStyle: style,
+      originalText: 'Hello',
+      translatedText: '这是译文示例字幕。'
+    })
+
+    expect(content).toContain('&H8C4242E0')
+    expect(content).toContain(',3,6,')
+  })
+
   it('quotes ffmpeg filter paths safely', () => {
     expect(quoteAssFilterPath("/tmp/a b/it's.ass")).toBe("'/tmp/a b/it\\'s.ass'")
     expect(quoteAssFilterPath('C:\\temp\\preview.ass')).toBe("'C:/temp/preview.ass'")
