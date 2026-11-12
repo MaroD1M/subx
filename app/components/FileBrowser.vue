@@ -352,7 +352,7 @@
                   <p class="text-xs font-medium text-gray-600 dark:text-gray-300">片名与剧情背景</p>
                   <div class="flex flex-wrap items-center gap-1.5">
                     <UButton label="搜索 TMDB" icon="i-lucide-search" size="xs" color="primary" variant="soft" :loading="metadataSearching" @click="openMetadataSearch" />
-                    <UButton label="清空" icon="i-lucide-eraser" size="xs" color="neutral" variant="ghost" @click="clearMetadataFields" />
+                    <UButton label="清空" icon="i-lucide-eraser" size="xs" color="neutral" variant="ghost" :loading="metadataClearing" @click="clearMetadataFields" />
                   </div>
                 </div>
                 <div class="grid grid-cols-1 gap-3">
@@ -1089,6 +1089,7 @@ const seriesAutofillSuppressed = ref(false)
 const metadataSearchOpen = ref(false)
 const metadataSearchQuery = ref('')
 const metadataSearching = ref(false)
+const metadataClearing = ref(false)
 
 const showSeriesMemory = computed(() => !!selectedFile.value && !isSubtitleFile.value && !batchMode.value)
 
@@ -1165,13 +1166,40 @@ async function searchMetadata() {
   }
 }
 
-function clearMetadataFields() {
-  options.value.contentTitle = ''
-  options.value.contentBackground = ''
-  autoFilledTitle.value = ''
-  autoFilledBackground.value = ''
-  seriesAutofillSuppressed.value = true
-  toast.add({ title: '已清空片名与剧情背景', description: '本次任务不会再自动应用系列记忆；切换文件后恢复。', color: 'success' })
+async function clearMetadataFields() {
+  if (metadataClearing.value) return
+  metadataClearing.value = true
+  const file = selectedFile.value
+  const hadSeriesProfile = Boolean(seriesProfile.value)
+  try {
+    options.value.contentTitle = ''
+    options.value.contentBackground = ''
+    autoFilledTitle.value = ''
+    autoFilledBackground.value = ''
+    seriesAutofillSuppressed.value = true
+
+    if (file && hadSeriesProfile) {
+      try {
+        await saveSeriesProfile({
+          rootId: file.rootId || activeRootId.value,
+          filePath: file.path,
+          title: '',
+          background: '',
+          summary: ''
+        })
+      } catch (error) {
+        console.warn('[Series] Failed to clear series metadata:', error)
+      }
+    }
+
+    toast.add({
+      title: '已清空片名与剧情背景',
+      description: hadSeriesProfile ? '同时清空了该系列已保存的标题、背景和摘要。' : '当前任务不会再自动填充，切换文件后恢复系列记忆。',
+      color: 'success'
+    })
+  } finally {
+    metadataClearing.value = false
+  }
 }
 
 async function loadSeriesMemory(node: FileNode) {
