@@ -132,6 +132,13 @@
           </div>
           <USwitch :model-value="config.metadataEnabled" aria-label="启用 TMDB 元数据" @update:model-value="patch('metadataEnabled', $event)" />
         </div>
+        <div class="app-field-row">
+          <div class="space-y-0.5">
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">自动搜索并填充</p>
+            <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">默认关闭。关闭后不自动匹配，需在文件浏览器手动点击「搜索 TMDB」。</p>
+          </div>
+          <USwitch :model-value="config.metadataAutoSearchEnabled" :disabled="!config.metadataEnabled" aria-label="自动搜索 TMDB 并填充" @update:model-value="patch('metadataAutoSearchEnabled', $event)" />
+        </div>
         <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]">
           <UFormField label="TMDB API Key">
             <UInput :model-value="config.metadataApiKey" type="password" placeholder="v3 API Key" class="w-full" @update:model-value="patch('metadataApiKey', $event)" />
@@ -143,7 +150,7 @@
             <UButton label="检测" icon="i-lucide-plug" color="neutral" variant="soft" :loading="testingMetadata" @click="testMetadata" />
           </div>
         </div>
-        <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">TMDB Key 加密保存；同一影片的结果会缓存 30 天，批量任务不会反复请求。</p>
+        <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">TMDB Key 加密保存；同一影片的结果会缓存 30 天。自动搜索默认关闭，批量自动任务也遵循该开关。</p>
       </div>
     </SettingsSection>
   </div>

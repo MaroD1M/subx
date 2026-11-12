@@ -391,7 +391,7 @@ export const WatchService = {
         const taskId = randomUUID()
         let contentTitle = ''
         let contentBackground = ''
-        if (config.metadataEnabled === true) {
+        if (config.metadataEnabled === true && config.metadataAutoSearchEnabled === true) {
           const metadata = await MetadataService.enrich(String(row.path), config)
           if (metadata) {
             contentTitle = metadata.title

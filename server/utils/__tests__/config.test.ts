@@ -69,6 +69,11 @@ describe('ConfigService local service migration', () => {
     expect(saved.subtitleStyle?.background).toMatchObject({ enabled: true, color: '#000000', opacity: 70, padding: 3 })
   })
 
+  it('defaults TMDB auto search to off', async () => {
+    const defaults = await ConfigService.getConfig(true)
+    expect(defaults.metadataAutoSearchEnabled).toBe(false)
+  })
+
   it('provides and persists OCR long-video settings', async () => {
     const defaults = await ConfigService.getConfig(true)
     expect(defaults.ocrMaxSeconds).toBe(14400)

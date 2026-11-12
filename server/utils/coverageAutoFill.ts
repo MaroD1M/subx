@@ -270,7 +270,7 @@ export const CoverageAutoFillService = {
         const taskId = randomUUID()
         let title = ''
         let background = ''
-        if (config.metadataEnabled === true) {
+        if (config.metadataEnabled === true && config.metadataAutoSearchEnabled === true) {
           const metadata = await MetadataService.enrich(file.path, config)
           if (metadata) {
             title = metadata.title

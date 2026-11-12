@@ -135,6 +135,44 @@ test('subtitle background color reaches real preview and task output style', asy
     await expect.poll(() => taskBody?.subtitleStyle?.background?.color, { timeout: 5000 }).toBe('#E04242')
 })
 
+test('TMDB metadata is manual and can be cleared', async ({ page }) => {
+  await page.route('**/api/tracks**', route => route.fulfill({
+    json: {
+      tracks: [{ index: 2, codec: 'subrip', language: 'eng', title: 'English', isDefault: true, isSupported: true }],
+      audioTracks: [{ index: 1, codec: 'aac', language: 'eng', channels: 2, isDefault: true }],
+      duration: 120
+    }
+  }))
+  await page.route('**/api/metadata/search', route => route.fulfill({
+    json: {
+      metadata: {
+        provider: 'tmdb',
+        mediaType: 'movie',
+        title: 'Manual Match',
+        overview: 'Manual Overview',
+        source: 'tmdb'
+      }
+    }
+  }))
+
+  await page.goto('/')
+  const tree = page.getByRole('tree', { name: '文件目录树' })
+  await tree.getByText('Shows', { exact: true }).click()
+  await tree.getByText('Demo Show', { exact: true }).click()
+  await tree.getByText('Demo.Show.S01E02.mkv', { exact: true }).click()
+  await page.getByRole('button', { name: '翻译设置' }).click()
+  await page.getByRole('button', { name: /高级设置/ }).click()
+  await page.getByRole('button', { name: '搜索 TMDB' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '搜索并填充' }).click()
+
+  await expect(page.getByPlaceholder('例如：权力的游戏 S01E01')).toHaveValue('Manual Match')
+  await expect(page.getByPlaceholder(/例如：本集发生在北境/)).toHaveValue('Manual Overview')
+
+  await page.getByRole('button', { name: '清空', exact: true }).click()
+  await expect(page.getByPlaceholder('例如：权力的游戏 S01E01')).toHaveValue('')
+  await expect(page.getByPlaceholder(/例如：本集发生在北境/)).toHaveValue('')
+})
+
 test('media library cards support drag sorting', async ({ page }) => {
   await page.goto('/media-libraries')
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))

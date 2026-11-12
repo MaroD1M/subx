@@ -137,6 +137,7 @@ export const ConfigService = {
             subtitleQualityAutoFixEnabled: false,
             translationMemoryEnabled: true,
             metadataEnabled: false,
+            metadataAutoSearchEnabled: false,
             metadataProvider: 'tmdb',
             metadataApiKey: '',
             metadataLanguage: 'zh-CN',
@@ -162,7 +163,7 @@ export const ConfigService = {
                 (config as any)[row.key] = Number(row.value)
             } else if (row.key === 'streamUsage') {
                 config.streamUsage = row.value === 'true' || row.value === '1'
-            } else if (['asrEnabled', 'asrVad', 'asrWordTimestamps', 'asrKeepAudio', 'asrCloudEnabled', 'asrCloudFallback', 'asrDiarization', 'ocrEnabled', 'notificationEnabled', 'embyCompatibleOutput', 'qualityCheckEnabled', 'autoBackupEnabled', 'fallbackProviderEnabled', 'chineseVariantOutputEnabled', 'subtitleQualityEnabled', 'subtitleQualityAutoFixEnabled', 'translationMemoryEnabled', 'metadataEnabled', 'costBudgetEnabled'].includes(row.key)) {
+            } else if (['asrEnabled', 'asrVad', 'asrWordTimestamps', 'asrKeepAudio', 'asrCloudEnabled', 'asrCloudFallback', 'asrDiarization', 'ocrEnabled', 'notificationEnabled', 'embyCompatibleOutput', 'qualityCheckEnabled', 'autoBackupEnabled', 'fallbackProviderEnabled', 'chineseVariantOutputEnabled', 'subtitleQualityEnabled', 'subtitleQualityAutoFixEnabled', 'translationMemoryEnabled', 'metadataEnabled', 'metadataAutoSearchEnabled', 'costBudgetEnabled'].includes(row.key)) {
                 (config as any)[row.key] = row.value === 'true' || row.value === '1'
             } else if (row.key === 'translationMode') {
                 config.translationMode = row.value === 'stream' ? 'stream' : 'non_stream'

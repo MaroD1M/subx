@@ -96,6 +96,7 @@ const ALLOWED_KEYS = new Set([
   'subtitleQualityAutoFixEnabled',
   'translationMemoryEnabled',
   'metadataEnabled',
+  'metadataAutoSearchEnabled',
   'metadataProvider',
   'metadataApiKey',
   'metadataLanguage',

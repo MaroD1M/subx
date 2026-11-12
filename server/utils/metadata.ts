@@ -100,13 +100,19 @@ function joinOverview(...parts: Array<string | undefined>) {
 export const MetadataService = {
   parseMediaHint,
 
-  async enrich(filePath: string, config: any): Promise<MetadataEnrichment | null> {
-    if (config?.metadataEnabled !== true) return null
+  async enrich(
+    filePath: string,
+    config: any,
+    options: { query?: string, manual?: boolean } = {}
+  ): Promise<MetadataEnrichment | null> {
+    if (!options.manual && config?.metadataEnabled !== true) return null
     const apiKey = String(config?.metadataApiKey || '').trim()
     if (!apiKey) return null
     if (Date.now() < circuitOpenUntil) return null
     const language = String(config?.metadataLanguage || 'zh-CN')
     const hint = parseMediaHint(filePath)
+    const manualQuery = cleanTitle(String(options.query || ''))
+    if (manualQuery) hint.title = manualQuery
     if (!hint.title) return null
     const cacheKey = `tmdb:${hint.mediaType}:${hint.title.toLowerCase()}:${hint.year || ''}:${hint.season ?? ''}:${hint.episode ?? ''}:${language}`
     const cached = cacheGet(cacheKey)

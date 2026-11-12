@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
     let resolvedTitle = contentTitle || ''
     let resolvedBackground = contentBackground || ''
     let metadataFound = false
-    if (!resolvedTitle && !resolvedBackground && config.metadataEnabled === true) {
+    if (!resolvedTitle && !resolvedBackground && config.metadataEnabled === true && config.metadataAutoSearchEnabled === true) {
       const metadata = await MetadataService.enrich(path, config)
       if (metadata) {
         resolvedTitle = metadata.title

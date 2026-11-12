@@ -340,12 +340,20 @@
                   <UIcon name="i-lucide-brain" class="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" />
                   <span class="text-xs font-semibold text-primary-800 dark:text-primary-200">系列记忆</span>
                   <UBadge v-if="seriesProfileLoading" color="neutral" variant="subtle" size="sm">加载中</UBadge>
-                  <UBadge v-else-if="seriesProfile" color="primary" variant="subtle" size="sm">已应用</UBadge>
+                  <UBadge v-else-if="seriesProfile && !seriesAutofillSuppressed" color="primary" variant="subtle" size="sm">已应用</UBadge>
+                  <UBadge v-else-if="seriesProfile" color="neutral" variant="subtle" size="sm">已忽略</UBadge>
                   <UBadge v-else color="neutral" variant="subtle" size="sm">暂无</UBadge>
                   <span v-if="seriesProfile?.title || seriesInferredTitle" class="min-w-0 flex-1 truncate text-xs text-primary-800 dark:text-primary-200" :title="seriesProfile?.title || seriesInferredTitle">
                     {{ seriesProfile?.title || seriesInferredTitle }}
                   </span>
                   <UButton label="编辑系列记忆" icon="i-lucide-pencil" color="primary" variant="soft" size="xs" class="ml-auto shrink-0" @click="openSeriesMemoryDialog" />
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="text-xs font-medium text-gray-600 dark:text-gray-300">片名与剧情背景</p>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <UButton label="搜索 TMDB" icon="i-lucide-search" size="xs" color="primary" variant="soft" :loading="metadataSearching" @click="openMetadataSearch" />
+                    <UButton label="清空" icon="i-lucide-eraser" size="xs" color="neutral" variant="ghost" @click="clearMetadataFields" />
+                  </div>
                 </div>
                 <div class="grid grid-cols-1 gap-3">
                   <UFormField label="片名 / 剧集名">
@@ -484,6 +492,20 @@
           <div class="flex items-center justify-end gap-3">
             <UButton label="取消" color="neutral" variant="ghost" @click="seriesMemoryOpen = false" />
             <UButton label="保存系列记忆" color="primary" :loading="seriesSaving" @click="saveSeriesMemory" />
+          </div>
+        </div>
+      </template>
+    </UModal>
+    <UModal v-model:open="metadataSearchOpen" title="搜索 TMDB 元数据" description="手动输入关键词搜索；留空则使用当前文件名。结果只会填入当前任务，不会自动搜索。">
+      <template #content>
+        <div class="space-y-4 p-5">
+          <UFormField label="搜索关键词">
+            <UInput v-model="metadataSearchQuery" placeholder="例如：片名 或 剧名 S01E01；留空使用文件名" class="w-full" @keydown.enter.prevent="searchMetadata" />
+          </UFormField>
+          <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">搜索会使用设置页保存的 TMDB API Key。体育赛事等文件可能没有匹配结果，建议直接清空后手动填写。</p>
+          <div class="flex items-center justify-end gap-3">
+            <UButton label="取消" color="neutral" variant="ghost" @click="metadataSearchOpen = false" />
+            <UButton label="搜索并填充" icon="i-lucide-search" color="primary" :loading="metadataSearching" @click="searchMetadata" />
           </div>
         </div>
       </template>
@@ -1063,10 +1085,15 @@ const seriesForm = reactive({ title: '', background: '', summary: '' })
 const seriesGlossaryRows = ref<Array<{ key: string, value: string }>>([])
 const autoFilledTitle = ref('')
 const autoFilledBackground = ref('')
+const seriesAutofillSuppressed = ref(false)
+const metadataSearchOpen = ref(false)
+const metadataSearchQuery = ref('')
+const metadataSearching = ref(false)
 
 const showSeriesMemory = computed(() => !!selectedFile.value && !isSubtitleFile.value && !batchMode.value)
 
 function applySeriesAutofill(profile: SeriesProfile | null) {
+  if (profile && seriesAutofillSuppressed.value) return
   if (!profile) {
     if (autoFilledTitle.value && options.value.contentTitle === autoFilledTitle.value) {
       options.value.contentTitle = ''
@@ -1094,7 +1121,57 @@ function applySeriesAutofill(profile: SeriesProfile | null) {
 
 function resetSeriesMemory() {
   resetSeriesProfile()
+  seriesAutofillSuppressed.value = false
   applySeriesAutofill(null)
+}
+
+function openMetadataSearch() {
+  if (!selectedFile.value) return
+  metadataSearchQuery.value = ''
+  metadataSearchOpen.value = true
+}
+
+async function searchMetadata() {
+  if (!selectedFile.value || metadataSearching.value) return
+  metadataSearching.value = true
+  try {
+    const result: any = await $fetch('/api/metadata/search', {
+      method: 'POST',
+      body: {
+        filePath: selectedFile.value.path,
+        rootId: selectedFile.value.rootId || activeRootId.value,
+        query: metadataSearchQuery.value.trim() || undefined
+      }
+    })
+    const metadata = result?.metadata
+    if (!metadata) throw new Error('未匹配到 TMDB 结果')
+    options.value.contentTitle = String(metadata.title || '')
+    options.value.contentBackground = String(metadata.overview || '')
+    autoFilledTitle.value = options.value.contentTitle
+    autoFilledBackground.value = options.value.contentBackground
+    seriesAutofillSuppressed.value = true
+    metadataSearchOpen.value = false
+    toast.add({
+      title: '已匹配 TMDB 元数据',
+      description: metadata.season && metadata.episode
+        ? `${metadata.title} · S${String(metadata.season).padStart(2, '0')}E${String(metadata.episode).padStart(2, '0')}`
+        : String(metadata.title || ''),
+      color: 'success'
+    })
+  } catch (error: any) {
+    toast.add({ title: 'TMDB 搜索失败', description: error?.data?.message || error?.message || '未匹配到结果', color: 'warning' })
+  } finally {
+    metadataSearching.value = false
+  }
+}
+
+function clearMetadataFields() {
+  options.value.contentTitle = ''
+  options.value.contentBackground = ''
+  autoFilledTitle.value = ''
+  autoFilledBackground.value = ''
+  seriesAutofillSuppressed.value = true
+  toast.add({ title: '已清空片名与剧情背景', description: '本次任务不会再自动应用系列记忆；切换文件后恢复。', color: 'success' })
 }
 
 async function loadSeriesMemory(node: FileNode) {
@@ -1204,6 +1281,7 @@ async function onSelect(node: FileNode) {
   }
 
   if (!batchMode.value) {
+    seriesAutofillSuppressed.value = false
     void loadSeriesMemory(node)
   } else {
     resetSeriesMemory()

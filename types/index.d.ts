@@ -238,6 +238,7 @@ export interface AppConfig {
   subtitleQualityAutoFixEnabled?: boolean
   translationMemoryEnabled?: boolean
   metadataEnabled?: boolean
+  metadataAutoSearchEnabled?: boolean
   metadataProvider?: 'tmdb'
   metadataApiKey?: string
   metadataLanguage?: string
