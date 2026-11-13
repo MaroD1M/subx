@@ -4,31 +4,55 @@ on:
   workflow_dispatch:
     inputs:
       keep_version:
-        description: '保留的版本 tag，逗号分隔'
+        description: '额外保留的 tag，逗号分隔（可选）'
         required: false
-        default: 'v2.10.0,2.10.0,v2.9.3,2.9.3,v2.9.2,2.9.2,latest'
+        type: string
+  schedule:
+    - cron: '23 4 * * 0'
 
 permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: cleanup-old-images
+  cancel-in-progress: false
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Delete old tagged package versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
-          KEEP: ${{ github.event.inputs.keep_version }}
-          SHA: ${{ github.sha }}
+          EXTRA_KEEP: ${{ github.event.inputs.keep_version }}
         run: |
           set -euo pipefail
           OWNER_LOWER="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
-          SHORT_SHA="$(echo "$SHA" | cut -c1-7)"
-          KEEP_LIST="$(printf '%s\n%s\n' "$KEEP" "sha-$SHORT_SHA" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')"
+          KEEP_FILE="$(mktemp)"
+
+          RELEASES="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 3 --json tagName --jq '.[].tagName')"
+          if [ -z "$RELEASES" ] && [ -z "${EXTRA_KEEP:-}" ]; then
+            echo "::error::No releases found and no extra keep tags; refusing to delete everything."
+            exit 1
+          fi
+
+          {
+            echo latest
+            if [ -n "${EXTRA_KEEP:-}" ]; then
+              printf '%s\n' "$EXTRA_KEEP" | tr ',' '\n'
+            fi
+            if [ -n "$RELEASES" ]; then
+              printf '%s\n' "$RELEASES" | while IFS= read -r tag; do
+                printf '%s\n%s\n' "$tag" "${tag#v}"
+              done
+            fi
+          } | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | sort -u > "$KEEP_FILE"
+
           echo "Preserving tags:"
-          echo "$KEEP_LIST"
+          cat "$KEEP_FILE"
 
           for pkg in subx subx-asr subx-ocr; do
             echo "::group::Package $pkg"
@@ -45,7 +69,7 @@ jobs:
               keep=0
               IFS=',' read -ra TAG_ARRAY <<< "$tags"
               for tag in "${TAG_ARRAY[@]}"; do
-                if printf '%s\n' "$KEEP_LIST" | grep -Fxq "$tag"; then
+                if grep -Fxq "$tag" "$KEEP_FILE"; then
                   keep=1
                   break
                 fi
