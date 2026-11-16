@@ -147,6 +147,6 @@ npm run check:versions
 ## 发版注意
 
 - 版本号目前分布在多个文件中，发版前必须执行 `npm run check:versions`。
-- 镜像构建以 `master` 推送触发，`latest` 跟随默认分支；正式 tag 会触发版本镜像。
+- 普通分支推送不会触发构建；只有创建新的 `v*` 版本标签才会构建并发布镜像。PR 仅做校验，不推送镜像。
 - 数据目录、数据库和模型目录升级前应备份。
 - 新 migration 必须同时更新 SQLite 基线、PostgreSQL 基线、migration 测试和本文档的迁移列表。

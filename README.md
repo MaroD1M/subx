@@ -376,4 +376,7 @@ FFPROBE_PATH=/usr/bin/ffprobe
 
 - 项目地址：<https://github.com/MaroD1M/subx>
 - 问题反馈：<https://github.com/MaroD1M/subx/issues>
-- 许可证：MIT，详见 [LICENSE](LICENSE)
+- 许可证：GNU Affero General Public License v3.0（AGPL-3.0），详见 [LICENSE](LICENSE)
+
+Copyright (c) 2026 MaroD1M 及 SubX 贡献者。分发衍生作品或通过网络向用户提供服务时，
+必须按 AGPL-3.0 的要求提供完整对应源码。
