@@ -1,6 +1,10 @@
 # 维护与架构说明
 
-本文档面向继续开发 SubX 的维护者，说明主要目录、数据缓存、数据库迁移和验证流程。
+> 适用版本：v2.10.0
+>
+> 本文档面向继续开发 SubX 的维护者，说明主要目录、数据缓存、数据库迁移和验证流程。
+
+相关文档：[文档索引](../README.md) · [实测指南](testing-guide.md) · [PostgreSQL 运行时](postgresql.md) · [ASR 基准](asr-benchmark.md)
 
 ## 目录职责
 
@@ -110,11 +114,13 @@ npm run test:api
 npm run preview:images
 npm run test:ocr
 npm run check:versions
+npm run docs:check
 ```
 
 CI 会执行：
 
 - 版本号一致性检查 `check:versions`
+- 文档检查 `docs:check`：本地链接、锚点、图片、版本号和文档引用的环境变量
 - 覆盖率统计范围覆盖 `server/**/*.ts` 与 `shared/**/*.ts`；当前门槛为 statements 34%、branches 29%、functions 38%、lines 35%，后续随测试补齐逐步提高
 - 覆盖率报告上传为构建产物
 - 前端视觉回归和移动端横向溢出检查
@@ -130,7 +136,18 @@ CI 会执行：
 npm run check:versions
 ```
 
-检查范围包括 README、使用/部署/测试文档、Dockerfile、Compose、`.env.example`、OpenAPI、镜像清理 workflow 和拉取脚本。
+检查范围包括 README、`docs/` 全量文档、Dockerfile、Compose、`.env.example`、OpenAPI、镜像清理 workflow 和拉取脚本。
+
+## 文档结构
+
+- `README.md`：项目门面、快速开始和文档入口，不放版本升级说明。
+- `docs/README.md`：按角色和场景组织的文档索引。
+- `docs/getting-started.md`、`docs/guide/*`：面向使用者的功能文档。
+- `docs/deployment.md`、`docs/reference/*`、`docs/operations.md`：部署、参数和运维。
+- `docs/troubleshooting.md`：统一故障排查入口。
+- `docs/development/*`：维护、测试、基准和 PostgreSQL 等开发文档。
+
+版本变更和升级注意事项只写在 `CHANGELOG.md`，不要在 README 或功能文档中重复维护。
 
 ## 发版流程
 

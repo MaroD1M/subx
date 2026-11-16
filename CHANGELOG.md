@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- 重构文档结构：README 收敛为项目门面，使用文档拆分为快速开始和 `docs/guide/*`，部署参数、升级、运维和故障排查独立成页。
+- 开发文档移至 `docs/development/`，修正实测指南章节编号，PostgreSQL 文档改为运行时参考。
+- README 不再维护版本升级说明，升级步骤统一放在 `docs/reference/upgrade.md`，版本变更统一以本文件为准。
+
+### Added
+
+- 新增 `docs/README.md` 文档索引、`CONTRIBUTING.md`、`SECURITY.md`、Issue/PR 模板。
+- 新增 `npm run docs:check`，校验文档本地链接、锚点、图片、版本号和引用的环境变量，并接入 CI。
+
 ## v2.10.0 - 2026-11-12
 
 ### Added

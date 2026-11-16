@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 故障排查
+    url: https://github.com/MaroD1M/subx/blob/master/docs/troubleshooting.md
+    about: 常见报错、权限、ASR/OCR 和网络问题的排查步骤
+  - name: 部署文档
+    url: https://github.com/MaroD1M/subx/blob/master/docs/deployment.md
+    about: Docker Compose、NAS 路径、反向代理和拆分部署
+  - name: 文档索引
+    url: https://github.com/MaroD1M/subx/blob/master/docs/README.md
+    about: 按角色和场景查找所有文档

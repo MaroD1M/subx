@@ -22,6 +22,7 @@
     "test:ocr": "python3 -m unittest discover -s ocr-service/tests -v",
     "preview:images": "playwright test --config playwright.preview.config.ts",
     "check:versions": "node scripts/check-versions.mjs",
+    "docs:check": "node scripts/check-docs.mjs",
     "test:api": "vitest run --config vitest.api.config.ts",
     "backup": "node scripts/backup-sqlite.mjs",
     "restore": "node scripts/restore-sqlite.mjs"

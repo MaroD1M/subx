@@ -2,9 +2,9 @@
 
 > 适用版本：v2.10.0
 
-本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理、拆分部署、升级备份和常见问题。使用说明请参阅 [usage.md](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
+本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理和拆分部署。升级、备份、健康检查和常见问题见[相关文档](#8-相关文档)。使用说明请参阅 [使用文档](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
-## 1. v2.10.0 架构
+## 1. 架构
 
 从 v2.5.0 开始，主应用镜像 `ghcr.io/marod1m/subx` 同时包含：
 
@@ -18,7 +18,7 @@ Whisper 模型体积较大且与硬件相关，**不打进镜像**。首次进�
 
 OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下载模型。
 
-拆分部署的 `subx-asr`、`subx-ocr`、增强版和 GPU 版 sidecar 仍然保留，见第 8 节。
+拆分部署的 `subx-asr`、`subx-ocr`、增强版和 GPU 版 sidecar 仍然保留，见第 7 节。
 
 ## 2. Docker Compose 快速部署
 
@@ -44,6 +44,7 @@ services:
       - /path/to/your/media:/media
       - ./data/db:/app/db
       - ./data/temp:/app/temp
+      - ./data/backups:/app/backups
       - ./data/models:/models
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
@@ -93,7 +94,7 @@ http://<主机IP>:3000
 | --- | --- | --- |
 | `ports` | 暴露 Web 端口 `3000` | 内置 ASR/OCR 只监听 `127.0.0.1:8000/8001`，不要额外映射端口 |
 | `volumes` | 媒体、数据库、临时文件、模型缓存 | `./data/models` 建议预留 10–20GB；媒体只读时无法输出字幕 |
-| `environment` | 基础、内置服务、ASR、OCR、数据库、Worker、反代 | 完整变量见第 4 节 |
+| `environment` | 基础、内置服务、ASR、OCR、数据库、Worker、反代 | 完整变量见[环境变量参考](reference/environment.md) |
 | `healthcheck` | 检查 `/api/health` | 首次启动 60 秒宽限期 |
 | `mem_limit` / `cpus` | 单镜像资源限制 | 默认 4GB/4 核，使用 medium/large 模型时按机器上调 |
 | `logging` | 限制容器日志大小 | 默认单文件 10MB、最多 3 个 |
@@ -167,130 +168,7 @@ volumes:
   - /mnt/user/appdata/subx/models:/models
 ```
 
-## 4. 环境变量与参数
-
-> 根目录 [`docker-compose.yml`](../docker-compose.yml) 已对每个变量和主要 Compose 参数逐项注释；下表是完整参考。`NODE_ENV`、`PG_TEST_DATABASE_URL` 属于内部/测试变量，不建议手动设置。
-
-**先记这几个就够用：**
-
-- `VIDEO_DIR` / 媒体卷：告诉 SubX 片子在哪儿。
-- `PUID` / `PGID`：保证容器读得动你的媒体文件。
-- `SUBX_SECRET_KEY`：给 API Key 上锁，强烈建议设置。
-- `ASR_MODEL`：先 `small`，够用再考虑 `medium`。
-- `ASR_AUTO_DOWNLOAD`：单镜像保持 `false`，去设置页手动下载。
-- `ASR_DOWNLOAD_PROXY` / `ASR_HF_ENDPOINT`：模型下载慢或连不上时再用。
-- `OCR_*`：只有图像字幕效果不理想时再调，默认值很稳。
-
-### 4.1 主镜像 / Web / 内部服务
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `VIDEO_DIR` | `/media` | 默认媒体目录；未配置媒体库时作为回退 |
-| `DB_PATH` | `/app/db/subx.db` | SQLite 数据库路径；设置 `DATABASE_URL` 后不生效 |
-| `SUBX_BACKUP_DIR` | `/app/backups` | 应用内备份目录；Compose 默认映射到 `./data/backups` |
-| `SUBX_SECRET_KEY` | 自动生成 | API Key 加密主密钥；未设置时自动生成 `db/.secret`；更换后旧 Key 需重填 |
-| `TZ` | `Asia/Shanghai` | 容器时区；界面时间、任务日志和通知均按此时区显示 |
-| `PUID` / `PGID` | `1001` | 容器运行用户；建议与媒体所有者一致 |
-| `CHOWN_MEDIA` | `false` | 启动时递归修复媒体目录权限；大目录会较慢 |
-| `CHOWN_MODELS` | `false` | 启动时递归修复 `/models` 权限；从旧 sidecar 迁移时可用 |
-| `RUN_AS_ROOT` | `false` | 跳过降权直接以 root 运行；仅排障，不推荐 |
-| `TRUST_PROXY` | 空 | 位于可信反向代理后设为 `true` |
-| `SUBX_ALLOWED_ORIGINS` | 空 | 额外允许的跨域来源，逗号分隔 |
-| `FFMPEG_PATH` | 自动 | 自定义 ffmpeg 路径；容器内通常不需要 |
-| `FFPROBE_PATH` | 自动 | 自定义 ffprobe 路径；容器内通常不需要 |
-| `SUBX_ALL_IN_ONE` | 镜像内 `true` | 单镜像标记；自动把旧 sidecar 默认地址迁移到 `127.0.0.1` |
-| `SUBX_KEEP_LEGACY_SIDECAR_URLS` | `false` | 保留旧的 `subx-asr` / `subx-ocr` 地址，不自动迁移 |
-| `ASR_INTERNAL_PORT` | `8000` | 内置 ASR 监听端口（仅回环）；启动脚本自动生成 URL |
-| `OCR_INTERNAL_PORT` | `8001` | 内置 OCR 监听端口（仅回环）；启动脚本自动生成 URL |
-| `ASR_INTERNAL_URL` | `http://127.0.0.1:8000` | 显式覆盖主应用默认 ASR 地址；一般不需要 |
-| `OCR_INTERNAL_URL` | `http://127.0.0.1:8001` | 显式覆盖主应用默认 OCR 地址；一般不需要 |
-| `ASR_API_KEY` / `OCR_API_KEY` | 空 | 内置服务可选鉴权；单镜像下环境变量优先于设置页保存值，拆分部署时设置页保存值优先 |
-| `ASR_MAX_CHUNKS` | `500` | 单次音频最多分段数；超过后明确报错，不再静默截断 |
-| `ASR_POLL_RETRIES` / `OCR_POLL_RETRIES` | `3` | 状态轮询遇到瞬时网络错误时的连续重试次数 |
-| `ASR_POLL_MS` / `OCR_POLL_MS` | `1500` | 主应用轮询 ASR / OCR 任务状态的间隔（毫秒）；高级参数 |
-| `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` | 空 | 通知出站和模型下载的默认代理；渠道里单独填的代理优先 |
-| `NO_PROXY` | 空 | 不走代理的地址，逗号分隔，例如 `localhost,127.0.0.1` |
-
-### 4.2 ASR 变量
-
-单镜像与独立 `subx-asr` / `subx-asr-gpu` / `subx-asr-enhanced` 共用这些变量。
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `ASR_MODEL_DIR` | `/models` | 模型缓存根目录；必须与 `/models` 卷对应 |
-| `ASR_WHISPER_CPP_MODEL_DIR` | `/models/whisper-cpp` | whisper.cpp 模型目录 |
-| `ASR_AUTO_DOWNLOAD` | 单镜像 `false`；sidecar `true` | 是否允许首次识别时静默下载；单镜像建议保持 `false` |
-| `ASR_DOWNLOAD_PROXY` | 空 | 模型下载默认 HTTP(S) 代理；未设置时读取容器 `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` |
-| `ASR_HF_ENDPOINT` | `https://huggingface.co` | Hugging Face 镜像站，例如 `https://hf-mirror.com` |
-| `ASR_MODEL` | `small` | 默认模型；设置页可覆盖 |
-| `ASR_DEVICE` | `auto` | `auto` / `cpu` / `cuda`；单镜像为 CPU 版，`cuda` 仅用于 GPU sidecar |
-| `ASR_COMPUTE_TYPE` | `int8` | `int8` / `float16` / `float32`；CPU 推荐 int8，GPU 推荐 float16 |
-| `ASR_ENGINE` | `auto` | `auto` / `faster-whisper` / `whisper-cpp` / `cloud` |
-| `ASR_PREPROCESS` | `off` | `off` / `demucs` / `deepfilternet`；后两者仅 enhanced sidecar，单镜像会回退原始音频 |
-| `ASR_AVAILABLE_MODELS` | `tiny,base,small,medium,large-v3,large-v3-turbo` | 设置页可下载模型列表 |
-| `ASR_WHISPER_CPP_MODELS` | 同 `ASR_AVAILABLE_MODELS` | whisper.cpp 可选模型列表 |
-| `ASR_THREADS` | `0` | whisper.cpp 推理线程数；0 表示使用 CPU 核心数 |
-| `ASR_MODEL_CACHE_SIZE` | 内存自适应：`<16GB` 为 `1`，`>=16GB` 为 `2` | 同时驻留内存的模型数量上限；切换模型时自动淘汰旧模型 |
-| `ASR_MAX_JOBS` | `100` | 内存中保留的识别任务数量上限；长时间音频较多时可调小 |
-| `ASR_JOB_RETENTION_SECONDS` | `86400` | 已完成任务在内存中的保留时间（秒） |
-| `ASR_VERIFY_MODEL_CHECKSUMS` | `true` | 启动时后台校验已有模型文件 sha256；结果缓存到 manifest，不阻塞启动 |
-| `ASR_CHECKSUM_METADATA_RETRY_SECONDS` | `86400` | 后台补取 sha256 元数据失败后的重试间隔（秒），避免反复请求 HF |
-| `ASR_AUDIO_CACHE_DAYS` | `14` | 提取音频缓存保留天数（最小 7 天）；缓存位于 `/app/temp/asr-audio` |
-| `ASR_POLL_MS` | `1500` | 主应用轮询 ASR 任务进度的间隔（毫秒），高级参数 |
-| `ASR_UPLOAD_TIMEOUT_MS` | `1800000` | 音频上传/任务创建超时（毫秒），默认 30 分钟 |
-| `ASR_POLL_TIMEOUT_MS` | `30000` | 单次 ASR 状态请求超时（毫秒） |
-| `ASR_JOB_IDLE_TIMEOUT_MS` | `1800000` | 任务长时间没有进度时中止（毫秒），默认 30 分钟 |
-| `ASR_JOB_ABSOLUTE_TIMEOUT_MS` | `21600000` | 单个 ASR 任务最长执行时间（毫秒），默认 6 小时 |
-| `ASR_DIARIZATION_MODEL` | `pyannote/speaker-diarization-3.1` | 说话人分离模型；仅 enhanced sidecar |
-| `HF_TOKEN` | 空 | Hugging Face Token；仅 enhanced 的说话人分离/受许可模型需要 |
-
-### 4.3 OCR 变量
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `OCR_MEDIA_ROOT` | `/media` | OCR 可访问的媒体根目录；必须与主应用挂载路径一致 |
-| `OCR_LANGUAGE` | `en` | 默认 OCR 语言，例如 `en` / `zh-CN` / `ja` |
-| `OCR_ENGINE` | `auto` | `auto` / `rapidocr` / `tesseract` |
-| `OCR_FPS` | `2` | 抽帧 OCR 帧率；低配 NAS 可降到 `1` |
-| `OCR_WORKERS` | `4` | 并行 OCR 线程数；低配可降到 `2` |
-| `OCR_MIN_CONFIDENCE` | `25` | 低置信度提示阈值（0–100），结果保留并进入核对 |
-| `OCR_MAX_SECONDS` | `14400` | OCR 最大视频时长；默认 4 小时，设置页可覆盖 |
-| `OCR_CHUNK_SECONDS` | `1800` | VobSub/DVD 分段时长；默认 30 分钟，设置页可覆盖 |
-| `OCR_PGSRIP_TIMEOUT_SECONDS` | `7200` | pgsrip 单次识别超时；默认 2 小时，设置页可覆盖 |
-| `OCR_FFMPEG_TIMEOUT_SECONDS` | `3600` | 单段抽帧/字幕提取超时；设置页可覆盖 |
-| `OCR_CHUNK_RETRIES` | `1` | 单段失败重试次数；设置页可覆盖 |
-| `OCR_RESUME_TTL_HOURS` | `24` | OCR 分段断点保留时间；设置页可覆盖 |
-| `OCR_MAX_CONCURRENT_JOBS` | `2` | 同时运行的 OCR 任务上限；低配 NAS 建议 `1` |
-| `OCR_JOB_RETENTION_SECONDS` | `3600` | 已完成 OCR 任务在内存中的保留时间（秒） |
-| `OCR_JOB_IDLE_TIMEOUT_MS` | `3600000` | 主应用 OCR 无进度超时；设置页可覆盖 |
-| `OCR_JOB_ABSOLUTE_TIMEOUT_MS` | `21600000` | 主应用 OCR 总任务上限；设置页可覆盖 |
-| `OCR_TEMP_DIR` | `/app/temp/ocr` | OCR 抽帧临时目录；默认位于主应用 `./data/temp/ocr` 下 |
-| `OCR_MAX_JOBS` | `50` | OCR 内存任务队列上限；超过时清理已结束任务，仍满则返回 429 |
-
-> 以上环境变量用于新实例默认值。设置页「图像字幕 OCR → 长视频与超时」保存后会随每个 OCR 请求下发，优先于容器环境变量，无需重启 OCR 服务。
-
-### 4.4 数据库 / 多 Worker
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `DATABASE_URL` | 空 | PostgreSQL 连接串；设置后优先于 `DB_PATH` |
-| `PG_POOL_SIZE` | `5` | PostgreSQL 连接池大小；同步桥为低并发设计 |
-| `POSTGRES_USER` | `subx` | PostgreSQL 用户名；需与 `DATABASE_URL` 一致 |
-| `POSTGRES_PASSWORD` | `subx` | PostgreSQL 密码；生产环境请修改 |
-| `POSTGRES_DB` | `subx` | PostgreSQL 数据库名；需与 `DATABASE_URL` 一致 |
-| `SUBX_WORKER_ID` | 进程 PID | 单主机多 Worker / 多实例标识 |
-| `SUBX_WORKER_STALE_SECONDS` | `120` | 回收陈旧任务的超时时间（秒） |
-
-### 4.5 内部 / 测试变量
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `NODE_ENV` | `production` | 运行时环境；镜像已设置，不建议修改 |
-| `PG_TEST_DATABASE_URL` | 空 | 仅 PostgreSQL 测试使用，不用于生产 |
-
-> 拆分部署时，`ASR_*` / `OCR_*` 变量同样适用；模型目录和媒体挂载必须与 sidecar 容器一致。完整 Compose 示例和逐项注释以根目录 `docker-compose.yml` 为准。
-
-## 5. 下载镜像：进度、暂停与代理
+## 4. 下载镜像：进度、暂停与代理
 
 Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下载的 layer 会保留，重新执行同一命令即可续传。
 
@@ -334,7 +212,7 @@ sudo systemctl restart docker
 
 Docker Desktop 在 `Settings → Resources → Proxies` 中配置即可。
 
-## 6. 下载模型：进度、暂停、续传与代理
+## 5. 下载模型：进度、暂停、续传与代理
 
 进入「设置 → 语音识别 → 本地模型管理」：
 
@@ -375,7 +253,7 @@ environment:
 - 模型下载与启动时后台校验支持 Hugging Face LFS sha256；仅旧 manifest 缺元数据且当前离线时会跳过校验并记录退避时间。
 - 自动目录改名前的暂停下载任务会在 ASR 服务启动时迁移到新目录，已下载部分和 `.part` 会保留；迁移失败则保留旧路径并告警。
 
-## 7. 反向代理
+## 6. 反向代理
 
 使用 Nginx、Traefik、宝塔或 NAS 反向代理时，请确保：
 
@@ -403,11 +281,11 @@ location / {
 
 > 模型下载和长任务通过浏览器轮询/SSE 查看状态，反代需要允许较长的请求时间。
 
-## 8. 拆分部署与特殊硬件
+## 7. 拆分部署与特殊硬件
 
-单镜像已经覆盖大多数 NAS。以下场景再使用 sidecar；ASR/OCR 变量见第 4.2 / 4.3 节。
+单镜像已经覆盖大多数 NAS。以下场景再使用 sidecar；ASR/OCR 变量见[环境变量参考](reference/environment.md)。
 
-### 8.1 独立 ASR 容器
+### 7.1 独立 ASR 容器
 
 ```bash
 docker compose --profile asr up -d asr
@@ -421,7 +299,7 @@ http://subx-asr:8000
 
 独立镜像：`ghcr.io/marod1m/subx-asr:v2.10.0`。模型目录为 `./data/models/asr`。
 
-### 8.2 独立 OCR 容器
+### 7.2 独立 OCR 容器
 
 ```bash
 docker compose --profile ocr up -d ocr
@@ -429,7 +307,7 @@ docker compose --profile ocr up -d ocr
 
 设置页 OCR 地址改为 `http://subx-ocr:8000`。OCR 容器必须挂载与主应用相同的媒体目录，容器内路径也要一致。长视频分段、重试和超时参数由主应用随任务下发，设置页调整后不需要重启 OCR 容器；拆分部署时请同步升级 OCR 镜像到与主应用相同版本。
 
-### 8.3 NVIDIA GPU ASR
+### 7.3 NVIDIA GPU ASR
 
 ```bash
 docker compose --profile asr-gpu up -d asr-gpu
@@ -437,7 +315,7 @@ docker compose --profile asr-gpu up -d asr-gpu
 
 设置页 ASR 地址改为 `http://subx-asr-gpu:8000`。需要 NVIDIA Container Toolkit 和可用驱动；P106-100、RX 580 等矿卡不保证兼容。
 
-### 8.4 增强 ASR（Demucs / DeepFilterNet / pyannote）
+### 7.4 增强 ASR（Demucs / DeepFilterNet / pyannote）
 
 ```bash
 docker compose --profile asr-enhanced up -d asr-enhanced
@@ -445,249 +323,13 @@ docker compose --profile asr-enhanced up -d asr-enhanced
 
 设置页地址改为 `http://subx-asr-enhanced:8000`。需要说话人分离时设置 `HF_TOKEN`，并接受 pyannote 模型许可。
 
-## 9. 健康检查与指标
-
-```text
-GET /api/health
-```
-
-返回 `{"ok":true,"status":"ok"}` 表示数据库可用。
-
-```text
-GET /api/metrics
-```
-
-返回 Prometheus 文本格式的轻量指标，包括任务状态、队列状态、翻译缓存和日志数量。该接口受登录保护。
-
-ASR 内部健康检查：
-
-```text
-容器内 http://127.0.0.1:8000/health
-```
-
-OCR 内部健康检查：
-
-```text
-容器内 http://127.0.0.1:8001/health
-```
-
-## 10. 自动化、通知与 API
-
-### 目录监控
-
-- 监控目录必须位于已配置的媒体库内，页面填写相对路径。
-- 容器需要能持续读取媒体目录；NAS 休眠或挂载断开时事件会进入失败记录。
-- 实时监听使用 chokidar，另有 60 秒轮询兜底。
-- 自动任务默认并发 1，可在「自动化」页面调整。
-- 已有字幕或目标输出默认跳过，避免重复翻译和输出循环。
-
-### 通知出站
-
-- Telegram、Webhook、ntfy 需要容器能访问对应网络；国内网络可配置代理。
-- SMTP 需要允许容器访问邮件服务器端口。
-- 通知失败会重试，不阻塞字幕任务。
-- 通知密钥与 API Key 一样加密存储，更换 `SUBX_SECRET_KEY` 后需要重新填写。
-
-#### Telegram / 通知代理排障
-
-一句话：**渠道里的代理优先；没填就自动用容器的 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`。**
-
-- 容器里的 `127.0.0.1` 指向容器自己，不指向 NAS 宿主机。代理在宿主机上时，请填宿主机局域网 IP，例如 `http://192.168.1.10:7890`。
-- 在 Telegram 通知编辑框里点「测试代理」，会显示代理连通性、HTTP 状态和延迟。
-- 报错现在会带底层原因，例如 `ECONNREFUSED`、`ENOTFOUND`、`ETIMEDOUT`，不再只有一句 `fetch failed`。
-- 如果代理只支持 SOCKS5，当前版本不支持；请换成 HTTP/HTTPS 代理，或等待后续 SOCKS 支持。
-
-### API Token
-
-- 建议为下载器、脚本分别创建独立 Token，只授予必要 scope。
-- Token 明文只在创建时显示一次。
-- 撤销 Token 后调用立即失败；调用记录可在「自动化 → API Token」查看。
-- OpenAPI：`GET /api/openapi.json`。
-
-## 11. 任务队列与重启恢复
-
-任务会持久化到 SQLite 的 `task_jobs` 表。容器重启后：
-
-- 运行中的任务会重新进入队列。
-- 队列会记录尝试次数和心跳。
-- 超过最大尝试次数的任务会标记为失败。
-- 可在任务详情页查看日志并手动重试。
-
-普通 NAS 单实例部署不需要 Redis。
-
-## 12. 升级与备份
-
-升级到 v2.10.0：
-
-```bash
-docker compose pull
-docker compose up -d --force-recreate
-```
-
-升级说明：
-
-- 从 v2.9.3 升级会自动执行数据库迁移 v12（暂停请求、覆盖快照、覆盖索引、自动补齐、翻译记忆、元数据缓存和费用表）；更早版本会依次补执行 v9 / v10 / v11 / v12。
-- 覆盖检查改为手动扫描 + 持久化快照，首次进入需要手动点一次「扫描覆盖」生成缓存。
-- 暂停任务改为“暂停中 → 已暂停”两阶段，当前识别分段结束后才真正暂停。
-- TMDB 自动搜索默认关闭；可在「设置 → 智能增强 → 媒体元数据」开启，或在文件浏览器手动搜索。
-- 设置页改为四个分组并按需加载，未保存修改仍会统一提示。
-- ASR/OCR 工作时限取消固定上限，长任务可按设备性能调大。
-- 历史、任务、自动化、核对、登录和移动端导航完成统一视觉与信息层级优化。
-- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.10.0。
-- 建议升级前执行备份，升级后进入「设置 → 系统体检」检查服务状态。
-
-备份：
-
-- 推荐在宿主机执行 `npm run backup`，默认写入 `backups/subx-*`，包含数据库、`.secret` 和任务日志。
-- 备份目录默认权限为 `0700`，数据库和 `.secret` 为 `0600`；`backups/` 已加入 `.gitignore`，不要上传或提交。
-- 只保留最近 10 份备份：`npm run backup -- --keep 10`。
-- 不想把加密密钥放进备份时使用 `npm run backup -- --no-secret`；但这样的备份无法恢复已加密的 AI Key 和通知密钥。
-- 恢复前停止容器，再执行 `npm run restore -- ./backups/subx-*`；脚本会校验完整性、检查 schema 版本并保留旧数据库。
-- 如果备份 schema 高于当前程序，恢复会被拒绝；如果要从新库降级到旧备份，需要确认后追加 `--force`。
-- 也可以手动备份 `DB_PATH` 所在目录，例如 `./data/db`；建议停止容器后备份，或同时备份 `-wal`/`-shm` 文件。
-- 备份模型缓存 `./data/models`，避免重新下载。
-- 如需保留排查日志，同时备份 `./data/temp`。
-- 也可以在「设置 → 存储与缓存 → 自动备份」中启用应用内定时备份（仅 SQLite），设置间隔和保留份数。应用内备份写入容器 `/app/backups`，Compose 默认映射到 `./data/backups`，请确保该目录已挂载。
-- 需要定时备份时，可在宿主机 crontab 中执行（路径按实际项目目录修改）：
-
-```bash
-0 3 * * * cd /path/to/subx && /usr/bin/npm run backup -- --keep 10 >> ./data/backup.log 2>&1
-```
-
-## 13. PostgreSQL 运行时
-
-先启动可选 PostgreSQL：
-
-```bash
-docker compose --profile postgres up -d postgres
-```
-
-设置 `DATABASE_URL` 后，SubX 会优先使用 PostgreSQL：
-
-```yaml
-environment:
-  DATABASE_URL: postgres://subx:password@postgres:5432/subx
-  PG_POOL_SIZE: 5
-```
-
-- 自动创建 schema。
-- 未设置 `DATABASE_URL` 时继续使用 `DB_PATH` 的 SQLite。
-- 多主机 Worker 建议使用 PostgreSQL。
-- 从 SQLite 迁移：
-
-```bash
-DATABASE_URL=postgres://... node scripts/export-sqlite-to-postgres.mjs --sqlite ./data/db/subx.db
-```
-
-详见 [PostgreSQL 运行时与迁移](postgresql-evaluation.md)。
-
-## 14. 多 Worker / 多实例
-
-单主机多 Worker 可以共享同一个本地 SQLite 数据目录：
-
-```yaml
-environment:
-  SUBX_WORKER_ID: worker-1
-  SUBX_WORKER_STALE_SECONDS: 120
-```
-
-- `SUBX_WORKER_ID` 用于区分实例；默认使用进程 PID。
-- 心跳每 10 秒更新一次。
-- 启动时只回收超过 `SUBX_WORKER_STALE_SECONDS` 的陈旧任务，不会抢占其他活跃 Worker。
-- 不要把 SQLite 数据库放在 NFS/SMB 等网络文件系统上。
-- 多主机部署建议使用 PostgreSQL；当前已提供 schema 和 SQLite → PostgreSQL 数据迁移脚本，但运行时仍默认 SQLite。详见 [PostgreSQL 运行时与迁移](postgresql-evaluation.md)。
-
-## 15. 常见问题
-
-### 页面能打开但看不到文件
-
-- 检查 Docker 挂载路径。
-- 检查 `VIDEO_DIR` 或媒体库路径是否为容器内路径。
-- 检查容器用户是否有读取权限。
-
-### 设置里填宿主机路径不生效
-
-应用运行在容器内，只能读取容器内路径。请填写挂载后的路径，例如 `/media/tv`。
-
-### 提示权限不足 / SQLITE_CANTOPEN
-
-- 数据目录必须对容器用户可写。镜像启动时会按 `PUID/PGID` 修复 `DB_PATH` 所在目录、`/app/temp` 和 `/models` 权限。
-- 默认用户是 `1001:1001`。如果宿主机媒体属于其他用户，请设置 `PUID`/`PGID` 为实际所有者。
-- 媒体目录默认不做递归 chown，避免大目录启动缓慢；需要时可设置 `CHOWN_MEDIA=true`。
-- 模型目录权限异常时可设置 `CHOWN_MODELS=true`。
-- 也可在宿主机手动修复：
-
-```bash
-sudo chown -R 1001:1001 ./data/db ./data/temp ./data/models
-```
-
-- 如果使用 `user:` 覆盖容器用户，入口脚本不会执行 chown，需要自行保证目录权限。
-
-### ASR 服务不可用
-
-先看任务日志里的 ASR 地址：现在连接失败会明确写出“已尝试 http://...”，不再只有一句 fetch failed。
-
-单镜像排查顺序：
-
-1. 设置页「语音识别」地址应是 `http://127.0.0.1:8000`，点「使用内置」可以一键恢复。
-2. 看容器日志：
-
-```bash
-docker compose logs -f subx | grep -Ei 'ASR|uvicorn|error|traceback'
-```
-
-正常应能看到 `starting built-in ASR` 和 `ASR ready`。如果 ASR 进程一启动就退出，日志里会有 Python traceback，常见原因是 CPU 指令集不兼容或依赖缺失。
-
-3. 在容器里直接测健康检查：
-
-```bash
-docker exec -it subx curl -fsS http://127.0.0.1:8000/health
-```
-
-4. 如果配置了 `ASR_INTERNAL_URL` 或旧的 `http://subx-asr:8000`，确认地址真的可达；单镜像会自动尝试内置 `127.0.0.1:8000` 作为兜底，但外部地址错误时仍会先失败一次。
-5. 如果提示“模型未下载”，去设置页「本地模型管理」下载；如果提示 ECONNREFUSED，则是 ASR 进程/端口问题，不是模型问题。
-
-拆分部署时，确认 sidecar 已启动且服务名正确。
-
-### 模型下载失败
-
-- 检查容器是否能访问 Hugging Face；国内网络可设置 `ASR_HF_ENDPOINT=https://hf-mirror.com`。
-- 在「本地模型管理」填写 HTTP(S) 代理，或设置 `ASR_DOWNLOAD_PROXY`。
-- 确认 `./data/models` 可写、磁盘空间足够。
-- 代理只支持 `http://` / `https://`，不支持 SOCKS。
-- 下载失败后点击「继续」，会从断点续传。
-
-### 镜像太大 / 拉取很慢
-
-- v2.10.0 单镜像包含 Python、FFmpeg、Tesseract 语言包、OCR 依赖和内置中文字体；不同架构和版本体积会有差异，建议至少预留 2–3 GB 磁盘。
-- 使用 `./scripts/pull-image.sh` 查看 Docker 原生进度；Ctrl+C 暂停后重新执行可续传。
-- 配置 Docker Daemon 代理（见第 5 节）。
-- 只需要主应用时，可继续使用旧版精简镜像和独立 sidecar，但不再推荐。
-
-### 忘记口令怎么办
-
-SubX 没有云端账号，也没有“找回密码”后门。确认无法找回时，按下面步骤重置：
-
-1. 停止容器，先备份 `./data/db`。
-2. 用 SQLite 工具打开数据库，执行：
-
-```sql
-DELETE FROM auth;
-DELETE FROM sessions;
-```
-
-3. 重启容器，刷新登录页，重新设置口令。
-
-这样只清掉登录口令和会话，不会删除媒体、字幕、模型、任务历史和翻译记录。使用 PostgreSQL 时，对 PostgreSQL 数据库执行同样的 SQL 即可。
-
-> 登录页的「获取帮助」弹窗也写了这套步骤，忘了口令时不用翻半天文档。
-
-### 任务失败
-
-优先检查：
-
-- API Key、模型名、Base URL。
-- 模型服务是否能从容器内访问。
-- 媒体库路径是否可读。
-- 任务详情中的错误日志和原始响应。
-- 容器日志：`docker compose logs -f subx`。
+---
+
+## 8. 相关文档
+
+- 环境变量完整参考：[环境变量参考](reference/environment.md)
+- 备份恢复、健康检查、多 Worker：[运维与数据管理](operations.md)
+- 升级与回滚：[升级与回滚](reference/upgrade.md)
+- 自动化、通知与 API：[自动化与集成](guide/automation.md)
+- PostgreSQL 运行时：[PostgreSQL 运行时](development/postgresql.md)
+- 常见问题：[故障排查](troubleshooting.md)

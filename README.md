@@ -2,72 +2,63 @@
 
 > 把 NAS 里的生肉视频，变成能直接看的双语字幕。
 
-当前版本：**v2.10.0** · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [维护说明](docs/maintenance.md) · [更新日志](CHANGELOG.md)
+[![Release](https://img.shields.io/github/v/release/MaroD1M/subx)](https://github.com/MaroD1M/subx/releases)
+[![License](https://img.shields.io/github/license/MaroD1M/subx)](LICENSE)
+[![GHCR](https://img.shields.io/badge/ghcr.io-subx-blue?logo=github)](https://github.com/MaroD1M/subx/pkgs/container/subx)
 
-[项目地址](https://github.com/MaroD1M/subx) · [问题反馈](https://github.com/MaroD1M/subx/issues)
+当前版本：**v2.10.0** · [文档索引](docs/README.md) · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
 
-> 本仓库基于 [chao-eng/subx](https://github.com/chao-eng/subx) 开发而来。原项目已停止维护，本项目在其基础上继续维护和增强，核心能力与设计思路归功于原作者。
+SubX 是面向 NAS 与自托管环境的 AI 字幕工作台。它会扫描媒体库，读取内嵌/外挂字幕，或通过语音识别与图像字幕 OCR 生成文本，再调用 LLM 翻译，最终输出可核对的 SRT/ASS。API Key、字幕、媒体和模型都可以留在自己的机器上。
 
----
+## 目录
 
-## ✨ 近期亮点
+- [适合谁](#适合谁)
+- [界面预览](#界面预览)
+- [核心能力](#核心能力)
+- [快速开始](#快速开始)
+- [按场景选读](#按场景选读)
+- [文档导航](#文档导航)
+- [数据与安全](#数据与安全)
+- [技术栈](#技术栈)
+- [本地开发](#本地开发)
+- [许可证与致谢](#许可证与致谢)
 
-- 🧠 **v2.10.0 界面与可靠性**：设置分组与按需加载、覆盖检查手动扫描缓存、两阶段暂停、超长任务时限、TMDB 手动搜索和一键清空。
-- 🛠️ **稳定性与并发修复**：修复暂停进度归零、暂停标记残留、覆盖缓存变体串扰、ASR 响应体超时和队列恢复问题。
-- 🏠 **家庭 NAS 友好**：新增简洁模式、低功耗 NAS 预设、系列记忆、手动覆盖扫描、TMDB 手动搜索和备用供应商回退。
-- 🔤 **字体与实景预览**：字体选择器可搜索并显示服务器安装状态；可从视频抽帧并按完整分辨率烧录当前 ASS 样式，便于核对字号、颜色和位置。
-- 💾 **数据安全**：任务删除和清空历史改为事务执行；导出前自动备份同名旧字幕；任务失败日志不再输出 API Key 前缀和上游响应体。
-- 🎬 **长电影 OCR 不再被 2 小时限制误拦**：默认上限提升到 4 小时，并可在应用设置页调整。
-- 🧩 **PGS 长片直通**：PGS 优先走 pgsrip，不再强制整片抽帧；失败时自动回退到分段图像 OCR。
-- 💾 **VobSub / DVD 自动分段**：长视频按 30 分钟一段处理，每段完成立即清理帧文件。
-- 🔁 **断点续跑**：失败重试会复用已完成分段，断点默认保留 24 小时，避免整片重新 OCR。
-- ⚙️ **长视频参数进设置页**：最大时长、分段、PGS/抽帧超时、重试、断点、无进度超时和总任务上限都可配置。
-- 🧾 **错误提示更准确**：OCR 超时不再误报“供应商服务异常”，任务详情直接提示调大上限或改用语音识别。
-
-> v2.7.0 的目录批量选择、同集去重、批量轨道策略、通知详情继续保留。
->
-> 更早版本的变化见 [CHANGELOG.md](CHANGELOG.md)。
-
----
-
-## 🖼️ 界面预览
-
-| 首页工作台 | 翻译历史 |
-| --- | --- |
-| ![首页工作台](docs/images/preview-home.png) | ![翻译历史](docs/images/preview-history.png) |
-
-| 字幕核对 | AI 校对与问题筛选 |
-| --- | --- |
-| ![字幕核对](docs/images/preview-review.png) | ![AI 校对与问题筛选](docs/images/preview-review-ai.png) |
-
-| 任务详情 | 媒体库管理 |
-| --- | --- |
-| ![任务详情](docs/images/preview-task.png) | ![媒体库管理](docs/images/preview-media-libraries.png) |
-
-| 移动端首页 | 设置与自定义风格 |
-| --- | --- |
-| ![移动端首页](docs/images/preview-mobile.png) | ![设置](docs/images/preview-settings.png) |
-
-| 语音识别来源 | 自动化 |
-| --- | --- |
-| ![语音识别来源](docs/images/preview-asr.png) | ![自动化](docs/images/preview-automation.png) |
-
-> 预览图由 `npm run preview:images` 使用稳定演示数据统一生成（1440×900 视口），实际界面会随版本继续优化。
-
----
-
-## 👤 它适合谁
+## 适合谁
 
 - NAS 里存了一堆剧集，却懒得逐部找字幕。
 - 想让翻译保留人物语气、剧情上下文和专有名词。
 - 希望 API Key、字幕和媒体文件都留在自己机器上。
 - 想接 Ollama，把翻译成本压到接近零。
 
----
+## 界面预览
 
-## 🚀 30 秒跑起来
+| 首页工作台 | 字幕核对 |
+| --- | --- |
+| ![首页工作台](docs/images/preview-home.png) | ![字幕核对](docs/images/preview-review.png) |
 
-把下面这段放进 `docker-compose.yml`，改一行媒体路径：
+| 自动化 | 语音识别来源 |
+| --- | --- |
+| ![自动化](docs/images/preview-automation.png) | ![语音识别来源](docs/images/preview-asr.png) |
+
+> 预览图由 `npm run preview:images` 使用稳定演示数据统一生成，实际界面会随版本继续优化。
+
+## 核心能力
+
+- **找片**：多媒体库、目录树、内嵌轨道探测、外挂 SRT/ASS/SSA/VTT。
+- **翻译**：上下文分块、术语表、自定义风格、片名/背景、翻译记忆、简繁双输出、缓存、重试和备用供应商回退。
+- **质量**：双模型评分、技术质检（行长/CPS/时长/重叠）、问题标签、AI 校对与术语学习。
+- **语音识别**：内置 faster-whisper / Silero VAD，可选 whisper.cpp 和云 ASR 兜底；有字幕也可强制重听。
+- **图像字幕**：内置 Tesseract / RapidOCR，处理 PGS / VobSub / DVD，长片支持 PGS 直通和分段断点。
+- **核对导出**：三栏编辑、批量重译、时间轴调整、实时预览，输出单语/双语 SRT/ASS。
+- **自动化**：目录监控、覆盖检查、历史回填、规则过滤、通知、API Token 和调用审计。
+- **外部集成**：Sonarr、Radarr、Jellyfin、Plex、Emby、Bazarr Webhook 和路径映射。
+- **本地优先**：OpenAI 兼容、Anthropic、Gemini 协议，也可接 Ollama / LM Studio / llama.cpp / vLLM。
+
+## 快速开始
+
+前置要求：Docker 与 Compose v2，x86_64 或 arm64，建议至少 4GB 内存和 2–3GB 镜像空间；模型目录另预留 10–20GB。
+
+把下面内容放进 `docker-compose.yml`，改一行媒体路径：
 
 ```yaml
 services:
@@ -85,12 +76,20 @@ services:
       PGID: 1001
       SUBX_ALL_IN_ONE: "true"
       ASR_AUTO_DOWNLOAD: "false"
+      # 建议设置：至少 32 位随机字符串
+      # SUBX_SECRET_KEY: change-me
     volumes:
       - /path/to/your/media:/media
       - ./data/db:/app/db
       - ./data/temp:/app/temp
       - ./data/backups:/app/backups
       - ./data/models:/models
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 ```
 
 启动：
@@ -101,232 +100,61 @@ docker compose up -d
 
 访问 `http://NAS_IP:3000`，第一次进入先设置至少 8 位访问口令。
 
-> 镜像体积会随版本、架构和内置字体变化，建议至少预留 2–3 GB 磁盘；也可以先执行 `./scripts/pull-image.sh`，按 Ctrl+C 暂停后重新运行即可续传。
->
-> 根目录 [`docker-compose.yml`](docker-compose.yml) 已逐项注释端口、卷、环境变量、健康检查、资源限制和 profiles；完整变量表见 [部署文档第 4 节](docs/deployment.md#4-环境变量与参数)。
+首次打开后：
 
-### 第一次打开做什么
+1. 进入「媒体库」添加容器内路径，例如 `/media`，并执行路径检测。
+2. 打开「设置 → 语音识别 → 本地模型管理」，手动下载 Whisper 模型。
+3. 需要图像字幕时，在「设置 → 图像字幕 OCR」开启 OCR。
+4. 回首页选择视频或字幕文件，选风格、模型和输出设置，开始翻译。
+5. 在「翻译历史」查看进度，完成后进入「字幕核对」精修。
 
-1. 设置访问口令并登录。
-2. 进入「媒体库」添加容器内路径，例如 `/media`。
-3. 执行路径检测，确认挂载和权限正常。
-4. 打开「设置 → 语音识别」，在「本地模型管理」里手动下载 Whisper 模型。
-5. 开启「启用语音识别」；有字幕的视频也可以在选择文件后打开「语音识别」开关，强制重新听写。
-6. 需要图像字幕时进入「设置 → 图像字幕 OCR」开启 OCR，可按需选择 OCR 语言和引擎。
-7. 在「设置 → 存储与缓存」查看磁盘占用，并按类型清理 ASR 音频、OCR 临时图像、任务日志等缓存。
-8. 回首页选视频或字幕文件，选风格、模型和输出设置，开始翻译。
-9. 去「翻译历史」看进度，完成后可进入「字幕核对」精修。
+> 完整参数、NAS 路径、反向代理和拆分部署见 [部署文档](docs/deployment.md)；环境变量见 [环境变量参考](docs/reference/environment.md)。
 
-> ASR 默认地址是内置服务 `http://127.0.0.1:8000`，OCR 是 `http://127.0.0.1:8001`。拆分部署时可改成 sidecar 服务名。
+## 按场景选读
 
----
-
-## 🧩 功能一览
-
-| 区域 | 能做什么 |
+| 场景 | 文档 |
 | --- | --- |
-| **找片** | 多媒体库、目录树、内嵌轨道探测、外挂 SRT/ASS/SSA/VTT |
-| **翻译** | 上下文分块、术语表、自定义风格、片名/背景、翻译记忆、简繁双输出、缓存、重试、回退 |
-| **核对** | 筛选、批量重译、三栏编辑、调序、分页、实时预览 |
-| **自动化** | 目录监控、历史回填、规则过滤、通知、API Token、调用审计 |
-| **多引擎** | 内置 faster-whisper、whisper.cpp、OpenAI 兼容云 ASR 兜底；有字幕也可强制语音识别 |
-| **OCR** | 内置 Tesseract / RapidOCR，处理 PGS / VobSub / DVD；长电影支持 PGS 直通和分段断点 |
-| **模型管理** | 下载进度、速度、剩余时间、暂停、续传、取消、重试、卸载、代理 |
-| **质量** | 双模型评分、技术质检（行长/CPS/时长/重叠）、问题标签、低分核对、质量报告、AI 校对与术语学习 |
-| **智能增强** | 自动补齐、简繁双输出、翻译记忆、TMDB 元数据、成本预算、翻译历史运行与诊断总览 |
-| **集成** | Sonarr/Radarr/Jellyfin/Plex/Emby/Bazarr Webhook、路径映射 |
-| **运维** | 持久队列、任务日志、Token 统计、诊断总览、健康检查、轻量指标、多 Worker |
+| 接 Ollama 或局域网模型 | [翻译设置](docs/guide/translation.md) |
+| 无字幕视频听写 | [媒体库与语音识别](docs/guide/media-asr.md) |
+| PGS / VobSub / DVD 图像字幕 | [图像字幕 OCR](docs/guide/ocr.md) |
+| 新片自动翻译、通知和 Webhook | [自动化与集成](docs/guide/automation.md) |
+| 校对、改时间轴、导出 ASS | [核对与导出](docs/guide/review-export.md) |
+| 清理缓存、备份和健康检查 | [运维与数据管理](docs/operations.md) |
+| 升级或回滚 | [升级与回滚](docs/reference/upgrade.md) |
+| 报错排查 | [故障排查](docs/troubleshooting.md) |
 
-### 字幕工作台
+## 文档导航
 
-- 多套媒体库，支持默认库、排序、启用/停用和路径检测。
-- 覆盖检查：按媒体库扫描缺失、待核对、处理中、失败和已完成字幕，支持按系列筛选、批量补齐和定时自动补齐。
-- 自动补齐：按天或间隔执行，支持运行时段、单次上限、跳过最近文件、dry-run 预览和预算限流。
-- 系列记忆：自动按剧集保存标题、背景、摘要和术语表，后续集数自动复用；TMDB 自动搜索默认关闭，可手动搜索或按需开启自动补充。
-- 目录树懒加载、展开状态记忆、路径复制。
-- 文件/目录多选、递归扫描、同集版本去重和批量轨道策略。
-- 桌面分栏，移动端「文件 / 翻译设置」切换。
+- [文档索引](docs/README.md)：按角色和场景组织的完整入口。
+- [快速开始](docs/getting-started.md)：首次配置、媒体库和第一个任务。
+- [使用文档](docs/usage.md)：所有使用者文档的入口。
+- [部署文档](docs/deployment.md)：Compose、NAS、反向代理和拆分部署。
+- [更新日志](CHANGELOG.md)：版本变更、迁移和升级注意事项。
+- [维护与架构](docs/development/maintenance.md)：目录职责、数据库迁移和发版流程。
+- [实测指南](docs/development/testing-guide.md)：真实设备与功能回归清单。
 
-### AI 翻译
-
-- 兼容 OpenAI 协议，也支持 Anthropic、Gemini 原生协议。
-- 支持备用供应商回退：主供应商失败时可用本地 Ollama 或低价模型补译。
-- 纯 Token 估算分块，跨块带前 6 条 + 后 6 条语境，取消即时中止。
-- 21 种内置翻译风格，覆盖犯罪、谍战、科幻、动画、家庭、医疗、武侠、恐怖、纪录片、脱口秀等常见影视类型，也能自定义 Prompt。
-- 字幕输出独立设置：SRT/ASS、双语布局、预设样式，以及原文/译文分别设置字体、字号、颜色、描边和阴影。
-- 可搜索字体选择器，支持推荐字体、服务器已安装字体和手动输入；实景预览可抽取视频画面并按完整分辨率烧录字幕样式。
-- 任务级片名、剧情背景、人物关系和额外要求。
-- 术语表、翻译缓存、翻译记忆、非语言字幕跳过、自动重试与回退。
-- 简繁双输出：同一任务可额外生成简体/繁体变体，不重复调用模型。
-- 技术质检：可配置单行字数、行数、CPS、最短/最长显示时间和最小间隔，低分或技术问题自动进入核对。
-
-### 核对与导出
-
-- 自动标记缺译、同源、串条、译文过长等问题。
-- 按状态/原因筛选，批量重译，手动编辑和调序。
-- 原文、当前译文、最终导出三栏编辑。
-- 单语 / 双语 / 仅原文，SRT / ASS / 两者同时输出。
-- 原始 ASS 时间轴和样式尽量保留。
-
----
-
-## 🧠 NAS 本地模型
-
-SubX 支持通过 OpenAI 兼容接口接入本地模型，适合隐私优先和零 API 费用场景。
-
-| 服务 | 示例地址 | 备注 |
-| --- | --- | --- |
-| Ollama | `http://NAS_IP:11434/v1` | 推荐设置 `OLLAMA_HOST=0.0.0.0` |
-| LM Studio | `http://NAS_IP:1234/v1` | 需启动 Local Server |
-| llama.cpp | `http://NAS_IP:8080/v1` | 以实际监听端口为准 |
-| vLLM | `http://NAS_IP:8000/v1` | 适合 GPU / 并发场景 |
-
-> [!TIP]
-> Docker 里不要写 `localhost`，它指向 SubX 容器自己。请用 NAS 局域网 IP、容器服务名或 `host.docker.internal`。
->
-> 模型列表拿不到时，在设置页打开「手动填写模型名称」即可。
-
----
-
-## 🎙️ 无字幕视频 / 本地 ASR
-
-单镜像已经内置 ASR，不需要额外启动 sidecar。首次使用只需下载模型：
-
-1. 进入「设置 → 语音识别」。
-2. 在「本地模型管理」选择模型并点击「下载」。
-3. 页面会显示下载进度、速度、剩余时间；可随时暂停、继续、取消或重试。
-4. 下载完成后开启「启用语音识别」，ASR 地址保持 `http://127.0.0.1:8000`。
-
-选中视频后，右侧会显示「语音识别」卡片：
-
-- 视频没有文本字幕时，默认走 ASR。
-- 视频已有文本字幕时，默认仍用字幕；想重新听写、修正错字或处理字幕质量差的片源，打开开关即可强制走 ASR。
-- 开启 ASR 后，当前选中的文本/图像字幕轨道会被忽略，任务改用所选音频轨道重新识别。
-- 关闭 ASR 后，「语音识别」卡片和视频选择会保留；如果没有文本/图像字幕轨，开始按钮会禁用并提示原因。
-
-ASR 提取的音频会缓存到 `./data/temp/asr-audio`（容器内 `/app/temp/asr-audio`），默认保留 14 天。成功任务默认删除音频，失败或取消的任务会保留缓存，重试时直接复用；可用 `ASR_AUDIO_CACHE_DAYS` 调整保留天数，开启「保留临时音频」则成功任务也不删除。
-
-模型默认保存到 `./data/models`，不会打包进镜像。下载支持：
-
-- HTTP(S) 代理：页面填写，或设置 `ASR_DOWNLOAD_PROXY`。
-- Hugging Face 镜像站：设置 `ASR_HF_ENDPOINT`，例如 `https://hf-mirror.com`。
-- 断点续传：中断后重新开始会复用 `.part` 文件。
-
-首页选择无文本字幕的视频时，会出现「语音识别」音轨选择；开始任务后会依次执行：
-
-```text
-提取音频 → VAD → faster-whisper 识别 → 生成字幕 → 翻译 → 核对 → 导出
-```
-
-> [!TIP]
-> 低配 NAS 选 `small + int8`；16GB 以上可尝试 `medium`；Apple Silicon / ARM 可切换 `whisper-cpp`。
->
-> 需要 GPU 时使用独立 `asr-gpu` sidecar：`docker compose --profile asr-gpu up -d asr-gpu`，设置页地址改为 `http://subx-asr-gpu:8000`。
->
-> 需要拆分部署时仍可使用独立 CPU sidecar：`docker compose --profile asr up -d asr`，地址改为 `http://subx-asr:8000`。
->
-> 独立 ASR 镜像：`ghcr.io/marod1m/subx-asr:v2.10.0`；可选鉴权：设置 `ASR_API_KEY` 后在设置页填写相同 Key。
-
----
-
-## 🤖 自动化与 API
-
-进入「自动化」页面可以配置：
-
-- **监控目录**：在「自动化 → 监控目录」中新建子目录或整库监控；媒体库页面只提供入口。
-- **规则**：递归、扩展名、包含/排除正则、体积、视频时长、创建/修改时间、稳定等待、已有字幕/输出跳过。
-- **输出策略**：目标语言、输出模式、字幕格式、翻译风格、模型和通知渠道。
-- **历史回填**：手动指定时间范围，按全局自动并发逐步处理，不默认全库扫描。
-- **事件记录**：查看去重结果、失败原因，并手动重试。
-- **通知渠道**：Telegram、邮件 SMTP、Webhook、ntfy、Discord、Matrix、企业微信；密钥加密保存，支持测试发送。
-- **API Token**：按任务/自动化/Token/系统权限拆分 scope，可设置过期时间并随时撤销。
-- **外部集成**：Sonarr、Radarr、Jellyfin、Plex、Emby、Bazarr Webhook，支持下载器路径到媒体库路径映射。
-- **规则模板**：电影库、剧集库、动画、低配 NAS、双语字幕一键套用。
-
-OpenAPI 文档：
-
-```text
-GET /api/openapi.json
-```
-
-调用示例：
-
-```bash
-curl -H "Authorization: Bearer subx_xxx" \
-  "http://NAS_IP:3000/api/tasks?page=1&pageSize=20"
-```
-
-> [!TIP]
-> Token 明文只在创建时显示一次。API 调用审计可在「自动化 → API Token」底部查看。
->
-> 自动任务默认并发 1，可在自动化页调整，避免和手动任务争抢 CPU/GPU。
-
----
-
-## 🔐 权限与常见坑
-
-> [!IMPORTANT]
-> `SQLITE_CANTOPEN` 多半不是数据库坏了，而是 `/app/db` 对容器用户不可写。
-
-- 镜像会按 `PUID/PGID` 自动修复 `DB_PATH` 所在目录、`/app/temp` 和 `/models` 权限。
-- 默认用户是 `1001:1001`。媒体文件属于其他用户时，把 `PUID/PGID` 改成实际所有者。
-- 媒体目录默认不做递归 chown，避免大目录启动缓慢；需要时设置 `CHOWN_MEDIA=true`。
-- 从旧 sidecar 切换到单镜像后，如果模型目录属主异常，可临时设置 `CHOWN_MODELS=true`。
-- 页面里的媒体库路径必须填**容器内路径**，不是宿主机路径。
-- 反向代理记得透传 `X-Forwarded-Proto`；需要时再开启 `TRUST_PROXY=true`。
-- 更换 `SUBX_SECRET_KEY` 后，旧 API Key 无法解密，需要重新填写。
-
----
-
-## ⬆️ 升级到 v2.10.0
-
-```bash
-docker compose pull
-docker compose up -d --force-recreate
-```
-
-从 v2.9.3 升级会自动执行数据库迁移 v12（暂停请求、覆盖快照、覆盖索引、自动补齐、翻译记忆、元数据缓存和费用表）；更早版本会依次补执行 v9 / v10 / v11 / v12。
-
-升级说明：
-
-- 覆盖检查改为手动扫描 + 持久化快照，首次进入需要手动点一次「扫描覆盖」生成缓存。
-- 暂停任务改为“暂停中 → 已暂停”两阶段，当前识别分段结束后才真正暂停。
-- TMDB 自动搜索默认关闭；可在「设置 → 智能增强 → 媒体元数据」开启，或在文件浏览器手动搜索。
-- 设置页改为四个分组并按需加载，未保存修改仍会统一提示。
-- ASR/OCR 工作时限取消固定上限，长任务可按设备性能调大。
-- 历史、任务、自动化、核对、登录和移动端导航完成统一视觉与信息层级优化。
-- 拆分部署时请同步升级主应用、ASR 和 OCR 镜像到 v2.10.0。
-- 建议升级前执行备份。
----
-
-## 🛡️ 安全说明
+## 数据与安全
 
 - 首次初始化完成前，只开放登录/初始化相关接口。
-- 口令使用 `scrypt` 加盐哈希。
-- API Key 使用 AES-256-GCM 加密存储。
-- Session Token 只存哈希。
+- 口令使用 `scrypt` 加盐哈希；Session Token 只存哈希。
+- API Key 使用 AES-256-GCM 加密存储；更换 `SUBX_SECRET_KEY` 后旧 Key 需要重填。
 - 文件操作统一做 realpath 校验，默认跳过符号链接。
-- 运行中任务需要先取消，才能删除记录。
+- 删除任务和清空历史使用事务；导出前自动备份同名旧字幕。
+- 媒体、字幕、模型和数据库都保存在自己挂载的目录中。
 
----
-
-## 🛠️ 技术栈
+## 技术栈
 
 - **前端**：Nuxt 4 + Vue 3 + Nuxt UI + Tailwind CSS
 - **服务端**：Nitro
-- **数据库**：SQLite（`better-sqlite3`，WAL）
+- **数据库**：SQLite（`better-sqlite3`，WAL），可选 PostgreSQL
 - **媒体处理**：FFmpeg / ffprobe
 - **语音识别**：内置 faster-whisper / Silero VAD，可选 whisper.cpp、GPU sidecar
 - **OCR**：内置 Tesseract / RapidOCR
-- **字幕处理**：`ass-compiler`、`srt-parser-2`，内置 VTT 解析与编码检测
 - **AI**：OpenAI 兼容、Anthropic 原生、Gemini 原生
-- **实时进度**：SSE
 - **测试**：Vitest + Playwright + axe-core
 - **部署**：Docker / docker-compose / GitHub Actions
 
----
-
-## 💻 本地开发
+## 本地开发
 
 环境要求：Node.js 22.22.3+、FFmpeg / FFprobe。
 
@@ -342,14 +170,8 @@ npm run lint
 npm run typecheck
 npm test
 npm run test:ocr
+npm run docs:check
 npm run build
-```
-
-端到端视觉与可访问性检查：
-
-```bash
-npx playwright install chromium
-npm run test:e2e
 ```
 
 开发环境示例：
@@ -361,24 +183,14 @@ FFMPEG_PATH=/usr/bin/ffmpeg
 FFPROBE_PATH=/usr/bin/ffprobe
 ```
 
----
+贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。
 
-## 📚 文档与致谢
+## 许可证与致谢
 
-- [使用文档](docs/usage.md)：批量选择、轨道策略、翻译设置、模型下载、核对页、字幕格式和日志排查。
-- [部署文档](docs/deployment.md)：单镜像、模型下载、镜像拉取、NAS、反向代理、升级备份和常见问题。
-- [更新日志](CHANGELOG.md)：版本变更和升级注意事项。
-- [ASR 11 语言基准](docs/asr-benchmark.md)：基准脚本、样本规范与报告模板。
-- [PostgreSQL 运行时与迁移](docs/postgresql-evaluation.md)：PG 运行时、同步桥限制与数据迁移。
-- [实测指南](docs/testing-guide.md)：单镜像模型下载、真实 NAS、OCR、PG 和多 Worker 回归清单。
-
-本项目基于 [chao-eng/subx](https://github.com/chao-eng/subx) 开发，原项目已停止维护。
+本项目基于 [chao-eng/subx](https://github.com/chao-eng/subx) 开发，原项目已停止维护，核心能力与设计思路归功于原作者。
 
 - 项目地址：<https://github.com/MaroD1M/subx>
 - 问题反馈：<https://github.com/MaroD1M/subx/issues>
-- 许可证：GNU Affero General Public License v3.0（AGPL-3.0），详见 [LICENSE](LICENSE) 与 [NOTICE.md](NOTICE.md)
+- 许可证：AGPL-3.0，详见 [LICENSE](LICENSE) 与 [NOTICE.md](NOTICE.md)
 
-Copyright (c) 2026 MaroD1M。上游 [chao-eng/subx](https://github.com/chao-eng/subx)
-采用 MIT License（Copyright (c) 2026 chao-eng），本项目的修改与扩展以 AGPL-3.0 发布，
-上游 MIT 许可文本与署名保留在 [NOTICE.md](NOTICE.md)。分发衍生作品或通过网络向用户
-提供服务时，必须按 AGPL-3.0 的要求提供完整对应源码。
+Copyright (c) 2026 MaroD1M。上游 [chao-eng/subx](https://github.com/chao-eng/subx) 采用 MIT License，本项目的修改与扩展以 AGPL-3.0 发布。分发衍生作品或通过网络向用户提供服务时，必须按 AGPL-3.0 的要求提供完整对应源码。

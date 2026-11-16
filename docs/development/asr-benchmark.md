@@ -32,7 +32,7 @@ node scripts/asr-benchmark.mjs \
   --base-url http://127.0.0.1:8000 \
   --engine auto \
   --model small \
-  --out docs/asr-benchmark-result.md
+  --out docs/development/asr-benchmark-result.md
 ```
 
 对每个设备/模型组合分别运行，例如：

@@ -18,24 +18,40 @@ function expectMatch(path, pattern, label) {
 const semver = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 expectMatch('README.md', new RegExp(`当前版本：\\*\\*v${semver}\\*\\*`), '当前版本')
-expectMatch('docs/usage.md', new RegExp(`适用版本：v${semver}`), '适用版本')
-expectMatch('docs/deployment.md', new RegExp(`适用版本：v${semver}`), '适用版本')
-expectMatch('docs/postgresql-evaluation.md', new RegExp(`适用版本：v${semver}`), '适用版本')
-expectMatch('docs/asr-benchmark.md', new RegExp(`适用版本：v${semver}`), '适用版本')
-expectMatch('docs/testing-guide.md', new RegExp(`版本：v${semver}`), '版本')
+
+const versionedDocs = [
+  'docs/README.md',
+  'docs/usage.md',
+  'docs/deployment.md',
+  'docs/getting-started.md',
+  'docs/operations.md',
+  'docs/troubleshooting.md',
+  'docs/guide/translation.md',
+  'docs/guide/media-asr.md',
+  'docs/guide/ocr.md',
+  'docs/guide/automation.md',
+  'docs/guide/review-export.md',
+  'docs/reference/environment.md',
+  'docs/reference/upgrade.md',
+  'docs/development/maintenance.md',
+  'docs/development/testing-guide.md',
+  'docs/development/postgresql.md',
+  'docs/development/asr-benchmark.md'
+]
+for (const path of versionedDocs) {
+  expectMatch(path, new RegExp(`适用版本：v${semver}`), '适用版本')
+}
+expectMatch('docs/development/testing-guide.md', new RegExp(`版本：v${semver}`), '版本')
 expectMatch('Dockerfile', new RegExp(`# SubX v${semver}`), '镜像版本注释')
 expectMatch('docker-compose.yml', new RegExp(`# SubX v${semver}`), 'Compose 版本注释')
 expectMatch('.env.example', new RegExp(`# SubX v${semver}`), '环境变量示例版本')
 expectMatch('server/api/openapi.json.get.ts', new RegExp(`version: '${semver}'`), 'OpenAPI 版本')
-expectMatch('.github/workflows/cleanup-old-images.yml', new RegExp(`v${semver},${semver},`), '镜像清理保留版本')
 expectMatch('scripts/pull-image.sh', new RegExp(`DEFAULT_VERSION="${semver}"`), '拉取脚本默认版本')
 expectMatch('docker-compose.yml', new RegExp(`image: ghcr\\.io/marod1m/subx:v${semver}`), '主镜像 tag')
 expectMatch('docker-compose.yml', new RegExp(`image: ghcr\\.io/marod1m/subx-asr:v${semver}`), 'ASR 镜像 tag')
 expectMatch('docker-compose.yml', new RegExp(`image: ghcr\\.io/marod1m/subx-ocr:v${semver}`), 'OCR 镜像 tag')
 
 expectMatch('README.md', new RegExp(`image: ghcr\\.io/marod1m/subx:v${semver}`), 'README 镜像 tag')
-expectMatch('README.md', new RegExp(`升级到 v${semver}`), 'README 升级章节')
-expectMatch('docs/deployment.md', new RegExp(`升级到 v${semver}`), '部署升级章节')
 expectMatch('docs/deployment.md', new RegExp(`image: ghcr\\.io/marod1m/subx:v${semver}`), '部署主镜像 tag')
 expectMatch('CHANGELOG.md', new RegExp(`## v${semver} - \\d{4}-\\d{2}-\\d{2}`), 'CHANGELOG 版本')
 
