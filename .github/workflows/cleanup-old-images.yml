@@ -12,6 +12,11 @@ on:
         required: false
         default: '2'
         type: string
+      untagged_days:
+        description: '删除超过多少天的无 tag 版本（默认 30，0 表示不清理）'
+        required: false
+        default: '30'
+        type: string
   schedule:
     - cron: '23 4 * * 0'
 
@@ -34,6 +39,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           EXTRA_KEEP: ${{ github.event.inputs.keep_version }}
           KEEP_RELEASES: ${{ github.event.inputs.keep_releases || '2' }}
+          UNTAGGED_DAYS: ${{ github.event.inputs.untagged_days || '30' }}
         run: |
           set -euo pipefail
           OWNER_LOWER="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
@@ -61,6 +67,20 @@ jobs:
 
           echo "Preserving tags:"
           cat "$KEEP_FILE"
+
+          UNTAGGED_DAYS="$(printf '%s' "${UNTAGGED_DAYS:-30}" | tr -cd '0-9')"
+          [ -n "$UNTAGGED_DAYS" ] || UNTAGGED_DAYS=30
+          OLDEST_RELEASE_EPOCH="$(gh release list --repo "$GITHUB_REPOSITORY" --limit "$KEEP_RELEASES" --json publishedAt --jq '.[].publishedAt' | sort | head -1 | xargs -r -I{} date -d {} +%s 2>/dev/null || true)"
+          UNTAGGED_CUTOFF=0
+          if [ "$UNTAGGED_DAYS" -gt 0 ] && [ "${OLDEST_RELEASE_EPOCH:-0}" -gt 0 ]; then
+            UNTAGGED_CUTOFF=$(( $(date -u +%s) - UNTAGGED_DAYS * 86400 ))
+            # Protect child manifests of the oldest kept release (created just before the release).
+            GUARD=$(( OLDEST_RELEASE_EPOCH - 86400 ))
+            if [ "$GUARD" -lt "$UNTAGGED_CUTOFF" ]; then UNTAGGED_CUTOFF=$GUARD; fi
+            echo "Untagged cleanup cutoff: $(date -u -d "@$UNTAGGED_CUTOFF" +%Y-%m-%dT%H:%M:%SZ)"
+          else
+            echo "Untagged cleanup disabled"
+          fi
 
           # Legacy standalone sidecar images are no longer published. Remove all their versions.
           for pkg in subx-asr subx-ocr; do
@@ -92,7 +112,7 @@ jobs:
           for pkg in subx; do
             echo "::group::Package $pkg"
             if ! gh api --paginate "users/$OWNER_LOWER/packages/container/$pkg/versions?per_page=100" \
-              --jq '.[] | [.id, ((.metadata.container.tags // []) | join(","))] | @tsv' > /tmp/versions.tsv 2>/tmp/versions.err; then
+              --jq '.[] | [.id, ((.metadata.container.tags // []) | join(",")), (.created_at // "")] | @tsv' > /tmp/versions.tsv 2>/tmp/versions.err; then
               echo "Skip $pkg: $(cat /tmp/versions.err)"
               echo "::endgroup::"
               continue
@@ -100,9 +120,23 @@ jobs:
 
             count=$(grep -c . /tmp/versions.tsv 2>/dev/null || true)
             echo "Inspecting $count versions in $pkg"
-            while IFS=$'\t' read -r id tags; do
+            MAIN_DELETE_FILE="/tmp/main-delete-ids.txt"
+            : > "$MAIN_DELETE_FILE"
+            untagged_deleted=0
+            tagged_deleted=0
+            while IFS=$'\t' read -r id tags created_at; do
               [ -z "$id" ] && continue
-              [ -z "$tags" ] && continue
+              if [ -z "$tags" ]; then
+                if [ "$UNTAGGED_CUTOFF" -gt 0 ] && [ -n "$created_at" ]; then
+                  created_epoch="$(date -d "$created_at" +%s 2>/dev/null || echo 0)"
+                  if [ "${created_epoch:-0}" -gt 0 ] && [ "$created_epoch" -lt "$UNTAGGED_CUTOFF" ]; then
+                    echo "Deleting untagged $pkg version $id (created $created_at)"
+                    echo "$id" >> "$MAIN_DELETE_FILE"
+                    untagged_deleted=$((untagged_deleted + 1))
+                  fi
+                fi
+                continue
+              fi
               keep=0
               IFS=',' read -ra TAG_ARRAY <<< "$tags"
               for tag in "${TAG_ARRAY[@]}"; do
@@ -113,8 +147,20 @@ jobs:
               done
               if [ "$keep" -eq 0 ]; then
                 echo "Deleting $pkg:$tags (version $id)"
-                gh api --method DELETE "users/$OWNER_LOWER/packages/container/$pkg/versions/$id" >/dev/null 2>&1 || echo "  delete skipped"
+                echo "$id" >> "$MAIN_DELETE_FILE"
+                tagged_deleted=$((tagged_deleted + 1))
               fi
             done < /tmp/versions.tsv
+            echo "Queued $tagged_deleted tagged and $untagged_deleted untagged versions for deletion"
+            export OWNER_LOWER
+            delete_main_version() {
+              if ! out=$(gh api --method DELETE "users/$OWNER_LOWER/packages/container/subx/versions/$1" 2>&1); then
+                echo "  delete failed $1: $(printf '%s' "$out" | head -c 300)"
+              fi
+            }
+            export -f delete_main_version
+            if [ -s "$MAIN_DELETE_FILE" ]; then
+              xargs -P 4 -n 1 bash -c 'delete_main_version "$0"' < "$MAIN_DELETE_FILE"
+            fi
             echo "::endgroup::"
           done
