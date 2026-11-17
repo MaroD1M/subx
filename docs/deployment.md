@@ -1,8 +1,8 @@
 # SubX 部署文档
 
-> 适用版本：v2.10.1
+> 适用版本：v2.11.0
 
-本文档覆盖单镜像部署、NAS、镜像与模型下载和反向代理。升级、备份、健康检查和常见问题见[相关文档](#8-相关文档)。使用说明请参阅 [使用文档](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
+本文档覆盖单镜像部署、NAS、镜像与模型下载和反向代理。升级、备份、健康检查和常见问题见[相关文档](#7-相关文档)。使用说明请参阅 [使用文档](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
 ## 1. 架构
 
@@ -18,14 +18,14 @@ Whisper 模型体积较大且与硬件相关，**不打进镜像**。首次进�
 
 OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下载模型。
 
-SubX 不再发布独立 ASR/OCR 镜像，默认使用单镜像内置服务；确有高级需求时可自行构建外部服务，见第 7 节。
+ASR 和 OCR 已完整内置在主镜像中，不需要额外镜像、服务或 Compose profile。默认部署一个 `subx` 容器即可使用全部字幕能力。
 
 ## 2. Docker Compose 快速部署
 
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.10.1
+    image: ghcr.io/marod1m/subx:v2.11.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -103,14 +103,14 @@ http://<主机IP>:3000
 可选服务：
 
 - `postgres`：`--profile postgres`，启用 PostgreSQL。
-- 独立 ASR/OCR 镜像已停止发布，不再提供 sidecar profile；GPU/增强需求请自行构建外部服务。
+- ASR/OCR 无需额外服务，已随 `subx` 主镜像启动。
 
 ## 3. 多媒体库模式与 NAS 路径
 
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.10.1
+    image: ghcr.io/marod1m/subx:v2.11.0
     container_name: subx
     restart: unless-stopped
     ports:
@@ -172,11 +172,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.10.1
+# 默认拉取 v2.11.0
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.10.1
+./scripts/pull-image.sh --tag v2.11.0
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
@@ -278,15 +278,7 @@ location / {
 
 > 模型下载和长任务通过浏览器轮询/SSE 查看状态，反代需要允许较长的请求时间。
 
-## 7. 外部 ASR/OCR 服务（高级）
-
-SubX 不再发布独立的 `subx-asr` / `subx-ocr` 镜像，也不再提供官方 sidecar Compose profile。默认单镜像已内置 ASR/OCR，适合绝大多数 NAS。
-
-确有拆分、GPU 或增强预处理需求时，可以基于仓库中的 `asr-service/`、`ocr-service/` 自行构建服务，然后在设置页填写外部地址和鉴权 Key。模型目录、媒体挂载和环境变量需与自定义服务保持一致；官方不提供这些外部镜像的版本支持和升级承诺。
-
----
-
-## 8. 相关文档
+## 7. 相关文档
 
 - 环境变量完整参考：[环境变量参考](reference/environment.md)
 - 备份恢复、健康检查、多 Worker：[运维与数据管理](operations.md)

@@ -1,6 +1,6 @@
 # 维护与架构说明
 
-> 适用版本：v2.10.1
+> 适用版本：v2.11.0
 >
 > 本文档面向继续开发 SubX 的维护者，说明主要目录、数据缓存、数据库迁移和验证流程。
 
@@ -162,7 +162,7 @@ npm run check:versions
 4. 执行 `npm run check:versions`。
 5. 执行完整验证：`lint`、`typecheck`、`test`、`test:api`、`test:e2e`、`build`。
 6. 更新文档截图：`npm run preview:images`。
-7. 推送 `master`，等待 CI、PostgreSQL Smoke、All-in-One、ASR/OCR Sidecar 镜像构建全部成功。
+7. 推送 `master`，等待 CI、PostgreSQL Smoke 和主镜像构建全部成功。
 8. 打正式 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`。
 9. 检查 GHCR 上 `latest`、`X.Y.Z` 和 `vX.Y.Z` 标签指向同一 digest。
 

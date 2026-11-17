@@ -40,7 +40,7 @@
       </div>
 
       <div v-else-if="legacyService" class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
-        当前 ASR 服务是旧版本，只支持基础模型加载。请把主镜像和 sidecar 升级到最新版本后使用完整下载管理。
+        当前 ASR 服务是旧版本，只支持基础模型加载。请把主镜像升级到最新版本后使用完整下载管理。
       </div>
 
       <div v-if="loading && !rows.length" class="flex items-center gap-2 py-3 text-xs text-gray-500">

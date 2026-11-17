@@ -76,7 +76,7 @@ const lines = [
   '# SubX ASR 11 语言基准',
   '',
   `- 时间：${new Date().toISOString()}`,
-  `- Sidecar：${baseUrl}`,
+  `- ASR 服务：${baseUrl}`,
   `- 引擎：${engine}`,
   `- 模型：${model}`,
   '',

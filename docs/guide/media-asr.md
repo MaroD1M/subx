@@ -1,6 +1,6 @@
 # 媒体库与语音识别
 
-> 适用版本：v2.10.1
+> 适用版本：v2.11.0
 >
 > 前置条件：已完成 [快速开始](../getting-started.md)。
 
@@ -180,7 +180,7 @@
 http://127.0.0.1:8000
 ```
 
-设置页可以点击「使用内置」快速恢复该地址；连接自行构建的外部 ASR 时才需要改成对应地址。
+设置页可以点击「使用内置」快速恢复该地址，通常不需要修改。
 
 ### ASR 长任务超时
 
@@ -211,8 +211,8 @@ http://127.0.0.1:8000
 - 精度：CPU 用 `int8`，GPU 用 `float16`；设备和精度会随识别请求传给 ASR 服务
 - 语言：默认自动检测，也可固定源语言
 - 引擎：`auto` / `faster-whisper` / `whisper-cpp` / `cloud`
-- 预处理：关闭 / Demucs / DeepFilterNet（需要自行构建的增强 ASR 服务）
-- 说话人分离：pyannote PoC（需要自行构建的增强 ASR 服务和 HF_TOKEN）
+- 预处理：关闭 / Demucs / DeepFilterNet（默认镜像不包含后两者依赖）
+- 说话人分离：pyannote PoC（默认镜像不包含，需要外接自建服务和 `HF_TOKEN`）
 - 低功耗 NAS：设置页「语音识别 → 快速预设 → 低功耗 NAS」会使用 small / CPU / int8，把任务并发限制为 1，并关闭说话人分离和预处理。
 
 ARM NAS 推荐 `whisper-cpp`；x86 推荐 `faster-whisper`。`auto` 会在 ARM 上优先选择 whisper.cpp。
@@ -226,17 +226,9 @@ ARM NAS 推荐 `whisper-cpp`；x86 推荐 `faster-whisper`。`auto` 会在 ARM �
 - 地址使用 OpenAI 兼容 Base URL，例如 `https://api.openai.com/v1`。
 - 适配层保留扩展位，Azure/Google/豆包暂未作为首阶段重点。
 
-### 外部 ASR 服务（高级）
+### 高级能力说明
 
-SubX 不再发布独立 ASR 镜像。需要 GPU 或 Demucs / DeepFilterNet / pyannote 等增强能力时，可基于 `asr-service/` 自行构建服务，在设置页填写外部地址和 API Key：
-
-- Demucs：分离人声后再识别，适合背景音乐较重的视频。
-- DeepFilterNet：降噪后再识别。
-- 预处理失败会自动回退原始音频，不阻塞任务。
-- 说话人分离需要 `HF_TOKEN` 和 pyannote 模型许可；失败会回退普通识别。
-- 说话人标签会写入识别详情，并在任务详情中展示。
-
-外置服务的模型目录、媒体挂载和升级节奏由使用者自行维护；官方只发布单镜像。
+ASR 已内置在主镜像中，普通用户不需要外接服务。默认镜像不包含 Demucs、DeepFilterNet 和 pyannote；如自行维护外部 ASR 服务，可在设置页填写地址和 API Key。预处理失败会自动回退原始音频，说话人分离需要 `HF_TOKEN` 和 pyannote 模型许可。外部服务的模型目录、媒体挂载和升级节奏由使用者自行维护。
 
 ### 处理视频
 

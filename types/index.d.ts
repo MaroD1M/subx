@@ -175,7 +175,7 @@ export interface AppConfig {
   mediaRoots?: MediaRoot[]     // 媒体库配置
   customStylePresets?: CustomStylePreset[] // 用户自定义翻译风格
   asrEnabled?: boolean         // 是否启用语音识别
-  asrBaseUrl?: string          // ASR 服务地址（内置或 sidecar）
+  asrBaseUrl?: string          // ASR 服务地址（默认内置）
   asrApiKey?: string           // 可选 ASR API Key
   asrModel?: string            // ASR 模型
   asrLanguage?: string         // auto 或固定源语言

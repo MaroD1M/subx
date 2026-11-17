@@ -1,6 +1,6 @@
 # 升级与回滚
 
-> 适用版本：v2.10.1
+> 适用版本：v2.11.0
 >
 > 版本变更、数据库迁移和升级注意事项统一记录在 [CHANGELOG](../../CHANGELOG.md)，本页只保留通用操作步骤。
 
@@ -26,6 +26,17 @@ docker compose logs -f subx
 ```
 
 访问「设置 → 系统体检」，确认数据库、媒体库、FFmpeg、字体、临时目录和磁盘状态正常。
+
+## 从旧拆分部署迁移
+
+v2.11.0 起只发布内置 ASR/OCR 的单镜像。旧 Compose 中如果还有 `asr`、`ocr` 或 `asr-enhanced` 服务：
+
+1. 删除这些服务和对应镜像，只保留 `subx` 与可选 `postgres`。
+2. 把 `subx` 镜像改为 `ghcr.io/marod1m/subx:v2.11.0`。
+3. 保留原来的媒体、数据库、模型和临时目录挂载。
+4. 执行 `docker compose up -d --force-recreate`。
+
+应用会自动把旧的 `subx-asr` / `subx-ocr` 默认地址迁移到 `127.0.0.1:8000/8001`。如果确实还要连接外部自建服务，请重新填写地址，或设置 `SUBX_KEEP_LEGACY_SIDECAR_URLS=true` 关闭自动迁移。
 
 ## 数据库迁移
 

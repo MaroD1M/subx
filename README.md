@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/github/license/MaroD1M/subx)](LICENSE)
 [![GHCR](https://img.shields.io/badge/ghcr.io-subx-blue?logo=github)](https://github.com/MaroD1M/subx/pkgs/container/subx)
 
-当前版本：**v2.10.1** · [文档索引](docs/README.md) · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.11.0** · [文档索引](docs/README.md) · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
 
 SubX 是面向 NAS 与自托管环境的 AI 字幕工作台。它会扫描媒体库，读取内嵌/外挂字幕，或通过语音识别与图像字幕 OCR 生成文本，再调用 LLM 翻译，最终输出可核对的 SRT/ASS。API Key、字幕、媒体和模型都可以留在自己的机器上。
 
@@ -59,12 +59,12 @@ SubX 是面向 NAS 与自托管环境的 AI 字幕工作台。它会扫描媒体
 
 前置要求：Docker 与 Compose v2，x86_64 或 arm64，建议至少 4GB 内存和 2–3GB 镜像空间；模型目录另预留 10–20GB。
 
-把下面内容放进 `docker-compose.yml`，改一行媒体路径：
+ASR 和 OCR 已内置在主镜像中，不需要额外镜像或服务。把下面内容放进 `docker-compose.yml`，改一行媒体路径即可：
 
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.10.1
+    image: ghcr.io/marod1m/subx:v2.11.0
     container_name: subx
     restart: unless-stopped
     ports:

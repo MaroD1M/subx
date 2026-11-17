@@ -1,5 +1,5 @@
 # ============================================================
-# SubX v2.10.1 - 单镜像开箱即用
+# SubX v2.11.0 - 单镜像开箱即用
 # ============================================================
 # 默认只启动一个 subx 容器，内部包含：
 #   - Web / 翻译主应用
@@ -29,7 +29,7 @@ services:
   subx:
     # 固定版本，避免 latest 自动升级带来意外。
     # 想跟随最新版可改成 ghcr.io/marod1m/subx:latest
-    image: ghcr.io/marod1m/subx:v2.10.1
+    image: ghcr.io/marod1m/subx:v2.11.0
 
     # 容器名称，便于 docker logs / docker exec 使用。
     container_name: subx
@@ -140,8 +140,8 @@ services:
       # 默认模型；设置页可覆盖。
       ASR_MODEL: ${ASR_MODEL:-small}
 
-      # 运行设备。单镜像为 CPU 版，建议 auto/cpu。
-      # 需要 cuda 时请连接自行构建的 GPU ASR 服务，并修改设置页地址。
+      # 运行设备。主镜像为 CPU 版，建议 auto/cpu。
+      # 需要 cuda 时请外接自建 ASR 服务，并在设置页修改地址。
       ASR_DEVICE: ${ASR_DEVICE:-auto}
 
       # 计算精度。CPU 推荐 int8，GPU 推荐 float16。
@@ -152,7 +152,7 @@ services:
       ASR_ENGINE: ${ASR_ENGINE:-auto}
 
       # 音频预处理：off / demucs / deepfilternet。
-      # Demucs/DeepFilterNet 需要自行构建的增强 ASR 服务；单镜像会回退原始音频。
+      # 主镜像不包含后两者的依赖，保持 off；外部自定义服务可按需开启。
       ASR_PREPROCESS: ${ASR_PREPROCESS:-off}
 
       # 设置页可下载的模型列表，逗号分隔。
@@ -164,7 +164,7 @@ services:
       # whisper.cpp 推理线程数；默认使用 CPU 核心数，低配可调小。
       # ASR_THREADS: 2
 
-      # 说话人分离模型；仅自行构建的增强 ASR 服务有效。
+      # 说话人分离模型；仅外部自定义 ASR 服务有效。
       # ASR_DIARIZATION_MODEL: pyannote/speaker-diarization-3.1
 
       # ---------------- 内置 OCR ----------------

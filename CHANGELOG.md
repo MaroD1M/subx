@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.11.0 - 2026-11-17
 
 ### Changed
 
@@ -8,12 +8,24 @@
 - 覆盖检查压缩为摘要、筛选和列表三层结构，移除重复统计卡片与说明文字。
 - 设置页改为左侧分组导航 + 右侧内容，移动端使用分组下拉，减少顶部层级占用。
 - 首页在未选择文件时使用全宽文件浏览器，隐藏空设置面板，精简空状态和步骤提示。
+- 文档统一为单镜像部署思路：ASR/OCR 随主镜像启动，一个 `subx` 容器即可完成识别、OCR、翻译和导出。
 
 ### Removed
 
-- 停止发布独立 OCR / ASR 镜像，移除对应 sidecar workflow 与 Compose profile，保留自行构建外部服务的能力。
+- 移除 ASR/OCR 独立 sidecar Dockerfile、`.dockerignore`、构建 workflow、Compose profile 和拆分部署说明。
 - 清理历史 OCR / ASR 镜像包的定时任务改为删除全部旧版本。
 - 主镜像清理策略改为保留最近 2 个正式版本，并清理超过 30 天且未被当前发布引用的无 tag 版本。
+
+### Fixed
+
+- 修复主镜像清理任务因缺少 tag 字段而误判版本、可能删除仍被 release 引用的镜像子清单的问题。
+- 修复历史 OCR / ASR 镜像包清理缺少失败日志、并发处理和部分保护版本无法删除时的提示问题。
+
+### Upgrade Notes
+
+- 无数据库 migration，媒体、字幕、模型和配置目录保持不变。
+- 直接替换镜像 tag 后执行 `docker compose pull && docker compose up -d --force-recreate` 即可。
+- 旧拆分部署升级后会自动迁移 `subx-asr` / `subx-ocr` 默认地址到内置服务；如确需保留外部地址，设置 `SUBX_KEEP_LEGACY_SIDECAR_URLS=true`。
 
 ## v2.10.1 - 2026-11-17
 

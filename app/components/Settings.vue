@@ -74,7 +74,7 @@
                   <UInput v-model="config.asrBaseUrl" placeholder="http://127.0.0.1:8000" icon="i-lucide-server" class="w-full" />
                   <UButton label="使用内置" size="sm" color="neutral" variant="soft" @click="config.asrBaseUrl = 'http://127.0.0.1:8000'" />
                 </div>
-                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">单镜像已内置 ASR，默认地址 <code>http://127.0.0.1:8000</code>；拆分部署时填 sidecar 服务名。</p>
+                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">ASR 已内置在主镜像中，默认地址 <code>http://127.0.0.1:8000</code>，通常无需修改。</p>
               </UFormField>
 
               <UFormField label="ASR API Key（可选）">
@@ -195,7 +195,7 @@
               <LazyAsrModelManager :selected-model="config.asrModel" :engine="config.asrEngine" @select="config.asrModel = $event" />
 
               <p class="app-info-warning p-3">
-                单镜像已内置 ASR 服务，不需要再启动 sidecar profile。模型默认不会自动下载，请在「本地模型管理」中手动开始，下载前请预留 10–20GB 空间。ARM NAS 可把引擎切到 <code>whisper-cpp</code>。
+                ASR 已内置在主镜像中，不需要额外启动服务。模型默认不会自动下载，请在「本地模型管理」中手动开始，下载前请预留 10–20GB 空间。ARM NAS 可把引擎切到 <code>whisper-cpp</code>。
               </p>
 
               <div class="surface-muted p-3 space-y-3">
@@ -244,7 +244,7 @@
                     <UInput v-model="config.ocrBaseUrl" placeholder="http://127.0.0.1:8001" class="w-full" />
                     <UButton label="使用内置" size="sm" color="neutral" variant="soft" @click="config.ocrBaseUrl = 'http://127.0.0.1:8001'" />
                   </div>
-                  <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">单镜像默认地址 <code>http://127.0.0.1:8001</code>；拆分部署时改用 <code>http://subx-ocr:8000</code>。</p>
+                  <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">OCR 已内置在主镜像中，默认地址 <code>http://127.0.0.1:8001</code>，通常无需修改。</p>
                 </UFormField>
 
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">

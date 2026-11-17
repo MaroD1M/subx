@@ -1,6 +1,6 @@
 # SubX OCR Service
 
-图像字幕 OCR 服务，用于 PGS / VobSub / DVD。v2.5.0 起默认运行在 SubX 单镜像内部（`127.0.0.1:8001`），也可以独立 sidecar 部署。
+SubX 主镜像内置的图像字幕 OCR 服务，监听容器内 `127.0.0.1:8001`，用于 PGS / VobSub / DVD。不需要单独构建镜像或启动额外容器。
 
 - PGS：FFmpeg 提取 `.sup` 后交给 pgsrip；提取文件名会携带轨道语言，强制轨额外带 `.forced` 标记；pgsrip 再显式选择 forced/full 轨，避免按语言或 flags 误过滤。长电影不强制整片抽帧，结果为空、文本过少或时间覆盖异常时自动回退到分段位图 OCR。
 - FFmpeg/pgsrip 失败时会保留 stderr 摘要，并通过任务错误返回，避免只看到 `exit status 1`。
@@ -18,15 +18,11 @@
 - 默认语言 `en`；支持中/英/日/韩/俄/法/德/西/意/葡/泰/阿/印地/土耳其/越南/乌克兰/荷兰/波兰/瑞典/丹麦/芬兰/挪威/捷克/希腊/希伯来/印尼/马来语。
 - 低置信度结果不再静默丢弃；会保留文本和置信度，由主应用进入核对页高亮。`OCR_MIN_CONFIDENCE` 用作低置信度提示阈值。
 
-单镜像已经内置本服务和 Tesseract 语言包、RapidOCR，不需要手动下载 OCR 模型，也不需要启动 `--profile ocr`。
-
-拆分部署：
+主镜像已经内置本服务、Tesseract 语言包和 RapidOCR，不需要手动下载 OCR 模型。开发调试时可在本目录直接运行：
 
 ```bash
-docker compose --profile ocr up -d ocr
+python3 -m uvicorn main:app --host 127.0.0.1 --port 8001
 ```
-
-然后在 SubX 设置页把 OCR 地址改为 `http://subx-ocr:8000`。
 
 ## 环境变量
 
@@ -48,7 +44,7 @@ docker compose --profile ocr up -d ocr
 | `OCR_MAX_JOBS` | `50` | 内存中保留的 OCR 任务数量上限；超过时优先清理已结束任务 |
 | `OCR_JOB_RETENTION_SECONDS` | `3600` | 已完成 OCR 任务在内存中的保留时间（秒） |
 | `OCR_TEMP_DIR` | `/app/temp/ocr` | 抽帧与断点临时目录；默认与主应用 `./data/temp/ocr` 一致 |
-| `OCR_API_KEY` | 空 | 可选服务鉴权；单镜像下优先于设置页保存的 Key，拆分部署时设置页保存值优先 |
+| `OCR_API_KEY` | 空 | 可选服务鉴权；主镜像下优先于设置页保存的 Key |
 
 > 主应用会在请求中传入设置页的“长视频与超时”参数；环境变量主要用于服务默认值和未传参数时的兜底。
 

@@ -1,10 +1,10 @@
 """SubX ASR service.
 
-Runs inside the all-in-one SubX image (127.0.0.1:8000) or as an optional
-standalone sidecar. Supports optional API-key authentication, resumable model
-downloads, audio preprocessing fallbacks, cloud-independent transcription and
-optional pyannote speaker labels. It is intended to stay on an internal Docker
-network unless an auth key and reverse proxy are configured.
+Runs inside the all-in-one SubX image on 127.0.0.1:8000. Supports optional
+API-key authentication, resumable model downloads, audio preprocessing
+fallbacks, cloud-independent transcription and optional pyannote speaker labels.
+It stays on the container loopback interface unless an auth key and reverse
+proxy are configured.
 """
 
 import gc
@@ -177,7 +177,7 @@ def resolve_engine(value: str | None = None) -> str:
     engine = str(value or DEFAULT_ENGINE or "auto").strip().lower()
     if engine in {"faster-whisper", "whisper-cpp"}:
         if engine == "whisper-cpp" and WhisperCppModel is None:
-            raise HTTPException(status_code=503, detail="whisper.cpp 引擎不可用，请使用包含 pywhispercpp 的 sidecar 镜像")
+            raise HTTPException(status_code=503, detail="whisper.cpp 引擎不可用，请使用包含 pywhispercpp 的 ASR 服务")
         return engine
     if DEFAULT_ENGINE in {"faster-whisper", "whisper-cpp"}:
         return DEFAULT_ENGINE

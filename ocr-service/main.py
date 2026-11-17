@@ -1,4 +1,4 @@
-"""SubX OCR sidecar.
+"""SubX built-in OCR service.
 
 Converts PGS and bitmap subtitle tracks (VobSub/DVD) to text. PGS uses pgsrip;
 bitmap fallback burns subtitles onto a black background, extracts frames, skips
@@ -70,7 +70,7 @@ TESS_LANG = {
     "id": "ind+eng", "ms": "msa+eng"
 }
 
-app = FastAPI(title="SubX OCR Sidecar", version="0.1.0")
+app = FastAPI(title="SubX OCR Service", version="0.1.0")
 OCR_API_KEY = os.getenv("OCR_API_KEY", "")
 
 
