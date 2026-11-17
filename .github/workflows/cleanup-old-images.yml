@@ -112,7 +112,7 @@ jobs:
           for pkg in subx; do
             echo "::group::Package $pkg"
             if ! gh api --paginate "users/$OWNER_LOWER/packages/container/$pkg/versions?per_page=100" \
-              --jq '.[] | [.id, ((.metadata.container.tags // []) | join(",")), (.created_at // "")] | @tsv' > /tmp/versions.tsv 2>/tmp/versions.err; then
+              --jq '.[] | [.id, (((.metadata.container.tags // []) | join(",")) | if . == "" then "-" else . end), (.created_at // "")] | @tsv' > /tmp/versions.tsv 2>/tmp/versions.err; then
               echo "Skip $pkg: $(cat /tmp/versions.err)"
               echo "::endgroup::"
               continue
@@ -126,7 +126,7 @@ jobs:
             tagged_deleted=0
             while IFS=$'\t' read -r id tags created_at; do
               [ -z "$id" ] && continue
-              if [ -z "$tags" ]; then
+              if [ "$tags" = "-" ]; then
                 if [ "$UNTAGGED_CUTOFF" -gt 0 ] && [ -n "$created_at" ]; then
                   created_epoch="$(date -d "$created_at" +%s 2>/dev/null || echo 0)"
                   if [ "${created_epoch:-0}" -gt 0 ] && [ "$created_epoch" -lt "$UNTAGGED_CUTOFF" ]; then
