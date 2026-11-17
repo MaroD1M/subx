@@ -10,15 +10,14 @@ export default defineEventHandler(async (event) => {
   if (['done', 'error', 'cancelled', 'review'].includes(String(task.status))) {
     throw apiError(409, '任务已结束，无法暂停')
   }
-  if (task.sourceType !== 'asr') {
-    throw apiError(400, '当前仅语音识别任务支持暂停')
-  }
-  if (['parsing', 'translating', 'exporting'].includes(String(task.status))) {
-    throw apiError(409, '语音识别已完成，无法暂停')
-  }
-
   const db = useDb()
   const running = globalTaskQueue.isActive(taskId)
+  if (running && task.sourceType !== 'asr') {
+    throw apiError(409, '运行中的任务暂不支持暂停，请取消或等待完成')
+  }
+  if (running && ['parsing', 'translating', 'exporting'].includes(String(task.status))) {
+    throw apiError(409, '语音识别已完成，无法暂停')
+  }
   if (running) {
     db.prepare("UPDATE tasks SET pause_requested_at = datetime('now'), updated_at = datetime('now') WHERE task_id = ? AND status NOT IN ('done', 'error', 'cancelled', 'review', 'paused')").run(taskId)
     const latest = db.prepare('SELECT status, progress, step_progress FROM tasks WHERE task_id = ?').get(taskId) as { status?: string, progress?: number, step_progress?: number } | undefined

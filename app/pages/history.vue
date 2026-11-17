@@ -97,6 +97,7 @@
               <span class="app-pill" :class="outputModePillClass(row.original.outputMode)">{{ outputModeLabel(row.original.outputMode) }}</span>
               <span class="app-pill app-pill-neutral">{{ subtitleFormatLabel(row.original.subtitleFormat || row.original.subtitle_format) }}</span>
               <span class="whitespace-nowrap">{{ targetLanguageLabel(row.original.targetLanguage) }}</span>
+              <span v-if="row.original.priority" class="app-meta whitespace-nowrap" title="队列优先级">P{{ row.original.priority }}</span>
             </div>
           </div>
         </template>
@@ -129,6 +130,17 @@
                 title="进入核对"
                 aria-label="进入核对"
                 @click="openReview(row.original.taskId)"
+              />
+              <UButton
+                v-if="canPauseQueue(row.original)"
+                icon="i-lucide-pause"
+                variant="ghost"
+                color="warning"
+                size="xs"
+                :loading="queueActionId === row.original.taskId"
+                title="暂停排队"
+                aria-label="暂停排队"
+                @click="pauseTask(row.original.taskId)"
               />
               <UButton
                 v-if="row.original.status === 'paused' && !row.original.pauseRequested"
@@ -181,6 +193,7 @@
                 <span class="app-pill" :class="outputModePillClass(task.outputMode)">{{ outputModeLabel(task.outputMode) }}</span>
                 <span class="app-pill app-pill-neutral">{{ subtitleFormatLabel(task.subtitleFormat || task.subtitle_format) }}</span>
                 <span>{{ targetLanguageLabel(task.targetLanguage) }}</span>
+                <span v-if="task.priority" class="app-meta whitespace-nowrap" title="队列优先级">P{{ task.priority }}</span>
               </div>
               <p v-if="task.content_title" class="mt-1 line-clamp-1 text-xs text-primary-700 dark:text-primary-400">{{ task.content_title }}</p>
             </div>
@@ -202,6 +215,7 @@
           <div class="mt-3 flex flex-wrap items-center gap-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
             <UButton label="详情" icon="i-lucide-eye" size="xs" color="neutral" variant="soft" :to="`/task/${task.taskId}`" />
             <UButton v-if="task.reviewAvailable" label="核对" icon="i-lucide-list-checks" size="xs" color="warning" variant="soft" @click="openReview(task.taskId)" />
+            <UButton v-if="canPauseQueue(task)" label="暂停" icon="i-lucide-pause" size="xs" color="warning" variant="soft" :loading="queueActionId === task.taskId" @click="pauseTask(task.taskId)" />
             <UButton v-if="task.status === 'paused' && !task.pauseRequested" label="继续" icon="i-lucide-play" size="xs" color="primary" variant="soft" :loading="resumingTaskId === task.taskId" @click="resumeTask(task.taskId)" />
             <UButton v-if="['error', 'cancelled', 'review', 'done'].includes(task.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="retryingTaskId === task.taskId" @click="retryTask(task.taskId)" />
             <UDropdownMenu v-if="rowActionItems(task).length" :items="rowActionItems(task)" size="sm" class="ml-auto">
@@ -267,6 +281,7 @@ const isClearModalOpen = ref(false)
 const isClearing = ref(false)
 const retryingTaskId = ref('')
 const resumingTaskId = ref('')
+const queueActionId = ref('')
 const deletingTaskId = ref('')
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -508,6 +523,52 @@ async function retryTask(taskId) {
   }
 }
 
+async function pauseTask(taskId) {
+  queueActionId.value = taskId
+  try {
+    await $fetch(`/api/tasks/${taskId}/pause`, { method: 'POST' })
+    toast.add({ title: '已暂停排队', description: '恢复后会重新加入队列', color: 'success' })
+    await refresh()
+  } catch (e) {
+    toast.add({ title: '暂停失败', description: e?.data?.message || e?.message || '无法暂停任务', color: 'error' })
+  } finally {
+    queueActionId.value = ''
+  }
+}
+
+async function changePriority(task, delta) {
+  const next = Math.max(-1000, Math.min(1000, Number(task?.priority || 0) + delta))
+  queueActionId.value = task.taskId
+  try {
+    await $fetch(`/api/tasks/${task.taskId}/priority`, { method: 'POST', body: { priority: next } })
+    toast.add({ title: `优先级已调整为 P${next}`, description: '数值越大越先执行', color: 'success' })
+    await refresh()
+  } catch (e) {
+    toast.add({ title: '优先级调整失败', description: e?.data?.message || e?.message || '请稍后重试', color: 'error' })
+  } finally {
+    queueActionId.value = ''
+  }
+}
+
+async function cancelTask(taskId) {
+  if (!(await confirm({
+    title: '取消这个任务？',
+    description: '运行中的任务会停止，已完成的部分不会回滚。',
+    confirmLabel: '取消任务',
+    color: 'error'
+  }))) return
+  queueActionId.value = taskId
+  try {
+    await $fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
+    toast.add({ title: '任务已取消', color: 'success' })
+    await refresh()
+  } catch (e) {
+    toast.add({ title: '取消失败', description: e?.data?.message || e?.message || '无法取消任务', color: 'error' })
+  } finally {
+    queueActionId.value = ''
+  }
+}
+
 async function resumeTask(taskId) {
   resumingTaskId.value = taskId
   try {
@@ -555,10 +616,18 @@ function downloadSubtitle(taskId, format) {
   window.location.assign(`/api/tasks/${taskId}/download?format=${format}`)
 }
 
+function canPauseQueue(task) {
+  return !['paused', 'done', 'error', 'cancelled', 'review'].includes(String(task?.status || ''))
+    && ['queued', 'retrying'].includes(String(task?.queueStatus || task?.status || ''))
+}
+
 function rowActionItems(task) {
   const items = []
   const format = String(task?.subtitle_format || task?.subtitleFormat || 'srt')
-  if (task?.status === 'done') {
+  const status = String(task?.status || '')
+  const terminal = ['done', 'error', 'cancelled', 'review'].includes(status)
+
+  if (status === 'done') {
     if (format === 'vtt') {
       items.push({ label: '下载 VTT', icon: 'i-lucide-file-text', onSelect: () => downloadSubtitle(task.taskId, 'vtt') })
     } else if (format === 'ttml') {
@@ -572,7 +641,23 @@ function rowActionItems(task) {
       }
     }
   }
-  if (!isActiveStatus(task?.status)) {
+
+  if (!terminal) {
+    if (items.length) items.push({ type: 'separator' })
+    if (status === 'paused') {
+      items.push({ label: '继续排队', icon: 'i-lucide-play', onSelect: () => resumeTask(task.taskId) })
+    } else if (canPauseQueue(task)) {
+      items.push({ label: '暂停排队', icon: 'i-lucide-pause', onSelect: () => pauseTask(task.taskId) })
+    }
+    items.push(
+      { label: '提高优先级', icon: 'i-lucide-arrow-up', onSelect: () => changePriority(task, 10) },
+      { label: '降低优先级', icon: 'i-lucide-arrow-down', onSelect: () => changePriority(task, -10) },
+      { type: 'separator' },
+      { label: '取消任务', icon: 'i-lucide-octagon-x', color: 'error', onSelect: () => cancelTask(task.taskId) }
+    )
+  }
+
+  if (terminal) {
     if (items.length) items.push({ type: 'separator' })
     items.push({
       label: '删除记录',

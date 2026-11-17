@@ -123,10 +123,10 @@ docker compose logs -f subx | grep -Ei 'ASR|uvicorn|error|traceback'
 docker exec -it subx curl -fsS http://127.0.0.1:8000/health
 ```
 
-4. 如果配置了 `ASR_INTERNAL_URL` 或旧的 `http://subx-asr:8000`，确认地址真的可达；单镜像会自动尝试内置 `127.0.0.1:8000` 作为兜底。
+4. 如果配置了 `ASR_INTERNAL_URL` 或外部 ASR 地址，确认地址真的可达；单镜像会自动尝试内置 `127.0.0.1:8000` 作为兜底。
 5. 如果提示“模型未下载”，去设置页「本地模型管理」下载；如果提示 `ECONNREFUSED`，则是 ASR 进程或端口问题，不是模型问题。
 
-拆分部署时，确认 sidecar 已启动且服务名正确。
+连接外部服务时，确认服务已启动且地址正确。
 
 **Q：模型下载失败？**
 

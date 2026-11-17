@@ -34,9 +34,12 @@ export default defineEventHandler(async (event) => {
   const offset = (page - 1) * pageSize
   const rows = db.prepare(`
     SELECT tasks.*, tb.name AS batch_name, tb.status AS batch_status,
+      tj.status AS queue_status, tj.priority AS queue_priority,
+      tj.attempts AS queue_attempts, tj.max_attempts AS queue_max_attempts,
       (SELECT COUNT(*) FROM task_review_entries tre WHERE tre.task_id = tasks.task_id) AS review_entry_count
     FROM tasks
     LEFT JOIN task_batches tb ON tb.id = tasks.batch_id
+    LEFT JOIN task_jobs tj ON tj.task_id = tasks.task_id
     ${where}
     ORDER BY tasks.created_at DESC
     LIMIT ? OFFSET ?
@@ -67,6 +70,10 @@ export default defineEventHandler(async (event) => {
       batchId: task.batch_id || undefined,
       batchName: task.batch_name || undefined,
       batchStatus: task.batch_status || undefined,
+      queueStatus: task.queue_status || '',
+      priority: Number(task.queue_priority || 0),
+      queueAttempts: Number(task.queue_attempts || 0),
+      queueMaxAttempts: Number(task.queue_max_attempts || 0),
       rootName,
       sourceType: task.source_type,
       trackIndex: task.track_index,

@@ -109,7 +109,7 @@ docker compose up -d
 4. 回首页选择视频或字幕文件，选风格、模型和输出设置，开始翻译。
 5. 在「翻译历史」查看进度，完成后进入「字幕核对」精修。
 
-> 完整参数、NAS 路径、反向代理和拆分部署见 [部署文档](docs/deployment.md)；环境变量见 [环境变量参考](docs/reference/environment.md)。
+> 完整参数、NAS 路径和反向代理见 [部署文档](docs/deployment.md)；环境变量见 [环境变量参考](docs/reference/environment.md)。
 
 ## 按场景选读
 
@@ -129,7 +129,7 @@ docker compose up -d
 - [文档索引](docs/README.md)：按角色和场景组织的完整入口。
 - [快速开始](docs/getting-started.md)：首次配置、媒体库和第一个任务。
 - [使用文档](docs/usage.md)：所有使用者文档的入口。
-- [部署文档](docs/deployment.md)：Compose、NAS、反向代理和拆分部署。
+- [部署文档](docs/deployment.md)：Compose、NAS 与反向代理。
 - [更新日志](CHANGELOG.md)：版本变更、迁移和升级注意事项。
 - [维护与架构](docs/development/maintenance.md)：目录职责、数据库迁移和发版流程。
 - [实测指南](docs/development/testing-guide.md)：真实设备与功能回归清单。
@@ -149,7 +149,7 @@ docker compose up -d
 - **服务端**：Nitro
 - **数据库**：SQLite（`better-sqlite3`，WAL），可选 PostgreSQL
 - **媒体处理**：FFmpeg / ffprobe
-- **语音识别**：内置 faster-whisper / Silero VAD，可选 whisper.cpp、GPU sidecar
+- **语音识别**：内置 faster-whisper / Silero VAD，可选 whisper.cpp 或自建 GPU 服务
 - **OCR**：内置 Tesseract / RapidOCR
 - **AI**：OpenAI 兼容、OpenCode Go、Anthropic 原生、Gemini 原生
 - **测试**：Vitest + Playwright + axe-core

@@ -49,7 +49,7 @@ docs/
     ocr.md                   图像字幕 OCR
     automation.md            监控目录、通知、API Token 和外部集成
     review-export.md         字幕核对、时间编辑和导出格式
-  deployment.md              Compose、NAS、反向代理和拆分部署
+  deployment.md              Compose、NAS 与反向代理
   reference/
     environment.md           环境变量完整参考
     upgrade.md               通用升级与回滚步骤

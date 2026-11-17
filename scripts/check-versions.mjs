@@ -48,8 +48,6 @@ expectMatch('.env.example', new RegExp(`# SubX v${semver}`), '环境变量示例
 expectMatch('server/api/openapi.json.get.ts', new RegExp(`version: '${semver}'`), 'OpenAPI 版本')
 expectMatch('scripts/pull-image.sh', new RegExp(`DEFAULT_VERSION="${semver}"`), '拉取脚本默认版本')
 expectMatch('docker-compose.yml', new RegExp(`image: ghcr\\.io/marod1m/subx:v${semver}`), '主镜像 tag')
-expectMatch('docker-compose.yml', new RegExp(`image: ghcr\\.io/marod1m/subx-asr:v${semver}`), 'ASR 镜像 tag')
-expectMatch('docker-compose.yml', new RegExp(`image: ghcr\\.io/marod1m/subx-ocr:v${semver}`), 'OCR 镜像 tag')
 
 expectMatch('README.md', new RegExp(`image: ghcr\\.io/marod1m/subx:v${semver}`), 'README 镜像 tag')
 expectMatch('docs/deployment.md', new RegExp(`image: ghcr\\.io/marod1m/subx:v${semver}`), '部署主镜像 tag')

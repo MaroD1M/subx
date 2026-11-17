@@ -155,7 +155,7 @@
 
 ### 内置 ASR 与手动下载模型
 
-单镜像已经内置 ASR 服务，不需要再启动 sidecar。
+单镜像已经内置 ASR 服务，不需要额外服务。
 
 首次使用：
 
@@ -180,7 +180,7 @@
 http://127.0.0.1:8000
 ```
 
-设置页可以点击「使用内置」快速恢复该地址。拆分部署时才需要改成 sidecar 服务名。
+设置页可以点击「使用内置」快速恢复该地址；连接自行构建的外部 ASR 时才需要改成对应地址。
 
 ### ASR 长任务超时
 
@@ -211,8 +211,8 @@ http://127.0.0.1:8000
 - 精度：CPU 用 `int8`，GPU 用 `float16`；设备和精度会随识别请求传给 ASR 服务
 - 语言：默认自动检测，也可固定源语言
 - 引擎：`auto` / `faster-whisper` / `whisper-cpp` / `cloud`
-- 预处理：关闭 / Demucs / DeepFilterNet（需要 enhanced sidecar）
-- 说话人分离：pyannote PoC（需要 enhanced sidecar 和 HF_TOKEN）
+- 预处理：关闭 / Demucs / DeepFilterNet（需要自行构建的增强 ASR 服务）
+- 说话人分离：pyannote PoC（需要自行构建的增强 ASR 服务和 HF_TOKEN）
 - 低功耗 NAS：设置页「语音识别 → 快速预设 → 低功耗 NAS」会使用 small / CPU / int8，把任务并发限制为 1，并关闭说话人分离和预处理。
 
 ARM NAS 推荐 `whisper-cpp`；x86 推荐 `faster-whisper`。`auto` 会在 ARM 上优先选择 whisper.cpp。
@@ -226,30 +226,17 @@ ARM NAS 推荐 `whisper-cpp`；x86 推荐 `faster-whisper`。`auto` 会在 ARM �
 - 地址使用 OpenAI 兼容 Base URL，例如 `https://api.openai.com/v1`。
 - 适配层保留扩展位，Azure/Google/豆包暂未作为首阶段重点。
 
-### 拆分部署与增强能力
+### 外部 ASR 服务（高级）
 
-如果确实需要拆分部署：
-
-```bash
-docker compose --profile asr up -d asr
-```
-
-设置页 ASR 地址改为 `http://subx-asr:8000`。
-
-增强 sidecar：
-
-```bash
-docker compose --profile asr-enhanced up -d asr-enhanced
-```
-
-设置页 ASR 地址改为 `http://subx-asr-enhanced:8000`。
+SubX 不再发布独立 ASR 镜像。需要 GPU 或 Demucs / DeepFilterNet / pyannote 等增强能力时，可基于 `asr-service/` 自行构建服务，在设置页填写外部地址和 API Key：
 
 - Demucs：分离人声后再识别，适合背景音乐较重的视频。
 - DeepFilterNet：降噪后再识别。
 - 预处理失败会自动回退原始音频，不阻塞任务。
 - 说话人分离需要 `HF_TOKEN` 和 pyannote 模型许可；失败会回退普通识别。
 - 说话人标签会写入识别详情，并在任务详情中展示。
-- 增强镜像体积较大，默认关闭；预处理和分离失败都会自动回退原始音频。
+
+外置服务的模型目录、媒体挂载和升级节奏由使用者自行维护；官方只发布单镜像。
 
 ### 处理视频
 

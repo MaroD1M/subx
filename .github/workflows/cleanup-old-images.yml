@@ -54,7 +54,24 @@ jobs:
           echo "Preserving tags:"
           cat "$KEEP_FILE"
 
-          for pkg in subx subx-asr subx-ocr; do
+          # Legacy standalone sidecar images are no longer published. Remove all their versions.
+          for pkg in subx-asr subx-ocr; do
+            echo "::group::Remove legacy package $pkg"
+            if ! gh api --paginate "users/$OWNER_LOWER/packages/container/$pkg/versions?per_page=100" \
+              --jq '.[].id' > /tmp/legacy-versions.txt 2>/tmp/legacy.err; then
+              echo "Skip $pkg: $(cat /tmp/legacy.err)"
+              echo "::endgroup::"
+              continue
+            fi
+            while IFS= read -r id; do
+              [ -z "$id" ] && continue
+              echo "Deleting $pkg version $id"
+              gh api --method DELETE "users/$OWNER_LOWER/packages/container/$pkg/versions/$id" >/dev/null 2>&1 || echo "  delete skipped"
+            done < /tmp/legacy-versions.txt
+            echo "::endgroup::"
+          done
+
+          for pkg in subx; do
             echo "::group::Package $pkg"
             if ! gh api --paginate "users/$OWNER_LOWER/packages/container/$pkg/versions?per_page=100" \
               --jq '.[] | [.id, ((.metadata.container.tags // []) | join(","))] | @tsv' > /tmp/versions.tsv 2>/tmp/versions.err; then

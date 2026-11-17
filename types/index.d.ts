@@ -90,6 +90,10 @@ export interface TranslationTask {
   batchId?: string             // 批量任务批次 ID
   batchName?: string           // 批次名称
   batchStatus?: string         // 批次状态
+  queueStatus?: string         // 队列状态
+  priority?: number            // 队列优先级
+  queueAttempts?: number       // 已尝试次数
+  queueMaxAttempts?: number    // 最大尝试次数
   sourceType: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr'  // 自动 / 内嵌字幕 / 外挂字幕 / 语音识别 / 图像字幕 OCR
   trackIndex?: number          // 内嵌字幕轨道或音频轨道索引
   sourceLanguage?: string      // ASR 检测或指定的源语言

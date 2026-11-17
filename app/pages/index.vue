@@ -1,8 +1,8 @@
 <template>
   <AppContainer size="wide" class="space-y-6">
     <PageHeader
-      title="本地视频翻译区"
-      description="浏览本地影视库，提取字幕并发起翻译。"
+      title="视频翻译"
+      description="选择视频，提取字幕并翻译。"
       :breadcrumb="[{ label: '首页', icon: 'i-lucide-home' }]"
     />
 

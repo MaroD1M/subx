@@ -143,6 +143,10 @@ export const previewFrameSchema = z.object({
   translatedText: z.string().max(1000).optional()
 }).passthrough()
 
+export const taskPrioritySchema = z.object({
+  priority: z.coerce.number().int().min(-1000).max(1000)
+}).passthrough()
+
 export const reviewVersionCreateSchema = z.object({
   label: z.string().max(160).optional(),
   note: z.string().max(2000).optional()

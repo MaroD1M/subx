@@ -2,7 +2,7 @@
 
 > 适用版本：v2.10.1
 >
-> 目标：用真实 NAS、真实媒体和单镜像/可选 sidecar 验证 v2.10.1，不只看构建是否通过。
+> 目标：用真实 NAS、真实媒体和单镜像验证 v2.10.1，不只看构建是否通过。
 >
 > 本文档面向维护者和参与实测的贡献者。历史版本行为以 [CHANGELOG](../../CHANGELOG.md) 为准。
 
@@ -24,7 +24,7 @@ docker compose pull
 docker compose up -d
 ```
 
-默认只启动一个 all-in-one `subx` 容器，内置 ASR/OCR。下面的 sidecar 步骤只在拆分部署或 GPU 场景执行。
+默认只启动一个 all-in-one `subx` 容器，内置 ASR/OCR。需要 GPU 或增强能力时使用自行构建的外部服务。
 
 检查：
 
@@ -38,18 +38,14 @@ curl http://NAS_IP:3000/api/health
 
 ### ASR
 
-```bash
-docker compose --profile asr up -d asr
-```
-
-在设置页填写：
+默认使用单镜像内置 ASR，无需启动额外容器。设置页保持：
 
 ```text
-ASR 地址：http://subx-asr:8000
+ASR 地址：http://127.0.0.1:8000
 ASR API Key：与 ASR_API_KEY 一致（若设置）
 ```
 
-建议实测矩阵：
+如需测试自行构建的外部 ASR 服务，再改填对应地址。建议实测矩阵：
 
 | 场景 | 设置 |
 | --- | --- |
@@ -60,22 +56,13 @@ ASR API Key：与 ASR_API_KEY 一致（若设置）
 
 ### OCR
 
-默认无需启动 sidecar。拆分部署时：
+默认使用单镜像内置 OCR，无需启动额外容器。设置页保持 `http://127.0.0.1:8001`；连接自行构建的外部 OCR 服务时再改填地址和 `OCR_API_KEY`。
 
-```bash
-docker compose --profile ocr up -d ocr
-```
-
-设置页填写 OCR 地址和 `OCR_API_KEY`。  
 验证 PGS 与 VobSub/DVD 各一次，记录耗时、准确率和失败原因。
 
-### 增强音频
+### 增强音频（自行构建）
 
-```bash
-docker compose --profile asr-enhanced up -d asr-enhanced
-```
-
-分别测试 Demucs、DeepFilterNet、pyannote。记录：
+需要使用 Demucs、DeepFilterNet 或 pyannote 时，基于 `asr-service/Dockerfile.enhanced` 自行构建服务，并在设置页填写外部地址。分别测试并记录：
 
 - 是否明显提升对白识别；
 - 耗时增加；
@@ -191,7 +178,7 @@ docker compose --profile asr-enhanced up -d asr-enhanced
 - [ ] whisper.cpp 引擎下载到 `/models/whisper-cpp`，不会误写入 faster-whisper 目录。
 - [ ] 升级前暂停的自定义模型任务能迁移到新目录并保留 `.part` 文件。
 - [ ] 切换模型后旧模型从内存淘汰，`ASR_MODEL_CACHE_SIZE` 生效。
-- [ ] 单镜像设置 `ASR_API_KEY` / `OCR_API_KEY` 后环境变量优先；拆分部署设置页保存值优先。
+- [ ] 单镜像设置 `ASR_API_KEY` / `OCR_API_KEY` 后环境变量优先；外部服务时设置页保存值优先。
 
 ### 4.8 系列记忆、覆盖检查与稳定性回归
 
@@ -278,7 +265,7 @@ OCR 耗时：
 
 ```text
 版本：v2.10.1
-镜像：subx（含内置 ASR/OCR）/ 可选 subx-asr / subx-ocr
+镜像：subx（含内置 ASR/OCR）
 设备：
 部署方式：Docker Compose（默认单镜像 / 可选 profile）
 数据库：SQLite / PostgreSQL
@@ -294,5 +281,5 @@ OCR 耗时：
 - PostgreSQL 同步桥仍为阻塞式，高并发会放大延迟。
 - VobSub/DVD OCR 是抽帧 PoC，2fps 可能漏掉极短字幕。
 - OCR 超过设置页“最大 OCR 时长”会直接报错；PGS 直通，VobSub/DVD 默认按 30 分钟分段。
-- 内置 ASR/OCR 只监听回环地址；拆分 sidecar 默认不鉴权，必须设置 `ASR_API_KEY` / `OCR_API_KEY` 并同步配置。
+- 内置 ASR/OCR 只监听回环地址；外部服务默认不鉴权，必须设置 `ASR_API_KEY` / `OCR_API_KEY` 并同步配置。
 - 依赖审计仍有已知漏洞，实测版暂未完成 major 升级。

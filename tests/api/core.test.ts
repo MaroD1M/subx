@@ -1132,6 +1132,38 @@ describe('core API integration', () => {
     expect((await after.json() as any).entries[0].target).toBe('接口术语')
   })
 
+  it('pauses, resumes and changes priority for a queued task', async () => {
+    const created = await apiFetch('/api/task', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        files: [{ path: 'Demo.zh.srt' }],
+        sourceType: 'external',
+        outputMode: 'original',
+        subtitleFormat: 'srt',
+        batch: { name: 'API queue controls', scheduledAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), priority: 5 }
+      })
+    })
+    expect(created.status).toBe(200)
+    const taskId = (await created.json() as any).taskId as string
+    expect(taskId).toBeTruthy()
+
+    const priority = await apiFetch(`/api/tasks/${taskId}/priority`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ priority: 25 })
+    })
+    expect(priority.status).toBe(200)
+    expect((await priority.json() as any).priority).toBe(25)
+
+    const paused = await apiFetch(`/api/tasks/${taskId}/pause`, { method: 'POST', headers: { cookie } })
+    expect(paused.status).toBe(200)
+    const resumed = await apiFetch(`/api/tasks/${taskId}/resume`, { method: 'POST', headers: { cookie } })
+    expect(resumed.status).toBe(200)
+    const cancelled = await apiFetch(`/api/tasks/${taskId}/cancel`, { method: 'POST', headers: { cookie } })
+    expect(cancelled.status).toBe(200)
+  })
+
   it('exposes task queue and batch status endpoints', async () => {
     const queue = await apiFetch('/api/task-queue', { headers: { cookie } })
     expect(queue.status).toBe(200)

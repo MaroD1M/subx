@@ -27,20 +27,20 @@
 | `TZ` | `Asia/Shanghai` | 容器时区；界面时间、任务日志和通知均按此时区显示 |
 | `PUID` / `PGID` | `1001` | 容器运行用户；建议与媒体所有者一致 |
 | `CHOWN_MEDIA` | `false` | 启动时递归修复媒体目录权限；大目录会较慢 |
-| `CHOWN_MODELS` | `false` | 启动时递归修复 `/models` 权限；从旧 sidecar 迁移时可用 |
+| `CHOWN_MODELS` | `false` | 启动时递归修复 `/models` 权限；从旧拆分部署迁移时可用 |
 | `RUN_AS_ROOT` | `false` | 跳过降权直接以 root 运行；仅排障，不推荐 |
 | `TRUST_PROXY` | 空 | 位于可信反向代理后设为 `true` |
 | `SUBX_ALLOWED_ORIGINS` | 空 | 额外允许的跨域来源，逗号分隔 |
 | `SUBX_AI_LOG_FULL_PAYLOAD` | 空 | 设为 `1` 时记录完整 AI 请求/响应正文；仅排障时临时开启 |
 | `FFMPEG_PATH` | 自动 | 自定义 ffmpeg 路径；容器内通常不需要 |
 | `FFPROBE_PATH` | 自动 | 自定义 ffprobe 路径；容器内通常不需要 |
-| `SUBX_ALL_IN_ONE` | 镜像内 `true` | 单镜像标记；自动把旧 sidecar 默认地址迁移到 `127.0.0.1` |
-| `SUBX_KEEP_LEGACY_SIDECAR_URLS` | `false` | 保留旧的 `subx-asr` / `subx-ocr` 地址，不自动迁移 |
+| `SUBX_ALL_IN_ONE` | 镜像内 `true` | 单镜像标记；自动把旧外部服务默认地址迁移到 `127.0.0.1` |
+| `SUBX_KEEP_LEGACY_SIDECAR_URLS` | `false` | 保留旧的外部 ASR/OCR 地址，不自动迁移 |
 | `ASR_INTERNAL_PORT` | `8000` | 内置 ASR 监听端口（仅回环）；启动脚本自动生成 URL |
 | `OCR_INTERNAL_PORT` | `8001` | 内置 OCR 监听端口（仅回环）；启动脚本自动生成 URL |
 | `ASR_INTERNAL_URL` | `http://127.0.0.1:8000` | 显式覆盖主应用默认 ASR 地址；一般不需要 |
 | `OCR_INTERNAL_URL` | `http://127.0.0.1:8001` | 显式覆盖主应用默认 OCR 地址；一般不需要 |
-| `ASR_API_KEY` / `OCR_API_KEY` | 空 | 内置服务可选鉴权；单镜像下环境变量优先于设置页保存值，拆分部署时设置页保存值优先 |
+| `ASR_API_KEY` / `OCR_API_KEY` | 空 | 内置服务可选鉴权；单镜像下环境变量优先于设置页保存值，外部服务时设置页保存值优先 |
 | `ASR_MAX_CHUNKS` | `500` | 单次音频最多分段数；超过后明确报错，不再静默截断 |
 | `ASR_POLL_RETRIES` / `OCR_POLL_RETRIES` | `3` | 状态轮询遇到瞬时网络错误时的连续重试次数 |
 | `ASR_POLL_MS` / `OCR_POLL_MS` | `1500` | 主应用轮询 ASR / OCR 任务状态的间隔（毫秒）；高级参数 |
@@ -49,20 +49,20 @@
 
 ## ASR 变量
 
-单镜像与独立 `subx-asr` / `subx-asr-gpu` / `subx-asr-enhanced` 共用这些变量。
+单镜像与自行构建的外部 ASR 服务共用这些变量。
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `ASR_MODEL_DIR` | `/models` | 模型缓存根目录；必须与 `/models` 卷对应 |
 | `ASR_WHISPER_CPP_MODEL_DIR` | `/models/whisper-cpp` | whisper.cpp 模型目录 |
-| `ASR_AUTO_DOWNLOAD` | 单镜像 `false`；sidecar `true` | 是否允许首次识别时静默下载；单镜像建议保持 `false` |
+| `ASR_AUTO_DOWNLOAD` | 单镜像 `false`；外部服务 `true` | 是否允许首次识别时静默下载；单镜像建议保持 `false` |
 | `ASR_DOWNLOAD_PROXY` | 空 | 模型下载默认 HTTP(S) 代理；未设置时读取容器 `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` |
 | `ASR_HF_ENDPOINT` | `https://huggingface.co` | Hugging Face 镜像站，例如 `https://hf-mirror.com` |
 | `ASR_MODEL` | `small` | 默认模型；设置页可覆盖 |
-| `ASR_DEVICE` | `auto` | `auto` / `cpu` / `cuda`；单镜像为 CPU 版，`cuda` 仅用于 GPU sidecar |
+| `ASR_DEVICE` | `auto` | `auto` / `cpu` / `cuda`；单镜像为 CPU 版，`cuda` 仅用于自建 GPU 服务 |
 | `ASR_COMPUTE_TYPE` | `int8` | `int8` / `float16` / `float32`；CPU 推荐 int8，GPU 推荐 float16 |
 | `ASR_ENGINE` | `auto` | `auto` / `faster-whisper` / `whisper-cpp` / `cloud` |
-| `ASR_PREPROCESS` | `off` | `off` / `demucs` / `deepfilternet`；后两者仅 enhanced sidecar，单镜像会回退原始音频 |
+| `ASR_PREPROCESS` | `off` | `off` / `demucs` / `deepfilternet`；后两者仅自建增强服务，单镜像会回退原始音频 |
 | `ASR_AVAILABLE_MODELS` | `tiny,base,small,medium,large-v3,large-v3-turbo` | 设置页可下载模型列表 |
 | `ASR_WHISPER_CPP_MODELS` | 同 `ASR_AVAILABLE_MODELS` | whisper.cpp 可选模型列表 |
 | `ASR_THREADS` | `0` | whisper.cpp 推理线程数；0 表示使用 CPU 核心数 |
@@ -80,7 +80,7 @@
 | `ASR_POLL_TIMEOUT_MS` | `30000` | 单次 ASR 状态请求超时（毫秒） |
 | `ASR_JOB_IDLE_TIMEOUT_MS` | `1800000` | 任务长时间没有进度时中止（毫秒），默认 30 分钟 |
 | `ASR_JOB_ABSOLUTE_TIMEOUT_MS` | `21600000` | 单个 ASR 任务最长执行时间（毫秒），默认 6 小时 |
-| `ASR_DIARIZATION_MODEL` | `pyannote/speaker-diarization-3.1` | 说话人分离模型；仅 enhanced sidecar |
+| `ASR_DIARIZATION_MODEL` | `pyannote/speaker-diarization-3.1` | 说话人分离模型；仅自建增强服务 |
 | `HF_TOKEN` | 空 | Hugging Face Token；仅 enhanced 的说话人分离/受许可模型需要 |
 
 ## OCR 变量
@@ -127,7 +127,7 @@
 | `NODE_ENV` | `production` | 运行时环境；镜像已设置，不建议修改 |
 | `PG_TEST_DATABASE_URL` | 空 | 仅 PostgreSQL 测试使用，不用于生产 |
 
-> 拆分部署时，`ASR_*` / `OCR_*` 变量同样适用；模型目录和媒体挂载必须与 sidecar 容器一致。完整 Compose 示例和逐项注释以根目录 `docker-compose.yml` 为准。
+> 连接自行构建的外部 ASR/OCR 服务时，`ASR_*` / `OCR_*` 变量同样适用；模型目录和媒体挂载必须一致。完整 Compose 示例和逐项注释以根目录 `docker-compose.yml` 为准。
 
 ---
 

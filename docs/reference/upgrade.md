@@ -9,7 +9,6 @@
 1. 阅读 [CHANGELOG](../../CHANGELOG.md) 中目标版本的 `Upgrade Notes`。
 2. 备份数据库和密钥，见 [备份与恢复](../operations.md#备份与恢复)。
 3. 确认媒体库、模型和数据库目录都已挂载到宿主机。
-4. 拆分部署时，记录主应用、ASR、OCR 当前使用的镜像版本。
 
 ## 标准升级步骤
 
@@ -34,10 +33,6 @@ docker compose logs -f subx
 - 从旧版本跨多个版本升级时，会按顺序补齐所有未执行的 migration。
 - migration 执行前建议始终保留一份可用的 SQLite/PostgreSQL 备份。
 - 数据库 schema 版本和 migration 列表见 [维护与架构说明](../development/maintenance.md#数据库迁移)。
-
-## 拆分部署
-
-主应用、`subx-asr`、`subx-ocr` 应保持相同版本。升级主应用后同步升级 sidecar，并确认设置页中的 ASR/OCR 地址仍然可达。
 
 ## 回滚
 

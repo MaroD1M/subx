@@ -22,7 +22,7 @@ test('home visual and accessibility', async ({ page }) => {
   await expect(page.getByText('文件浏览器')).toBeVisible()
   await filesResponse
   await expect(page.getByText('Movies').first()).toBeVisible()
-  await expect(page.getByText('选择一个视频开始')).toBeVisible()
+  await expect(page.getByText('选择视频或字幕开始')).toBeVisible()
   await expect(page).toHaveScreenshot('home.png')
   await expectNoSeriousA11y(page)
 })

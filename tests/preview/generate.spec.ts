@@ -80,7 +80,7 @@ test('generate documentation preview images', async ({ page, browser }) => {
   await homeFiles
   await expect(page.getByText('文件浏览器')).toBeVisible()
   await expect(page.getByText('Movies').first()).toBeVisible()
-  await expect(page.getByText('选择一个视频开始')).toBeVisible()
+  await expect(page.getByText('选择视频或字幕开始')).toBeVisible()
   await capture(page, 'preview-home.png')
 
   await page.goto('/history')

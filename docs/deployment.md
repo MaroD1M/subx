@@ -2,7 +2,7 @@
 
 > 适用版本：v2.10.1
 
-本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理和拆分部署。升级、备份、健康检查和常见问题见[相关文档](#8-相关文档)。使用说明请参阅 [使用文档](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
+本文档覆盖单镜像部署、NAS、镜像与模型下载和反向代理。升级、备份、健康检查和常见问题见[相关文档](#8-相关文档)。使用说明请参阅 [使用文档](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
 ## 1. 架构
 
@@ -18,7 +18,7 @@ Whisper 模型体积较大且与硬件相关，**不打进镜像**。首次进�
 
 OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下载模型。
 
-拆分部署的 `subx-asr`、`subx-ocr`、增强版和 GPU 版 sidecar 仍然保留，见第 7 节。
+SubX 不再发布独立 ASR/OCR 镜像，默认使用单镜像内置服务；确有高级需求时可自行构建外部服务，见第 7 节。
 
 ## 2. Docker Compose 快速部署
 
@@ -98,15 +98,12 @@ http://<主机IP>:3000
 | `healthcheck` | 检查 `/api/health` | 首次启动 60 秒宽限期 |
 | `mem_limit` / `cpus` | 单镜像资源限制 | 默认 4GB/4 核，使用 medium/large 模型时按机器上调 |
 | `logging` | 限制容器日志大小 | 默认单文件 10MB、最多 3 个 |
-| `profiles` | 可选 PostgreSQL / sidecar | 默认不启用；单镜像不需要 ASR/OCR profile |
+| `profiles` | 可选 PostgreSQL | 默认不启用 |
 
 可选服务：
 
 - `postgres`：`--profile postgres`，启用 PostgreSQL。
-- `asr`：`--profile asr`，拆分 CPU ASR sidecar。
-- `asr-enhanced`：`--profile asr-enhanced`，Demucs / DeepFilterNet / pyannote。
-- `ocr`：`--profile ocr`，拆分 OCR sidecar。
-- `asr-gpu`：`--profile asr-gpu`，NVIDIA GPU ASR。
+- 独立 ASR/OCR 镜像已停止发布，不再提供 sidecar profile；GPU/增强需求请自行构建外部服务。
 
 ## 3. 多媒体库模式与 NAS 路径
 
@@ -247,7 +244,7 @@ environment:
 其他说明：
 
 - 默认 `ASR_AUTO_DOWNLOAD=false`，任务不会在后台静默下载模型；未下载时会给出明确错误。
-- 如果希望恢复旧 sidecar 的自动下载行为，可设置 `ASR_AUTO_DOWNLOAD=true`。
+- 如果希望恢复旧的自动下载行为，可设置 `ASR_AUTO_DOWNLOAD=true`。
 - OCR 模型已内置，不需要手动下载。
 - 下载任务元数据保存在 `/models/.subx-download-jobs.json`，容器重启后显示为「已暂停」，可继续下载。
 - 模型下载与启动时后台校验支持 Hugging Face LFS sha256；仅旧 manifest 缺元数据且当前离线时会跳过校验并记录退避时间。
@@ -281,47 +278,11 @@ location / {
 
 > 模型下载和长任务通过浏览器轮询/SSE 查看状态，反代需要允许较长的请求时间。
 
-## 7. 拆分部署与特殊硬件
+## 7. 外部 ASR/OCR 服务（高级）
 
-单镜像已经覆盖大多数 NAS。以下场景再使用 sidecar；ASR/OCR 变量见[环境变量参考](reference/environment.md)。
+SubX 不再发布独立的 `subx-asr` / `subx-ocr` 镜像，也不再提供官方 sidecar Compose profile。默认单镜像已内置 ASR/OCR，适合绝大多数 NAS。
 
-### 7.1 独立 ASR 容器
-
-```bash
-docker compose --profile asr up -d asr
-```
-
-然后在设置页把 ASR 地址改为：
-
-```text
-http://subx-asr:8000
-```
-
-独立镜像：`ghcr.io/marod1m/subx-asr:v2.10.1`。模型目录为 `./data/models/asr`。
-
-### 7.2 独立 OCR 容器
-
-```bash
-docker compose --profile ocr up -d ocr
-```
-
-设置页 OCR 地址改为 `http://subx-ocr:8000`。OCR 容器必须挂载与主应用相同的媒体目录，容器内路径也要一致。长视频分段、重试和超时参数由主应用随任务下发，设置页调整后不需要重启 OCR 容器；拆分部署时请同步升级 OCR 镜像到与主应用相同版本。
-
-### 7.3 NVIDIA GPU ASR
-
-```bash
-docker compose --profile asr-gpu up -d asr-gpu
-```
-
-设置页 ASR 地址改为 `http://subx-asr-gpu:8000`。需要 NVIDIA Container Toolkit 和可用驱动；P106-100、RX 580 等矿卡不保证兼容。
-
-### 7.4 增强 ASR（Demucs / DeepFilterNet / pyannote）
-
-```bash
-docker compose --profile asr-enhanced up -d asr-enhanced
-```
-
-设置页地址改为 `http://subx-asr-enhanced:8000`。需要说话人分离时设置 `HF_TOKEN`，并接受 pyannote 模型许可。
+确有拆分、GPU 或增强预处理需求时，可以基于仓库中的 `asr-service/`、`ocr-service/` 自行构建服务，然后在设置页填写外部地址和鉴权 Key。模型目录、媒体挂载和环境变量需与自定义服务保持一致；官方不提供这些外部镜像的版本支持和升级承诺。
 
 ---
 

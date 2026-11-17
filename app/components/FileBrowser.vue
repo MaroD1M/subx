@@ -4,7 +4,7 @@
       {{ resizeHint }}
     </div>
 
-    <div class="flex rounded-lg border border-gray-200/80 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/60 lg:hidden">
+    <div v-if="showSettingsPane" class="flex rounded-lg border border-gray-200/80 bg-gray-50 p-1 dark:border-gray-800 dark:bg-gray-900/60 lg:hidden">
       <button
         type="button"
         class="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
@@ -24,8 +24,8 @@
     </div>
 
     <div
-      class="surface-card flex min-w-0 flex-col p-3 stagger-fade-in lg:w-[var(--left-pane-width)]"
-      :class="activeMobileTab === 'files' ? 'flex' : 'hidden lg:flex'"
+      class="surface-card flex min-w-0 flex-col p-3 stagger-fade-in"
+      :class="[activeMobileTab === 'files' ? 'flex' : 'hidden lg:flex', showSettingsPane ? 'lg:w-[var(--left-pane-width)]' : 'lg:w-full']"
       :style="{ '--left-pane-width': `${leftPaneWidth}%` }"
     >
       <div class="mb-3.5 space-y-3 border-b border-gray-100/90 pb-3 dark:border-gray-800/70">
@@ -34,7 +34,6 @@
             <UIcon name="i-lucide-folder" class="h-5 w-5 shrink-0 text-primary-700" />
             <div class="min-w-0">
               <h3 class="app-section-title">文件浏览器</h3>
-              <p class="app-caption truncate">媒体库 · 目录树 · 文件选择</p>
             </div>
           </div>
           <div class="app-toolbar-row sm:justify-end" role="toolbar" aria-label="文件浏览器操作">
@@ -161,6 +160,10 @@
           <template v-for="node in displayNodes" :key="`${node.rootId || 'group'}:${node.path || node.name}`">
             <FileNodeItem :node="node" :selected-path="selectedNodeKey" :active-key="activeTreeKey" :expanded-keys="expandedNodeKeys" :selectable="batchMode" :selected-keys="selectedFileKeys" :folder-totals="folderVideoTotals" :folder-selected-counts="selectedFolderVideoCounts" :scanning-keys="folderScanningKeysArray" :search-active="Boolean(debouncedSearchQuery.trim())" @select="onSelect" @toggle-dir="toggleDirectory" @toggle-select="toggleFileSelection" />
           </template>
+          <div v-if="!batchMode && !selectedFile && displayNodes.length && !serverSearchActive" class="mt-8 flex flex-col items-center gap-2 text-center text-gray-500 dark:text-gray-400">
+            <UIcon name="i-lucide-mouse-pointer-click" class="h-6 w-6" />
+            <p class="text-xs">选择视频或字幕开始</p>
+          </div>
           <div v-if="!loadingFiles && (!displayNodes || !displayNodes.length)" class="h-full min-h-[180px] flex items-center justify-center text-center px-3">
             <div v-if="isRootUnavailable" class="space-y-3">
               <p class="text-sm font-medium text-amber-600 dark:text-amber-400">当前媒体库暂不可访问</p>
@@ -185,6 +188,7 @@
     </div>
 
     <div
+      v-if="showSettingsPane"
       class="hidden w-2 cursor-col-resize rounded-full bg-gray-200/80 transition-colors hover:bg-primary-300 focus-ring dark:bg-gray-700/80 dark:hover:bg-primary-700 lg:block"
       :class="{ 'bg-primary-400 dark:bg-primary-600': resizeMode === 'main' }"
       title="拖动调整左右分区宽度；聚焦后按左右方向键微调"
@@ -199,7 +203,7 @@
       @keydown="handleSplitterKeydown"
     />
 
-    <div ref="rightPaneRef" class="surface-card flex min-w-0 flex-1 flex-col overflow-hidden stagger-fade-in" :class="activeMobileTab === 'settings' ? 'flex' : 'hidden lg:flex'" style="animation-delay: 70ms;">
+    <div v-if="showSettingsPane" ref="rightPaneRef" class="surface-card flex min-w-0 flex-1 flex-col overflow-hidden stagger-fade-in" :class="activeMobileTab === 'settings' ? 'flex' : 'hidden lg:flex'" style="animation-delay: 70ms;">
       <div class="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100/90 px-3 py-2 dark:border-gray-800/70">
         <p class="app-caption font-medium text-gray-600 dark:text-gray-300">当前文件与设置</p>
         <UButton label="恢复默认宽度" size="xs" variant="ghost" color="neutral" icon="i-lucide-rotate-ccw" @click="resetLayout" />
@@ -621,6 +625,13 @@ const rightPaneRef = ref<HTMLElement | null>(null)
 const leftPaneWidth = ref(50)
 const rightTopHeight = ref(48)
 const resizeMode = ref<'main' | 'right' | null>(null)
+const showSettingsPane = computed(() => !batchMode.value && Boolean(selectedFile.value))
+watch(showSettingsPane, (visible) => {
+  if (!visible) {
+    activeMobileTab.value = 'files'
+    resizeMode.value = null
+  }
+})
 const LAYOUT_STORAGE_KEY = 'subx:file-browser-layout'
 const TREE_STATE_STORAGE_KEY = 'subx:file-browser-tree-state'
 const folderDialogOpen = ref(false)

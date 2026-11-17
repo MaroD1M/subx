@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   }
   const config = await ConfigService.getConfig()
   const db = useDb()
-  const job = db.prepare('SELECT batch_id, priority, retry_policy_json FROM task_jobs WHERE task_id = ?').get(taskId) as { batch_id?: string | null, priority?: number, retry_policy_json?: string } | undefined
+  const job = db.prepare('SELECT batch_id, priority, scheduled_at, retry_policy_json FROM task_jobs WHERE task_id = ?').get(taskId) as { batch_id?: string | null, priority?: number, scheduled_at?: string | null, retry_policy_json?: string } | undefined
   let retryPolicy: any = undefined
   try { retryPolicy = job?.retry_policy_json ? JSON.parse(String(job.retry_policy_json)) : undefined } catch { retryPolicy = undefined }
   db.prepare("UPDATE tasks SET pause_requested_at = NULL, updated_at = datetime('now') WHERE task_id = ?").run(taskId)
@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
   await globalTaskQueue.add(taskId, { apiKey: config.apiKey, baseUrl: config.apiBaseUrl }, {
     batchId: job?.batch_id || null,
     priority: job?.priority,
-    scheduledAt: null,
+    scheduledAt: job?.scheduled_at || null,
     retryPolicy: retryPolicy ? normalizeTaskRetryPolicy(retryPolicy) : undefined
   })
   return { success: true, status: 'queued' }

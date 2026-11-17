@@ -1,16 +1,37 @@
 <template>
   <div class="app-page">
     <div class="app-page-stack">
-      <AppSubNav :model-value="activeGroup" :items="settingsGroupItems" label="设置分组" @update:model-value="selectSettingsGroup" />
-      <AppSubNav
-        v-if="showTabNav"
-        :model-value="activeTab"
-        :items="activeGroupTabs"
-        label="设置分区"
-        @update:model-value="selectSettingsTab"
-      />
+      <div class="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
+        <aside class="hidden lg:block">
+          <nav class="sticky top-3 space-y-4" aria-label="设置导航">
+            <div v-for="group in settingsGroups" :key="group.value" class="space-y-1">
+              <p class="section-title px-2">{{ group.label }}</p>
+              <UButton
+                v-for="tab in group.tabs"
+                :key="tab.value"
+                :label="tab.label"
+                :icon="tab.icon"
+                size="sm"
+                color="neutral"
+                :variant="activeTab === tab.value ? 'soft' : 'ghost'"
+                :class="['w-full justify-start', activeTab === tab.value ? 'text-primary-700 dark:text-primary-300' : 'text-gray-600 dark:text-gray-300']"
+                :aria-current="activeTab === tab.value ? 'page' : undefined"
+                @click="selectSettingsTab(tab.value)"
+              />
+            </div>
+          </nav>
+        </aside>
 
-      <div class="min-w-0 space-y-4">
+        <div class="min-w-0 space-y-4">
+          <div class="lg:hidden">
+            <USelect
+              :model-value="activeTab"
+              :items="mobileTabItems"
+              class="w-full"
+              aria-label="设置分区"
+              @update:model-value="selectSettingsTab"
+            />
+          </div>
         <div v-if="activeTab === 'ai'" class="space-y-4">
           <SettingsAiSection
             :config="config"
@@ -385,6 +406,7 @@
         <div v-if="activeTab === 'health'" class="space-y-4">
           <LazySettingsHealthPanel />
         </div>
+        </div>
       </div>
     </div>
 
@@ -448,7 +470,7 @@ const SETTINGS_TABS: Array<{ label: string, icon: string, value: SettingsTabValu
 const SETTINGS_GROUPS: Array<{ label: string, icon: string, value: SettingsGroupValue }> = [
   { label: '连接', icon: 'i-lucide-cable', value: 'connection' },
   { label: '翻译', icon: 'i-lucide-languages', value: 'translation' },
-  { label: '智能增强', icon: 'i-lucide-brain-circuit', value: 'intelligence' },
+  { label: '增强', icon: 'i-lucide-brain-circuit', value: 'intelligence' },
   { label: '系统', icon: 'i-lucide-settings-2', value: 'system' }
 ]
 const SIMPLE_MODE_HIDDEN_TABS = new Set<SettingsTabValue>(['advanced', 'storage', 'health'])
@@ -464,18 +486,10 @@ const visibleTabs = computed(() => (
 const settingsGroups = computed(() => SETTINGS_GROUPS
   .map(group => ({ ...group, tabs: visibleTabs.value.filter(tab => tab.group === group.value) }))
   .filter(group => group.tabs.length > 0))
-const settingsGroupItems = computed(() => settingsGroups.value.map(({ label, icon, value }) => ({ label, icon, value })))
-const activeGroupTabs = computed(() => settingsGroups.value.find(group => group.value === activeGroup.value)?.tabs ?? [])
-const showTabNav = computed(() => activeGroupTabs.value.length > 1)
-
-function selectSettingsGroup(value: string) {
-  const group = settingsGroups.value.find(item => item.value === value)
-  if (!group) return
-  activeGroup.value = group.value
-  if (!group.tabs.some(tab => tab.value === activeTab.value)) {
-    activeTab.value = group.tabs[0]!.value
-  }
-}
+const mobileTabItems = computed(() => settingsGroups.value.flatMap(group => group.tabs.map(tab => ({
+  label: `${group.label} · ${tab.label}`,
+  value: tab.value
+}))))
 
 function selectSettingsTab(value: string) {
   const tab = visibleTabs.value.find(item => item.value === value)

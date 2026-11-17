@@ -2,12 +2,9 @@
   <AppContainer size="wide" class="app-page-stack pb-4">
     <PageHeader
       title="覆盖检查"
-      description="检查媒体库中视频的目标语言字幕覆盖情况，并批量补齐缺失字幕。"
+      description="检查字幕覆盖并批量补齐缺失。"
       :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '覆盖检查', icon: 'i-lucide-list-checks' }]"
     >
-      <p class="app-caption">
-        扫描覆盖会读取媒体库并探测内嵌字幕，大型媒体库可能需要较长时间。
-      </p>
       <template #actions>
         <UButton
           :label="coverage?.hasCache ? '重新扫描' : '扫描覆盖'"
@@ -30,69 +27,35 @@
     </div>
 
     <template v-else>
-      <div class="app-toolbar-card items-stretch">
-        <div class="app-toolbar">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <UFormField label="媒体库" class="w-full sm:max-w-sm">
-              <USelect v-model="selectedRootId" :items="rootItems" class="w-full" aria-label="选择媒体库" />
-            </UFormField>
-            <label class="app-field-row w-full justify-between gap-3 sm:w-auto">
-              <span class="whitespace-nowrap text-xs font-medium text-gray-600 dark:text-gray-300">包含内嵌字幕</span>
-              <USwitch v-model="includeEmbedded" aria-label="包含内嵌字幕" />
-            </label>
-          </div>
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span class="app-pill app-pill-neutral">目标语言 {{ targetLanguageLabel(activeTargetLanguage) }}</span>
-            <template v-if="coverage?.hasCache">
-              <span class="app-pill app-pill-info">扫描 {{ coverage.scanned }} 个文件</span>
-              <span class="app-pill" :class="cacheStale ? 'app-pill-warning' : 'app-pill-success'">{{ cacheStale ? '缓存可能过期' : '缓存有效' }}</span>
-              <span class="app-pill" :class="coverage.truncated ? 'app-pill-warning' : 'app-pill-success'">{{ coverage.truncated ? '结果截断' : '结果完整' }}</span>
-            </template>
-            <span v-else class="app-pill app-pill-warning">尚未扫描</span>
-            <span v-if="loading" class="app-meta inline-flex items-center gap-1.5">
-              <UIcon name="i-lucide-loader-2" class="h-3.5 w-3.5 animate-spin" />
-              正在读取缓存…
-            </span>
-          </div>
+      <div class="surface-card space-y-2.5 p-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <USelect v-model="selectedRootId" :items="rootItems" class="w-full sm:w-56" aria-label="选择媒体库" />
+          <label class="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+            内嵌字幕
+            <USwitch v-model="includeEmbedded" aria-label="包含内嵌字幕" />
+          </label>
+          <span class="app-meta">目标 {{ targetLanguageLabel(activeTargetLanguage) }}</span>
+          <span v-if="loading" class="app-meta inline-flex items-center gap-1.5">
+            <UIcon name="i-lucide-loader-2" class="h-3.5 w-3.5 animate-spin" />
+            读取缓存
+          </span>
+          <template v-else-if="coverage?.hasCache">
+            <span class="app-pill" :class="cacheStale ? 'app-pill-warning' : 'app-pill-success'">{{ cacheStale ? '缓存过期' : '缓存有效' }}</span>
+            <span v-if="coverage.truncated" class="app-pill app-pill-warning">结果截断</span>
+            <span class="app-meta">{{ coverage.cachedAt ? formatDate(coverage.cachedAt) : '' }}</span>
+          </template>
+          <span v-else class="app-pill app-pill-warning">尚未扫描</span>
         </div>
-
-        <div class="app-stat-grid">
-          <div class="app-stat">
-            <p class="app-stat-label">扫描文件</p>
-            <p class="app-stat-value text-base">{{ coverage?.hasCache ? coverage.scanned : '—' }}</p>
+        <div v-if="coverage?.hasCache" class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <span class="text-sm font-semibold text-gray-800 dark:text-gray-100">已完成 <span class="tabular-nums">{{ summary.done }}</span>/{{ summary.total }}</span>
+          <span class="app-meta">缺失 {{ summary.missing }}<template v-if="summary.review"> · 待核对 {{ summary.review }}</template><template v-if="summary.failed"> · 失败 {{ summary.failed }}</template></span>
+          <div class="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+            <div class="h-full rounded-full bg-emerald-500 transition-all" :style="{ width: `${coverageRate}%` }" />
           </div>
-          <div class="app-stat">
-            <p class="app-stat-label">缺失文件</p>
-            <p class="app-stat-value text-base" :class="coverage?.hasCache && summary.missing ? 'text-orange-600 dark:text-orange-400' : ''">
-              {{ coverage?.hasCache ? summary.missing : '—' }}
-            </p>
-          </div>
-          <div class="app-stat">
-            <p class="app-stat-label">已完成</p>
-            <p class="app-stat-value text-base">{{ coverage?.hasCache ? summary.done : '—' }}</p>
-          </div>
-          <div class="app-stat">
-            <p class="app-stat-label">缓存时间</p>
-            <p class="mt-0.5 truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{{ coverage?.cachedAt ? formatDate(coverage.cachedAt) : '尚未扫描' }}</p>
-            <p v-if="coverage?.hasCache" class="app-meta">{{ cacheStale ? '建议重新扫描' : '缓存较新' }}</p>
-          </div>
+          <span class="app-meta tabular-nums">{{ coverageRate }}%</span>
         </div>
-
-        <p class="app-caption">
-          缺失表示该视频还没有目标语言字幕；处理中、待核对和失败会关联当前翻译任务。勾选缺失文件后即可批量创建翻译任务。
-        </p>
-        <div v-if="coverage?.hasCache" class="app-info-banner app-info-warning">
-          <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>结果来自缓存，媒体库变动后请重新扫描。</span>
-        </div>
+        <p v-if="coverage?.hasCache && cacheStale" class="text-xs text-amber-600 dark:text-amber-400">媒体库已变化，建议重新扫描。</p>
       </div>
-
-      <CoverageHealthCard
-        v-if="coverage?.hasCache"
-        :summary="summary"
-        :active-status="statusFilter"
-        @select="statusFilter = statusFilter === $event ? 'all' : $event"
-      />
 
       <CoverageAutoFillPanel
         v-model:root-id="selectedRootId"
@@ -149,7 +112,7 @@
       </div>
 
       <template v-else>
-        <section class="app-section space-y-3 p-3 sm:p-4">
+        <section class="app-toolbar-card space-y-2">
           <div class="app-toolbar">
             <div class="flex flex-wrap gap-1.5" role="group" aria-label="状态筛选">
               <UButton
@@ -235,8 +198,8 @@
             <UButton label="清空筛选" size="xs" color="neutral" variant="soft" @click="clearFilters" />
           </div>
 
-          <div v-else class="space-y-2">
-            <section v-for="group in visibleGroups" :key="group.key" class="app-section overflow-hidden p-0 sm:p-0">
+          <div v-else class="surface-card divide-y divide-gray-100 overflow-hidden dark:divide-gray-800">
+            <section v-for="group in visibleGroups" :key="group.key">
               <button
                 type="button"
                 class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-900/40 sm:px-4"
@@ -479,6 +442,8 @@ const summary = computed<CoverageSummary>(() => coverage.value?.summary || {
   failed: 0,
   missing: 0
 })
+
+const coverageRate = computed(() => summary.value.total > 0 ? Math.round((summary.value.done / summary.value.total) * 100) : 0)
 
 const statusTabs = computed(() => [
   { value: 'all' as const, label: '全部', count: summary.value.total },

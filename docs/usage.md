@@ -9,7 +9,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [快速开始](getting-started.md) | 首次访问、AI 接口、媒体库、第一个翻译任务、任务管理 |
-| [部署文档](deployment.md) | Docker Compose、NAS 路径、反向代理和拆分部署 |
+| [部署文档](deployment.md) | Docker Compose、NAS 路径和反向代理 |
 
 ## 功能文档
 
@@ -35,7 +35,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [维护与架构说明](development/maintenance.md) | 目录职责、共享缓存、数据库迁移和发版流程 |
-| [实测指南](development/testing-guide.md) | 真实 NAS、单镜像和 sidecar 回归清单 |
+| [实测指南](development/testing-guide.md) | 真实 NAS 和单镜像回归清单 |
 | [ASR 基准](development/asr-benchmark.md) | 11 语言基准脚本与结果模板 |
 | [PostgreSQL 运行时](development/postgresql.md) | 可选 PostgreSQL 运行时与迁移 |
 
