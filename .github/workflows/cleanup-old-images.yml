@@ -7,6 +7,11 @@ on:
         description: '额外保留的 tag，逗号分隔（可选）'
         required: false
         type: string
+      keep_releases:
+        description: '保留最近几个正式 release（默认 2）'
+        required: false
+        default: '2'
+        type: string
   schedule:
     - cron: '23 4 * * 0'
 
@@ -28,12 +33,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           EXTRA_KEEP: ${{ github.event.inputs.keep_version }}
+          KEEP_RELEASES: ${{ github.event.inputs.keep_releases || '2' }}
         run: |
           set -euo pipefail
           OWNER_LOWER="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
           KEEP_FILE="$(mktemp)"
 
-          RELEASES="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 3 --json tagName --jq '.[].tagName')"
+          KEEP_RELEASES="$(printf '%s' "${KEEP_RELEASES:-2}" | tr -cd '0-9')"
+          [ -n "$KEEP_RELEASES" ] || KEEP_RELEASES=2
+          RELEASES="$(gh release list --repo "$GITHUB_REPOSITORY" --limit "$KEEP_RELEASES" --json tagName --jq '.[].tagName')"
           if [ -z "$RELEASES" ] && [ -z "${EXTRA_KEEP:-}" ]; then
             echo "::error::No releases found and no extra keep tags; refusing to delete everything."
             exit 1
@@ -90,6 +98,8 @@ jobs:
               continue
             fi
 
+            count=$(grep -c . /tmp/versions.tsv 2>/dev/null || true)
+            echo "Inspecting $count versions in $pkg"
             while IFS=$'\t' read -r id tags; do
               [ -z "$id" ] && continue
               [ -z "$tags" ] && continue
