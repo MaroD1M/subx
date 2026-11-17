@@ -18,58 +18,154 @@
       </div>
     </div>
 
-    <div v-if="showQueuePanel" class="surface-card p-3">
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="flex min-w-0 flex-1 items-center gap-2">
+    <div v-if="showQueuePanel" class="surface-card overflow-hidden">
+      <div class="flex flex-wrap items-center gap-2 px-3 py-2.5">
+        <button
+          type="button"
+          class="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left focus-ring"
+          :aria-expanded="queueExpanded"
+          aria-controls="history-queue-content"
+          @click="queueExpanded = !queueExpanded"
+        >
           <UIcon name="i-lucide-activity" class="h-4 w-4 shrink-0" :class="queueControl?.paused ? 'text-amber-500' : 'text-primary-600 dark:text-primary-400'" />
-          <span class="text-sm font-medium">{{ queueControl?.paused ? '队列已暂停' : '队列' }}</span>
-          <span class="app-meta truncate">
-            <template v-if="queueJobs?.queued">排队 {{ queueJobs.queued }}</template>
-            <template v-if="queueJobs?.running"> · 运行 {{ queueJobs.running }}</template>
-            <template v-if="queueJobs?.paused"> · 暂停 {{ queueJobs.paused }}</template>
+          <span class="shrink-0 text-sm font-medium">{{ queueControl?.paused ? '队列已暂停' : '任务队列' }}</span>
+          <span class="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span v-if="queueJobs?.running" class="app-pill app-pill-primary">运行 {{ queueJobs.running }}</span>
+            <span v-if="queueJobs?.queued" class="app-pill app-pill-info">等待 {{ queueJobs.queued }}</span>
+            <span v-if="queueJobs?.paused" class="app-pill app-pill-warning">暂停 {{ queueJobs.paused }}</span>
+            <span v-if="activeBatches.length" class="app-pill app-pill-neutral">批次 {{ activeBatches.length }}</span>
           </span>
-        </div>
+          <UIcon name="i-lucide-chevron-down" class="ml-auto h-4 w-4 shrink-0 text-gray-400 transition-transform" :class="{ 'rotate-180': queueExpanded }" />
+        </button>
         <UButton
-          v-if="!queueControl?.paused"
-          icon="i-lucide-pause"
+          :label="queueControl?.paused ? '恢复队列' : '暂停队列'"
+          :icon="queueControl?.paused ? 'i-lucide-play' : 'i-lucide-pause'"
           size="xs"
-          color="warning"
+          :color="queueControl?.paused ? 'primary' : 'warning'"
           variant="soft"
           :loading="queueUpdating"
-          aria-label="暂停队列"
-          title="暂停队列"
-          @click="setQueuePaused(true)"
-        />
-        <UButton
-          v-else
-          icon="i-lucide-play"
-          size="xs"
-          color="primary"
-          variant="soft"
-          :loading="queueUpdating"
-          aria-label="恢复队列"
-          title="恢复队列"
-          @click="setQueuePaused(false)"
+          @click="setQueuePaused(!queueControl?.paused)"
         />
       </div>
 
-      <div v-if="activeBatches.length" class="mt-2.5 space-y-1.5 border-t border-gray-100 pt-2.5 dark:border-gray-800">
-        <div v-for="batch in activeBatches" :key="batch.id" class="rounded-lg bg-gray-50/70 px-2.5 py-2 dark:bg-gray-900/40">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ batch.name || '未命名批次' }}</span>
-            <span v-if="batch.priority" class="app-meta whitespace-nowrap" title="优先级">P{{ batch.priority }}</span>
-            <span class="app-pill" :class="batchStatusClass(batch.status)">{{ batchStatusLabel(batch.status) }}</span>
-            <span class="app-meta whitespace-nowrap tabular-nums">{{ batch.completedCount }}/{{ batch.taskCount }}<template v-if="batch.failedCount"> · 失败 {{ batch.failedCount }}</template></span>
-            <span v-if="batch.scheduledAt && batch.status === 'scheduled'" class="app-meta whitespace-nowrap">{{ formatDate(batch.scheduledAt) }}</span>
-            <div class="flex shrink-0 items-center">
-              <UButton v-if="batch.status === 'paused'" icon="i-lucide-play" size="xs" color="primary" variant="ghost" :loading="batchActionId === batch.id" aria-label="恢复批次" title="恢复批次" @click="resumeBatch(batch.id)" />
-              <UButton v-else-if="['queued', 'scheduled', 'running'].includes(batch.status)" icon="i-lucide-pause" size="xs" color="warning" variant="ghost" :loading="batchActionId === batch.id" aria-label="暂停批次" title="暂停批次" @click="pauseBatch(batch.id)" />
-              <UButton v-if="batch.failedCount" icon="i-lucide-refresh-cw" size="xs" color="warning" variant="ghost" :loading="batchActionId === batch.id" aria-label="重试失败任务" title="重试失败任务" @click="retryFailedBatch(batch.id)" />
-              <UButton v-if="!['completed', 'failed', 'cancelled'].includes(batch.status)" icon="i-lucide-octagon-x" size="xs" color="error" variant="ghost" :loading="batchActionId === batch.id" aria-label="取消批次" title="取消批次" @click="cancelBatch(batch.id)" />
+      <div v-if="queueExpanded" id="history-queue-content" class="border-t border-gray-100 dark:border-gray-800">
+        <div v-if="!queueSections.length && !activeBatches.length" class="px-3 py-6 text-center">
+          <UIcon name="i-lucide-list-checks" class="mx-auto h-6 w-6 text-gray-300 dark:text-gray-600" />
+          <p class="app-caption mt-2">当前没有运行中或等待中的任务</p>
+        </div>
+
+        <section v-for="section in queueSections" :key="section.key">
+          <div class="flex items-center gap-2 border-b border-gray-100 bg-gray-50/70 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-900/35">
+            <UIcon :name="section.icon" class="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+            <span class="text-xs font-semibold text-gray-600 dark:text-gray-300">{{ section.label }}</span>
+            <span class="app-meta">{{ section.tasks.length }}</span>
+            <span v-if="section.key === 'waiting'" class="app-meta ml-auto">按优先级从高到低</span>
+          </div>
+          <div class="divide-y divide-gray-100 dark:divide-gray-800">
+            <div v-for="task in section.tasks" :key="task.taskId" class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:gap-3">
+              <div class="flex min-w-0 flex-1 items-start gap-2.5">
+                <span v-if="section.key === 'waiting'" class="mt-0.5 w-7 shrink-0 text-center text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-400">{{ '#' + waitingPositions.get(task.taskId) }}</span>
+                <UIcon v-else :name="section.key === 'running' ? 'i-lucide-loader-2' : 'i-lucide-pause'" class="mt-0.5 h-4 w-4 shrink-0" :class="section.key === 'running' ? 'animate-spin text-sky-500' : 'text-amber-500'" />
+
+                <div class="min-w-0 flex-1 space-y-1">
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p class="min-w-0 break-all text-sm font-medium text-gray-800 dark:text-gray-100">{{ fileName(task.filePath) }}</p>
+                    <AppStatusBadge :status="statusBadgeStatus(task)" :label="statusBadgeLabel(task)" />
+                    <span class="app-pill app-pill-neutral tabular-nums" title="队列优先级">P{{ task.priority }}</span>
+                    <span class="app-meta">{{ targetLanguageLabel(task.targetLanguage) }}</span>
+                    <span v-if="task.batchName" class="app-meta truncate">{{ task.batchName }}</span>
+                  </div>
+                  <p v-if="task.stepMessage" class="app-meta break-all">{{ task.stepMessage }}</p>
+                  <div v-if="section.key !== 'waiting' || task.pauseRequested" class="flex items-center gap-2">
+                    <div class="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                      <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${Math.max(0, Math.min(100, Number(task.progress) || 0))}%` }" />
+                    </div>
+                    <span class="app-meta shrink-0 tabular-nums">{{ task.progress }}%</span>
+                  </div>
+                  <p v-else-if="task.scheduledAt" class="app-meta">计划 {{ formatDate(task.scheduledAt) }}</p>
+                </div>
+              </div>
+
+              <div class="flex shrink-0 items-center gap-1 pl-9 sm:pl-0">
+                <div v-if="canChangeQueuePriority(task)" class="inline-flex items-center gap-0.5 rounded-lg border border-gray-100 bg-gray-50/70 p-0.5 dark:border-gray-800 dark:bg-gray-900/40">
+                  <UButton
+                    icon="i-lucide-arrow-up"
+                    variant="ghost"
+                    color="neutral"
+                    size="xs"
+                    :loading="queueActionId === task.taskId"
+                    :aria-label="`提高优先级 ${fileName(task.filePath)}`"
+                    title="提高优先级"
+                    @click="changePriority(task, 10)"
+                  />
+                  <UButton
+                    icon="i-lucide-arrow-down"
+                    variant="ghost"
+                    color="neutral"
+                    size="xs"
+                    :loading="queueActionId === task.taskId"
+                    :aria-label="`降低优先级 ${fileName(task.filePath)}`"
+                    title="降低优先级"
+                    @click="changePriority(task, -10)"
+                  />
+                </div>
+                <UButton
+                  v-if="canPauseQueue(task)"
+                  icon="i-lucide-pause"
+                  variant="soft"
+                  color="warning"
+                  size="xs"
+                  :loading="queueActionId === task.taskId"
+                  :aria-label="`暂停 ${fileName(task.filePath)}`"
+                  title="暂停任务"
+                  @click="pauseTask(task.taskId)"
+                />
+                <UButton
+                  v-if="task.status === 'paused' && !task.pauseRequested"
+                  icon="i-lucide-play"
+                  variant="soft"
+                  color="primary"
+                  size="xs"
+                  :loading="resumingTaskId === task.taskId"
+                  :aria-label="`继续 ${fileName(task.filePath)}`"
+                  title="继续任务"
+                  @click="resumeTask(task.taskId)"
+                />
+                <UButton icon="i-lucide-eye" variant="ghost" color="neutral" size="xs" title="查看详情" aria-label="查看详情" :to="`/task/${task.taskId}`" />
+              </div>
             </div>
           </div>
-          <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-gray-200/70 dark:bg-gray-800">
-            <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${batch.taskCount ? Math.round(batch.completedCount / batch.taskCount * 100) : 0}%` }" />
+        </section>
+
+        <div v-if="queueData?.tasksTruncated" class="border-t border-gray-100 px-3 py-2 dark:border-gray-800">
+          <p class="app-meta">任务较多，当前只展示前 200 个队列任务。</p>
+        </div>
+
+        <div v-if="activeBatches.length" class="border-t border-gray-100 dark:border-gray-800">
+          <div class="flex items-center gap-2 border-b border-gray-100 bg-gray-50/70 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-900/35">
+            <UIcon name="i-lucide-layers" class="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+            <span class="text-xs font-semibold text-gray-600 dark:text-gray-300">批次</span>
+            <span class="app-meta">{{ activeBatches.length }}</span>
+          </div>
+          <div class="space-y-1.5 p-3">
+            <div v-for="batch in activeBatches" :key="batch.id" class="rounded-lg bg-gray-50/70 px-2.5 py-2 dark:bg-gray-900/40">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ batch.name || '未命名批次' }}</span>
+                <span v-if="batch.priority" class="app-meta whitespace-nowrap" title="优先级">P{{ batch.priority }}</span>
+                <span class="app-pill" :class="batchStatusClass(batch.status)">{{ batchStatusLabel(batch.status) }}</span>
+                <span class="app-meta whitespace-nowrap tabular-nums">{{ batch.completedCount }}/{{ batch.taskCount }}<template v-if="batch.failedCount"> · 失败 {{ batch.failedCount }}</template></span>
+                <span v-if="batch.scheduledAt && batch.status === 'scheduled'" class="app-meta whitespace-nowrap">{{ formatDate(batch.scheduledAt) }}</span>
+                <div class="flex shrink-0 items-center">
+                  <UButton v-if="batch.status === 'paused'" icon="i-lucide-play" size="xs" color="primary" variant="ghost" :loading="batchActionId === batch.id" aria-label="恢复批次" title="恢复批次" @click="resumeBatch(batch.id)" />
+                  <UButton v-else-if="['queued', 'scheduled', 'running'].includes(batch.status)" icon="i-lucide-pause" size="xs" color="warning" variant="ghost" :loading="batchActionId === batch.id" aria-label="暂停批次" title="暂停批次" @click="pauseBatch(batch.id)" />
+                  <UButton v-if="batch.failedCount" icon="i-lucide-refresh-cw" size="xs" color="warning" variant="ghost" :loading="batchActionId === batch.id" aria-label="重试失败任务" title="重试失败任务" @click="retryFailedBatch(batch.id)" />
+                  <UButton v-if="!['completed', 'failed', 'cancelled'].includes(batch.status)" icon="i-lucide-octagon-x" size="xs" color="error" variant="ghost" :loading="batchActionId === batch.id" aria-label="取消批次" title="取消批次" @click="cancelBatch(batch.id)" />
+                </div>
+              </div>
+              <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-gray-200/70 dark:bg-gray-800">
+                <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${batch.taskCount ? Math.round(batch.completedCount / batch.taskCount * 100) : 0}%` }" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -109,7 +205,7 @@
         <template #progress-cell="{ row }">
           <div class="min-w-[88px] whitespace-nowrap">
             <span class="text-sm font-medium tabular-nums text-gray-700 dark:text-gray-300">{{ isActiveStatus(row.original.status) || row.original.status === 'paused' || row.original.pauseRequested ? `${row.original.progress}%` : row.original.status === 'review' ? '待核对' : '—' }}</span>
-            <p v-if="(isActiveStatus(row.original.status) || row.original.status === 'paused' || row.original.pauseRequested) && row.original.stepMessage" class="mt-0.5 max-w-[180px] truncate text-xs font-normal text-gray-400 dark:text-gray-500">{{ row.original.stepMessage }}</p>
+            <p v-if="(isActiveStatus(row.original.status) || row.original.status === 'paused' || row.original.pauseRequested) && row.original.stepMessage" class="mt-0.5 max-w-[180px] truncate text-xs font-normal text-gray-500 dark:text-gray-400">{{ row.original.stepMessage }}</p>
           </div>
         </template>
 
@@ -138,8 +234,8 @@
                 color="warning"
                 size="xs"
                 :loading="queueActionId === row.original.taskId"
-                title="暂停排队"
-                aria-label="暂停排队"
+                :title="row.original.queueStatus === 'running' ? '暂停任务' : '暂停排队'"
+                :aria-label="row.original.queueStatus === 'running' ? '暂停任务' : '暂停排队'"
                 @click="pauseTask(row.original.taskId)"
               />
               <UButton
@@ -321,9 +417,20 @@ const { data: batchData, refresh: refreshBatches } = await useFetch('/api/task-b
 const queueControl = computed(() => queueData.value?.control)
 const queueJobs = computed(() => queueData.value?.jobs)
 const queueUpdating = ref(false)
+const queueExpanded = ref(false)
+const queueTasks = computed(() => queueData.value?.tasks || [])
+const queueRunningTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'running'))
+const queueWaitingTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'queued'))
+const queuePausedTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'paused'))
+const queueSections = computed(() => [
+  { key: 'running', label: '运行中', icon: 'i-lucide-activity', tasks: queueRunningTasks.value },
+  { key: 'waiting', label: '等待中', icon: 'i-lucide-clock-3', tasks: queueWaitingTasks.value },
+  { key: 'paused', label: '已暂停', icon: 'i-lucide-pause', tasks: queuePausedTasks.value }
+].filter(section => section.tasks.length > 0))
+const waitingPositions = computed(() => new Map(queueWaitingTasks.value.map((task, index) => [task.taskId, index + 1])))
 const batchActionId = ref('')
 const activeBatches = computed(() => (batchData.value?.batches || []).filter(batch => ['scheduled', 'queued', 'running', 'paused'].includes(String(batch.status))))
-const showQueuePanel = computed(() => Boolean(queueControl.value?.paused || activeBatches.value.length || queueJobs.value?.queued || queueJobs.value?.running))
+const showQueuePanel = computed(() => Boolean(queueControl.value?.paused || activeBatches.value.length || queueTasks.value.length || queueJobs.value?.queued || queueJobs.value?.running))
 watch(searchQuery, (value) => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   searchDebounceTimer = setTimeout(() => {
@@ -526,9 +633,13 @@ async function retryTask(taskId) {
 async function pauseTask(taskId) {
   queueActionId.value = taskId
   try {
-    await $fetch(`/api/tasks/${taskId}/pause`, { method: 'POST' })
-    toast.add({ title: '已暂停排队', description: '恢复后会重新加入队列', color: 'success' })
-    await refresh()
+    const result = await $fetch(`/api/tasks/${taskId}/pause`, { method: 'POST' })
+    toast.add({
+      title: result?.pending ? '正在暂停' : '已暂停任务',
+      description: result?.pending ? '当前识别分段完成后暂停，已完成进度会保留' : '恢复后会重新加入队列',
+      color: 'success'
+    })
+    await Promise.all([refresh(), refreshQueue()])
   } catch (e) {
     toast.add({ title: '暂停失败', description: e?.data?.message || e?.message || '无法暂停任务', color: 'error' })
   } finally {
@@ -542,7 +653,7 @@ async function changePriority(task, delta) {
   try {
     await $fetch(`/api/tasks/${task.taskId}/priority`, { method: 'POST', body: { priority: next } })
     toast.add({ title: `优先级已调整为 P${next}`, description: '数值越大越先执行', color: 'success' })
-    await refresh()
+    await Promise.all([refresh(), refreshQueue()])
   } catch (e) {
     toast.add({ title: '优先级调整失败', description: e?.data?.message || e?.message || '请稍后重试', color: 'error' })
   } finally {
@@ -561,7 +672,7 @@ async function cancelTask(taskId) {
   try {
     await $fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' })
     toast.add({ title: '任务已取消', color: 'success' })
-    await refresh()
+    await Promise.all([refresh(), refreshQueue()])
   } catch (e) {
     toast.add({ title: '取消失败', description: e?.data?.message || e?.message || '无法取消任务', color: 'error' })
   } finally {
@@ -574,7 +685,7 @@ async function resumeTask(taskId) {
   try {
     await $fetch(`/api/tasks/${taskId}/resume`, { method: 'POST' })
     toast.add({ title: '已恢复', description: '任务将复用已完成的识别分段继续执行', color: 'success' })
-    await refresh()
+    await Promise.all([refresh(), refreshQueue()])
   } catch (e) {
     toast.add({ title: '恢复失败', description: e?.data?.message || '无法恢复任务', color: 'error' })
   } finally {
@@ -617,8 +728,14 @@ function downloadSubtitle(taskId, format) {
 }
 
 function canPauseQueue(task) {
-  return !['paused', 'done', 'error', 'cancelled', 'review'].includes(String(task?.status || ''))
-    && ['queued', 'retrying'].includes(String(task?.queueStatus || task?.status || ''))
+  const status = String(task?.status || '')
+  if (task?.pauseRequested || ['paused', 'done', 'error', 'cancelled', 'review'].includes(status)) return false
+  const queueStatus = String(task?.queueStatus || '')
+  if (queueStatus === 'running') {
+    return String(task?.sourceType || '') === 'asr'
+      && !['parsing', 'translating', 'exporting'].includes(status)
+  }
+  return ['queued', 'retrying'].includes(queueStatus || status)
 }
 
 function canChangeQueuePriority(task) {
@@ -653,7 +770,11 @@ function rowActionItems(task) {
     if (status === 'paused') {
       items.push({ label: '继续排队', icon: 'i-lucide-play', onSelect: () => resumeTask(task.taskId) })
     } else if (canPauseQueue(task)) {
-      items.push({ label: '暂停排队', icon: 'i-lucide-pause', onSelect: () => pauseTask(task.taskId) })
+      items.push({
+        label: String(task?.queueStatus) === 'running' ? '暂停任务' : '暂停排队',
+        icon: 'i-lucide-pause',
+        onSelect: () => pauseTask(task.taskId)
+      })
     }
     if (canChangeQueuePriority(task)) {
       items.push(

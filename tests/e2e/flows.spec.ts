@@ -519,6 +519,42 @@ test('media library edits save without leaving the page', async ({ page }) => {
   await expect(page.getByPlaceholder('例如：电影库 / 剧集库')).toHaveValue('影视库')
 })
 
+test('history queue panel expands and adjusts a waiting task', async ({ page }) => {
+  const db = new Database(String(process.env.DB_PATH))
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO tasks (task_id, file_path, root_id, model, status, progress, step_message)
+      VALUES ('queue-ui-task', 'Shows/Demo Show/Queue.UI.Test.zh.srt', 'default', 'm', 'queued', 0, '等待执行')
+    `).run()
+    db.prepare(`
+      INSERT OR REPLACE INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, priority, created_at, updated_at)
+      VALUES ('queue-ui-task', 'queued', 0, 3, datetime('now', '+1 hour'), 5, datetime('now'), datetime('now'))
+    `).run()
+
+    await page.goto('/history')
+    await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+    const queueToggle = page.getByRole('button', { name: /任务队列/ })
+    await expect(queueToggle).toHaveAttribute('aria-expanded', 'false')
+    await queueToggle.click()
+    await expect(queueToggle).toHaveAttribute('aria-expanded', 'true')
+    const queueContent = page.locator('#history-queue-content')
+    await expect(queueContent.getByText('等待中')).toBeVisible()
+    await expect(queueContent.getByText('Queue.UI.Test.zh.srt')).toBeVisible()
+    await expect(queueContent.getByText('P5', { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: '提高优先级 Queue.UI.Test.zh.srt' }).click()
+    await expect(queueContent.getByText('P15', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '暂停 Queue.UI.Test.zh.srt' }).click()
+    await expect(queueContent.getByText('已暂停').first()).toBeVisible()
+    await expectNoSeriousA11y(page)
+  } finally {
+    db.prepare("DELETE FROM task_jobs WHERE task_id = 'queue-ui-task'").run()
+    db.prepare("DELETE FROM task_logs WHERE task_id = 'queue-ui-task'").run()
+    db.prepare("DELETE FROM tasks WHERE task_id = 'queue-ui-task'").run()
+    db.close()
+  }
+})
+
 test.describe('tablet', () => {
   test.use({ viewport: { width: 900, height: 900 } })
 

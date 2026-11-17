@@ -1167,7 +1167,9 @@ describe('core API integration', () => {
   it('exposes task queue and batch status endpoints', async () => {
     const queue = await apiFetch('/api/task-queue', { headers: { cookie } })
     expect(queue.status).toBe(200)
-    expect(await queue.json()).toHaveProperty('control')
+    const queuePayload = await queue.json() as any
+    expect(queuePayload).toHaveProperty('control')
+    expect(Array.isArray(queuePayload.tasks)).toBe(true)
 
     const batches = await apiFetch('/api/task-batches', { headers: { cookie } })
     expect(batches.status).toBe(200)
