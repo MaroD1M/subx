@@ -86,11 +86,20 @@
         </div>
       </div>
       <div class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 dark:border-gray-800">
-        <span class="app-meta">第 {{ data?.page || 1 }} / {{ totalPages }} 页</span>
-        <div class="flex items-center gap-1.5">
+        <span class="app-meta">第 {{ filters.page }} / {{ totalPages }} 页</span>
+        <div class="flex flex-wrap items-center justify-end gap-1.5">
           <USelect v-model="filters.pageSize" :items="pageSizeItems" size="xs" class="w-24" aria-label="每页条数" />
-          <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="(data?.page || 1) <= 1" @click="filters.page -= 1" />
-          <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="(data?.page || 1) >= totalPages" @click="filters.page += 1" />
+          <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="filters.page <= 1" @click="filters.page -= 1" />
+          <UButton
+            v-for="pageNumber in pageNumbers"
+            :key="pageNumber"
+            :label="String(pageNumber)"
+            size="xs"
+            :color="pageNumber === filters.page ? 'primary' : 'neutral'"
+            :variant="pageNumber === filters.page ? 'solid' : 'ghost'"
+            @click="filters.page = pageNumber"
+          />
+          <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="filters.page >= totalPages" @click="filters.page += 1" />
         </div>
       </div>
     </div>
@@ -275,7 +284,7 @@ const filters = reactive({
   sourceLang: '',
   targetLang: '',
   page: 1,
-  pageSize: 50
+  pageSize: 20
 })
 const advancedFilterCount = computed(() => [
   filters.enabled !== 'all',
@@ -304,8 +313,20 @@ const { data, pending, error, refresh } = await useFetch('/api/glossary', { quer
 const entries = computed<GlossaryEntry[]>(() => (data.value as any)?.entries || [])
 const errorMessage = computed(() => (error.value as any)?.data?.message || (error.value as any)?.message || '请稍后重试')
 const totalPages = computed(() => Math.max(1, Math.ceil(Number((data.value as any)?.total || 0) / filters.pageSize)))
+const pageNumbers = computed(() => {
+  const total = totalPages.value
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1)
+  const start = Math.max(1, Math.min(filters.page - 2, total - 4))
+  return Array.from({ length: 5 }, (_, index) => start + index)
+})
 
 watch(() => [filters.q, filters.scopeType, filters.scopeKey, filters.enabled, filters.sourceLang, filters.targetLang, filters.pageSize], () => { filters.page = 1 })
+watch(totalPages, (total) => {
+  if (filters.page > total) filters.page = total
+})
+watch(() => filters.page, () => {
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+})
 
 const editorOpen = ref(false)
 const saving = ref(false)

@@ -725,17 +725,18 @@ export const SubtitleService = {
     const translatedFirst = bilingualLayout !== 'original_first'
     const original = { ...style.original }
     const translated = { ...style.translated }
+    const lineAdvance = (fontSize: number) => Math.ceil(fontSize * 1.2)
     let originalMargin = original.marginV
     let translatedMargin = translated.marginV
     if (original.alignment === translated.alignment) {
       const alignment = translated.alignment
       if (alignment === 'bottom') {
-        if (translatedFirst) translatedMargin = original.marginV + original.fontSize + style.lineGap
-        else originalMargin = translated.marginV + translated.fontSize + style.lineGap
+        if (translatedFirst) translatedMargin = original.marginV + lineAdvance(original.fontSize) + style.lineGap
+        else originalMargin = translated.marginV + lineAdvance(translated.fontSize) + style.lineGap
       } else if (translatedFirst) {
-        originalMargin = translated.marginV + translated.fontSize + style.lineGap
+        originalMargin = translated.marginV + lineAdvance(translated.fontSize) + style.lineGap
       } else {
-        translatedMargin = original.marginV + original.fontSize + style.lineGap
+        translatedMargin = original.marginV + lineAdvance(original.fontSize) + style.lineGap
       }
     }
 

@@ -288,7 +288,7 @@ const { confirm } = useConfirm()
 const timeZone = useTimeZone()
 
 const page = ref(1)
-const pageSize = ref(50)
+const pageSize = ref(20)
 const pageSizeItems = [
   { label: '20 条/页', value: 20 },
   { label: '50 条/页', value: 50 },

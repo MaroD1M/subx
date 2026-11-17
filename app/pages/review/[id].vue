@@ -650,7 +650,7 @@ const reasonFilter = ref('all')
 const confidenceFilter = ref('all')
 const qualityFilter = ref('all')
 const guideOpen = ref(false)
-const pageSize = ref(50)
+const pageSize = ref(20)
 const currentPage = ref(1)
 const pageSizeItems = [
   { label: '20 条/页', value: 20 },
@@ -2389,9 +2389,6 @@ async function resumeActiveReviewJob() {
 }
 
 onMounted(async () => {
-  if (window.matchMedia('(max-width: 767px)').matches) {
-    pageSize.value = 20
-  }
   window.addEventListener('beforeunload', handleBeforeUnload)
   window.addEventListener('keydown', handleShortcut)
   try {

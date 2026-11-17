@@ -1,5 +1,6 @@
 import { apiError } from '../utils/apiError'
 import { SubtitleService, safePath } from '../utils/subtitle'
+import { mergePreviewEntries } from '../utils/subtitlePreview'
 
 export default defineEventHandler(async (event) => {
   const { path, rootId } = getQuery(event) as { path: string, rootId?: string }
@@ -11,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const fullPath = await safePath(path, rootId)
 
   try {
-    const entries = await SubtitleService.parseSubtitle(fullPath)
+    const entries = mergePreviewEntries(await SubtitleService.parseSubtitle(fullPath))
     return {
       entries: entries.slice(0, 50),
       total: entries.length

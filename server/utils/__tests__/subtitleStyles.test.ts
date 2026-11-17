@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { SubtitleService } from '../subtitle'
-import { buildSubtitleFontOptions, createSubtitleStyle, getSubtitleStylePresetLabel, getSubtitleStylePresetOptions, hexToAssColor, isFontInstalled, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '../../../shared/subtitleStyles'
+import { SUBTITLE_STYLE_PRESETS, buildSubtitleFontOptions, createSubtitleStyle, getSubtitleStylePresetLabel, getSubtitleStylePresetOptions, hexToAssColor, isFontInstalled, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '../../../shared/subtitleStyles'
 import { STYLE_PRESETS } from '../../../shared/stylePresets'
 import type { SubtitleEntry } from '../../../types'
 
@@ -116,6 +116,23 @@ describe('structured ASS output', () => {
     expect(parsed.events.dialogue[0].Style).toBe('SubX-Original')
     expect(parsed.events.dialogue[1].Style).toBe('SubX-Translated')
     expect(Number(original.MarginV)).toBeGreaterThan(Number(translated.MarginV))
+  })
+
+  it('keeps the selected top line above the bottom line for every bilingual preset', () => {
+    for (const preset of SUBTITLE_STYLE_PRESETS.filter(item => item.mode === 'bilingual')) {
+      const style = createSubtitleStyle(preset.value, 'bilingual')
+      for (const layout of ['translated_first', 'original_first'] as const) {
+        const content = SubtitleService.buildStyledAssContent(entries, 'bilingual', layout, style)
+        const parsed = parseAss(content) as any
+        const translated = parsed.styles.style.find((item: any) => item.Name === 'SubX-Translated')
+        const original = parsed.styles.style.find((item: any) => item.Name === 'SubX-Original')
+        const top = layout === 'translated_first' ? translated : original
+        const bottom = layout === 'translated_first' ? original : translated
+        const bottomLineHeight = Math.ceil(Number(bottom.Fontsize) * 1.2)
+        expect(parsed.events.dialogue[0].Style).toBe(layout === 'translated_first' ? 'SubX-Translated' : 'SubX-Original')
+        expect(Number(top.MarginV)).toBeGreaterThanOrEqual(Number(bottom.MarginV) + bottomLineHeight + style.lineGap)
+      }
+    }
   })
 
   it('keeps SRT text-only even when a visual style is supplied', async () => {

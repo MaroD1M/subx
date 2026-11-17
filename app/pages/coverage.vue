@@ -213,7 +213,7 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <p class="min-w-0 break-all text-sm font-semibold text-gray-900 dark:text-white">{{ group.title }}</p>
-                    <span class="app-meta">{{ group.files.length }} 个文件</span>
+                    <span class="app-meta">本页 {{ group.files.length }} 个<template v-if="group.totalCount > group.files.length"> · 共 {{ group.totalCount }} 个</template></span>
                     <span v-if="group.missingCount" class="app-pill app-pill-error">缺失 {{ group.missingCount }}</span>
                     <span v-if="group.reviewCount" class="app-pill app-pill-warning">待核对 {{ group.reviewCount }}</span>
                     <span v-if="group.failedCount" class="app-pill app-pill-error">失败 {{ group.failedCount }}</span>
@@ -279,6 +279,23 @@
                 </div>
               </div>
             </section>
+            <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
+              <span class="app-meta">共 {{ filteredFiles.length }} 个文件 · 第 {{ page }} / {{ totalPages }} 页</span>
+              <div class="flex flex-wrap items-center justify-end gap-1.5">
+                <USelect v-model="pageSize" :items="pageSizeItems" size="xs" class="w-24" aria-label="每页条数" />
+                <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="page <= 1" @click="page -= 1" />
+                <UButton
+                  v-for="pageNumber in pageNumbers"
+                  :key="pageNumber"
+                  :label="String(pageNumber)"
+                  size="xs"
+                  :color="pageNumber === page ? 'primary' : 'neutral'"
+                  :variant="pageNumber === page ? 'solid' : 'ghost'"
+                  @click="page = pageNumber"
+                />
+                <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="page >= totalPages" @click="page += 1" />
+              </div>
+            </div>
           </div>
         </template>
       </template>
@@ -347,6 +364,7 @@ interface CoverageGroup {
   key: string
   title: string
   files: CoverageFile[]
+  totalCount: number
   missingCount: number
   reviewCount: number
   failedCount: number
@@ -395,6 +413,13 @@ const includeEmbedded = ref(true)
 const error = ref('')
 const statusFilter = ref<'all' | CoverageStatus>('all')
 const searchQuery = ref('')
+const page = ref(1)
+const pageSize = ref(20)
+const pageSizeItems = [
+  { label: '20 条/页', value: 20 },
+  { label: '50 条/页', value: 50 },
+  { label: '100 条/页', value: 100 }
+]
 const selectedKeys = ref<Set<string>>(new Set())
 const expandedKeys = ref<Set<string>>(new Set())
 let readyForCoverage = false
@@ -412,21 +437,30 @@ watch(selectedRootId, () => {
   expandedKeys.value = new Set()
   coverage.value = null
   error.value = ''
+  page.value = 1
   if (!readyForCoverage) return
   if (selectedRootId.value) void loadCoverage()
 })
 
 watch(includeEmbedded, () => {
+  page.value = 1
   if (!readyForCoverage) return
   void loadCoverage()
 })
 
 watch([searchQuery, statusFilter], () => {
+  page.value = 1
   if (!coverage.value?.hasCache) return
   if (!searchQuery.value.trim() && statusFilter.value === 'all') return
   const next = new Set(expandedKeys.value)
   for (const group of visibleGroups.value) next.add(group.key)
   expandedKeys.value = next
+})
+
+watch(pageSize, () => { page.value = 1 })
+watch(page, () => {
+  resetGroupExpansion()
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
 })
 
 onMounted(() => {
@@ -473,31 +507,68 @@ const filteredFiles = computed(() => {
   })
 })
 
-const visibleGroups = computed<CoverageGroup[]>(() => {
-  const groups = new Map<string, CoverageGroup>()
+type CoverageGroupStats = Omit<CoverageGroup, 'key' | 'files'>
+
+const filteredGroupStats = computed(() => {
+  const stats = new Map<string, CoverageGroupStats>()
   for (const file of filteredFiles.value) {
     const key = file.seriesKey || '__ungrouped__'
-    let group = groups.get(key)
+    let group = stats.get(key)
     if (!group) {
-      const title = seriesTitles.value.get(key) || file.seriesTitle || file.seriesKey || '未分组文件'
       group = {
-        key,
-        title,
-        files: [],
+        title: seriesTitles.value.get(key) || file.seriesTitle || file.seriesKey || '未分组文件',
+        totalCount: 0,
         missingCount: 0,
         reviewCount: 0,
         failedCount: 0,
         doneCount: 0,
         processingCount: 0
       }
-      groups.set(key, group)
+      stats.set(key, group)
     }
-    group.files.push(file)
+    group.totalCount += 1
     if (file.status === 'missing') group.missingCount += 1
     else if (file.status === 'review') group.reviewCount += 1
     else if (file.status === 'failed') group.failedCount += 1
     else if (file.status === 'done') group.doneCount += 1
     else if (file.status === 'processing') group.processingCount += 1
+  }
+  return stats
+})
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredFiles.value.length / pageSize.value)))
+const pagedFiles = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filteredFiles.value.slice(start, start + pageSize.value)
+})
+const pageNumbers = computed(() => {
+  const total = totalPages.value
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1)
+  const start = Math.max(1, Math.min(page.value - 2, total - 4))
+  return Array.from({ length: 5 }, (_, index) => start + index)
+})
+
+const visibleGroups = computed<CoverageGroup[]>(() => {
+  const groups = new Map<string, CoverageGroup>()
+  for (const file of pagedFiles.value) {
+    const key = file.seriesKey || '__ungrouped__'
+    let group = groups.get(key)
+    if (!group) {
+      const stats = filteredGroupStats.value.get(key)
+      group = {
+        key,
+        title: stats?.title || file.seriesTitle || file.seriesKey || '未分组文件',
+        files: [],
+        totalCount: stats?.totalCount || 0,
+        missingCount: stats?.missingCount || 0,
+        reviewCount: stats?.reviewCount || 0,
+        failedCount: stats?.failedCount || 0,
+        doneCount: stats?.doneCount || 0,
+        processingCount: stats?.processingCount || 0
+      }
+      groups.set(key, group)
+    }
+    group.files.push(file)
   }
   return Array.from(groups.values()).sort((a, b) => {
     const priority = (group: CoverageGroup) => {
@@ -509,6 +580,10 @@ const visibleGroups = computed<CoverageGroup[]>(() => {
     const diff = priority(a) - priority(b)
     return diff || a.title.localeCompare(b.title, 'zh-CN')
   })
+})
+
+watch(totalPages, (total) => {
+  if (page.value > total) page.value = total
 })
 
 const missingFiles = computed(() => (coverage.value?.files || []).filter(file => file.status === 'missing'))
@@ -552,7 +627,7 @@ function formatDate(value: unknown) {
 }
 
 function groupCompletionRate(group: CoverageGroup) {
-  return group.files.length ? Math.round((group.doneCount / group.files.length) * 100) : 0
+  return group.totalCount ? Math.round((group.doneCount / group.totalCount) * 100) : 0
 }
 
 function clearFilters() {
@@ -630,6 +705,7 @@ async function loadCoverage() {
     const result = await $fetch<CoverageResponse>('/api/library/coverage', { query })
     if (serial !== requestSerial) return
     coverage.value = result
+    page.value = 1
     pruneSelection()
     resetGroupExpansion()
   } catch (e: any) {
@@ -658,6 +734,7 @@ async function scanCoverage() {
     })
     if (serial !== requestSerial) return
     coverage.value = result
+    page.value = 1
     pruneSelection()
     resetGroupExpansion()
     const count = Number(result.scanned ?? result.summary?.total ?? result.files?.length ?? 0)

@@ -266,7 +266,7 @@ export const glossaryListQuerySchema = z.object({
   targetLang: z.string().optional(),
   enabled: z.preprocess(value => value === undefined || value === '' ? undefined : (value === true || value === 'true' || value === '1' ? true : (value === false || value === 'false' || value === '0' ? false : undefined)), z.boolean().optional()),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(500).default(50)
+  pageSize: z.coerce.number().int().min(1).max(500).default(20)
 }).passthrough()
 
 export const apiTokenCreateSchema = z.object({
@@ -284,7 +284,7 @@ export const storageCleanupSchema = z.object({
 
 export const taskListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  pageSize: z.coerce.number().int().min(1).max(200).default(20),
   status: z.string().optional(),
   q: z.string().optional()
 })
