@@ -82,6 +82,30 @@ describe('task queue', () => {
     db.prepare("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('concurrency', '3', datetime('now'))").run()
   })
 
+  it('uses priority changes for jobs that are already queued', async () => {
+    db.prepare("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('concurrency', '1', datetime('now'))").run()
+    const order: string[] = []
+    const processed = new Set<string>()
+    const queue = new TaskQueue({
+      getTask: (taskId) => ({ taskId, status: processed.has(taskId) ? 'done' : 'queued' } as any),
+      process: async (taskId) => {
+        order.push(taskId)
+        await new Promise(resolve => setTimeout(resolve, 40))
+        processed.add(taskId)
+      }
+    })
+    for (const taskId of ['priority-updated-low', 'priority-updated-high']) {
+      db.prepare("INSERT INTO tasks (task_id, file_path, model, status) VALUES (?, '/tmp/demo.srt', 'm', 'queued')").run(taskId)
+      db.prepare("INSERT INTO task_jobs (task_id, status, priority, next_run_at) VALUES (?, 'queued', 0, datetime('now'))").run(taskId)
+    }
+    db.prepare("UPDATE task_jobs SET priority = 30 WHERE task_id = 'priority-updated-high'").run()
+
+    await queue.wake()
+    await expect.poll(() => order.length, { timeout: 3000 }).toBe(2)
+    expect(order).toEqual(['priority-updated-high', 'priority-updated-low'])
+    db.prepare("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('concurrency', '3', datetime('now'))").run()
+  })
+
   it('does not claim a job before its scheduled time', async () => {
     const processed: string[] = []
     const queue = new TaskQueue({

@@ -621,6 +621,12 @@ function canPauseQueue(task) {
     && ['queued', 'retrying'].includes(String(task?.queueStatus || task?.status || ''))
 }
 
+function canChangeQueuePriority(task) {
+  const queueStatus = String(task?.queueStatus || '')
+  if (queueStatus) return ['queued', 'paused'].includes(queueStatus)
+  return ['queued', 'paused'].includes(String(task?.status || ''))
+}
+
 function rowActionItems(task) {
   const items = []
   const format = String(task?.subtitle_format || task?.subtitleFormat || 'srt')
@@ -649,9 +655,15 @@ function rowActionItems(task) {
     } else if (canPauseQueue(task)) {
       items.push({ label: '暂停排队', icon: 'i-lucide-pause', onSelect: () => pauseTask(task.taskId) })
     }
+    if (canChangeQueuePriority(task)) {
+      items.push(
+        { label: '提高优先级', icon: 'i-lucide-arrow-up', onSelect: () => changePriority(task, 10) },
+        { label: '降低优先级', icon: 'i-lucide-arrow-down', onSelect: () => changePriority(task, -10) }
+      )
+    } else {
+      items.push({ label: '运行中不可调整优先级', icon: 'i-lucide-lock', disabled: true })
+    }
     items.push(
-      { label: '提高优先级', icon: 'i-lucide-arrow-up', onSelect: () => changePriority(task, 10) },
-      { label: '降低优先级', icon: 'i-lucide-arrow-down', onSelect: () => changePriority(task, -10) },
       { type: 'separator' },
       { label: '取消任务', icon: 'i-lucide-octagon-x', color: 'error', onSelect: () => cancelTask(task.taskId) }
     )

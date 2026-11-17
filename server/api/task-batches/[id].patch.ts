@@ -1,5 +1,6 @@
 import { apiError } from '../../utils/apiError'
 import { requireScope } from '../../utils/apiTokens'
+import { globalTaskQueue } from '../../utils/task'
 import { TaskBatchService } from '../../utils/taskBatches'
 import { parseBody, taskBatchUpdateSchema } from '../../utils/validation'
 
@@ -10,5 +11,6 @@ export default defineEventHandler(async (event) => {
   const body = await parseBody(event, taskBatchUpdateSchema)
   const batch = TaskBatchService.update(id, body)
   if (!batch) throw apiError(404, '批次不存在')
+  void globalTaskQueue.wake()
   return { batch }
 })

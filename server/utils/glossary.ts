@@ -295,7 +295,7 @@ export const GlossaryService = {
       params.push(options.enabled ? 1 : 0)
     }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
-    const pageSize = Math.min(500, Math.max(1, Math.floor(Number(options.pageSize) || 50)))
+    const pageSize = Math.min(500, Math.max(1, Math.floor(Number(options.pageSize) || 20)))
     const page = Math.max(1, Math.floor(Number(options.page) || 1))
     const offset = (page - 1) * pageSize
     const totalRow = db.prepare(`SELECT COUNT(*) AS count FROM glossary_entries ${where}`).get(...params) as { count?: number } | undefined
