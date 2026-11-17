@@ -3,14 +3,29 @@ import { requireScope } from '../utils/apiTokens'
 import { useDb } from '../utils/db'
 import { QueueControlService } from '../utils/queueControl'
 
-const QUEUE_TASK_LIMIT = 200
+const DEFAULT_QUEUE_PAGE_SIZE = 20
+const MAX_QUEUE_PAGE_SIZE = 100
 
 export default defineEventHandler((event) => {
   requireScope(event, 'tasks:read')
   const db = useDb()
+  const query = getQuery(event)
+  const requestedPage = Math.max(1, Math.floor(Number(query.page) || 1))
+  const pageSize = Math.min(MAX_QUEUE_PAGE_SIZE, Math.max(1, Math.floor(Number(query.pageSize) || DEFAULT_QUEUE_PAGE_SIZE)))
   const rows = db.prepare('SELECT status, COUNT(*) AS count FROM task_jobs GROUP BY status').all() as Array<{ status?: string, count?: number }>
   const jobs: Record<string, number> = {}
   for (const row of rows) jobs[String(row.status || '')] = Number(row.count || 0)
+
+  const totalRow = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM task_jobs tj
+    JOIN tasks t ON t.task_id = tj.task_id
+    WHERE tj.status IN ('running', 'queued', 'paused')
+  `).get() as { count?: number } | undefined
+  const total = Number(totalRow?.count || 0)
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(requestedPage, totalPages)
+  const offset = (page - 1) * pageSize
 
   const activeRows = db.prepare(`
     SELECT
@@ -29,11 +44,12 @@ export default defineEventHandler((event) => {
       CASE WHEN tj.status = 'running' THEN t.started_at ELSE NULL END ASC,
       tj.priority DESC,
       COALESCE(tj.next_run_at, tj.scheduled_at, tj.created_at) ASC,
-      tj.created_at ASC
-    LIMIT ?
-  `).all(QUEUE_TASK_LIMIT) as any[]
+      tj.created_at ASC,
+      tj.task_id ASC
+    LIMIT ? OFFSET ?
+  `).all(pageSize, offset) as any[]
 
-  const tasks = activeRows.map((task) => ({
+  const tasks = activeRows.map((task, index) => ({
     taskId: task.task_id,
     filePath: task.file_path,
     status: task.status,
@@ -53,7 +69,8 @@ export default defineEventHandler((event) => {
     nextRunAt: toUtcIsoString(task.next_run_at),
     pauseRequested: Boolean(task.pause_requested_at),
     queueAttempts: Number(task.queue_attempts || 0),
-    queueMaxAttempts: Number(task.queue_max_attempts || 0)
+    queueMaxAttempts: Number(task.queue_max_attempts || 0),
+    queuePosition: offset + index + 1
   }))
 
   return {
@@ -65,6 +82,9 @@ export default defineEventHandler((event) => {
       retrying: jobs.retrying || 0
     },
     tasks,
-    tasksTruncated: (jobs.running || 0) + (jobs.queued || 0) + (jobs.paused || 0) > tasks.length
+    page,
+    pageSize,
+    total,
+    totalPages
   }
 })

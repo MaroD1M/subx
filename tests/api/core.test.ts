@@ -1156,6 +1156,14 @@ describe('core API integration', () => {
     expect(priority.status).toBe(200)
     expect((await priority.json() as any).priority).toBe(25)
 
+    const queueList = await apiFetch('/api/task-queue?page=1&pageSize=20', { headers: { cookie } })
+    expect(queueList.status).toBe(200)
+    const queuePayload = await queueList.json() as any
+    expect(queuePayload.page).toBe(1)
+    expect(queuePayload.pageSize).toBe(20)
+    expect(queuePayload.total).toBeGreaterThanOrEqual(1)
+    expect(queuePayload.tasks.find((task: any) => task.taskId === taskId)?.priority).toBe(25)
+
     const paused = await apiFetch(`/api/tasks/${taskId}/pause`, { method: 'POST', headers: { cookie } })
     expect(paused.status).toBe(200)
     const resumed = await apiFetch(`/api/tasks/${taskId}/resume`, { method: 'POST', headers: { cookie } })
@@ -1170,6 +1178,9 @@ describe('core API integration', () => {
     const queuePayload = await queue.json() as any
     expect(queuePayload).toHaveProperty('control')
     expect(Array.isArray(queuePayload.tasks)).toBe(true)
+    expect(queuePayload).toMatchObject({ page: 1, pageSize: 20 })
+    expect(typeof queuePayload.total).toBe('number')
+    expect(typeof queuePayload.totalPages).toBe('number')
 
     const batches = await apiFetch('/api/task-batches', { headers: { cookie } })
     expect(batches.status).toBe(200)

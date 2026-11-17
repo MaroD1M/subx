@@ -1,6 +1,6 @@
 # 升级与回滚
 
-> 适用版本：v2.11.0
+> 适用版本：v2.11.1
 >
 > 版本变更、数据库迁移和升级注意事项统一记录在 [CHANGELOG](../../CHANGELOG.md)，本页只保留通用操作步骤。
 
@@ -32,7 +32,7 @@ docker compose logs -f subx
 v2.11.0 起只发布内置 ASR/OCR 的单镜像。旧 Compose 中如果还有 `asr`、`ocr` 或 `asr-enhanced` 服务：
 
 1. 删除这些服务和对应镜像，只保留 `subx` 与可选 `postgres`。
-2. 把 `subx` 镜像改为 `ghcr.io/marod1m/subx:v2.11.0`。
+2. 把 `subx` 镜像改为 `ghcr.io/marod1m/subx:v2.11.1`。
 3. 保留原来的媒体、数据库、模型和临时目录挂载。
 4. 执行 `docker compose up -d --force-recreate`。
 

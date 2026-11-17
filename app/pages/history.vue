@@ -64,8 +64,7 @@
           <div class="divide-y divide-gray-100 dark:divide-gray-800">
             <div v-for="task in section.tasks" :key="task.taskId" class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:gap-3">
               <div class="flex min-w-0 flex-1 items-start gap-2.5">
-                <span v-if="section.key === 'waiting'" class="mt-0.5 w-7 shrink-0 text-center text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-400">{{ '#' + waitingPositions.get(task.taskId) }}</span>
-                <UIcon v-else :name="section.key === 'running' ? 'i-lucide-loader-2' : 'i-lucide-pause'" class="mt-0.5 h-4 w-4 shrink-0" :class="section.key === 'running' ? 'animate-spin text-sky-500' : 'text-amber-500'" />
+                <span class="mt-0.5 w-8 shrink-0 text-center text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-400">#{{ task.queuePosition }}</span>
 
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -137,8 +136,22 @@
           </div>
         </section>
 
-        <div v-if="queueData?.tasksTruncated" class="border-t border-gray-100 px-3 py-2 dark:border-gray-800">
-          <p class="app-meta">任务较多，当前只展示前 200 个队列任务。</p>
+        <div v-if="queueTotal > 0" class="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 dark:border-gray-800">
+          <span class="app-meta">共 {{ queueTotal }} 个任务 · 第 {{ queuePage }} / {{ queueTotalPages }} 页</span>
+          <div class="flex flex-wrap items-center justify-end gap-1.5">
+            <USelect v-model="queuePageSize" :items="queuePageSizeItems" size="xs" class="w-24" aria-label="队列每页条数" />
+            <UButton label="上一页" size="xs" color="neutral" variant="ghost" :disabled="queuePage <= 1" @click="queuePage -= 1" />
+            <UButton
+              v-for="pageNumber in queuePageNumbers"
+              :key="pageNumber"
+              :label="String(pageNumber)"
+              size="xs"
+              :color="pageNumber === queuePage ? 'primary' : 'neutral'"
+              :variant="pageNumber === queuePage ? 'solid' : 'ghost'"
+              @click="queuePage = pageNumber"
+            />
+            <UButton label="下一页" size="xs" color="neutral" variant="ghost" :disabled="queuePage >= queueTotalPages" @click="queuePage += 1" />
+          </div>
         </div>
 
         <div v-if="activeBatches.length" class="border-t border-gray-100 dark:border-gray-800">
@@ -412,13 +425,29 @@ const taskQuery = computed(() => ({
   q: debouncedSearch.value.trim()
 }))
 const { data, pending, refresh } = await useFetch('/api/tasks', { query: taskQuery })
-const { data: queueData, refresh: refreshQueue } = await useFetch('/api/task-queue')
+const queuePage = ref(1)
+const queuePageSize = ref(20)
+const queuePageSizeItems = [
+  { label: '20 条/页', value: 20 },
+  { label: '50 条/页', value: 50 },
+  { label: '100 条/页', value: 100 }
+]
+const queueQuery = computed(() => ({ page: queuePage.value, pageSize: queuePageSize.value }))
+const { data: queueData, refresh: refreshQueue } = await useFetch('/api/task-queue', { query: queueQuery })
 const { data: batchData, refresh: refreshBatches } = await useFetch('/api/task-batches', { query: { limit: 20 } })
 const queueControl = computed(() => queueData.value?.control)
 const queueJobs = computed(() => queueData.value?.jobs)
 const queueUpdating = ref(false)
 const queueExpanded = ref(false)
 const queueTasks = computed(() => queueData.value?.tasks || [])
+const queueTotal = computed(() => Number(queueData.value?.total || 0))
+const queueTotalPages = computed(() => Math.max(1, Number(queueData.value?.totalPages || 1)))
+const queuePageNumbers = computed(() => {
+  const total = queueTotalPages.value
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1)
+  const start = Math.max(1, Math.min(queuePage.value - 2, total - 4))
+  return Array.from({ length: 5 }, (_, index) => start + index)
+})
 const queueRunningTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'running'))
 const queueWaitingTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'queued'))
 const queuePausedTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'paused'))
@@ -427,10 +456,13 @@ const queueSections = computed(() => [
   { key: 'waiting', label: '等待中', icon: 'i-lucide-clock-3', tasks: queueWaitingTasks.value },
   { key: 'paused', label: '已暂停', icon: 'i-lucide-pause', tasks: queuePausedTasks.value }
 ].filter(section => section.tasks.length > 0))
-const waitingPositions = computed(() => new Map(queueWaitingTasks.value.map((task, index) => [task.taskId, index + 1])))
 const batchActionId = ref('')
 const activeBatches = computed(() => (batchData.value?.batches || []).filter(batch => ['scheduled', 'queued', 'running', 'paused'].includes(String(batch.status))))
-const showQueuePanel = computed(() => Boolean(queueControl.value?.paused || activeBatches.value.length || queueTasks.value.length || queueJobs.value?.queued || queueJobs.value?.running))
+const showQueuePanel = computed(() => Boolean(queueControl.value?.paused || activeBatches.value.length || queueTotal.value || queueJobs.value?.queued || queueJobs.value?.running))
+watch(queuePageSize, () => { queuePage.value = 1 })
+watch(queueTotalPages, (total) => {
+  if (queuePage.value > total) queuePage.value = total
+})
 watch(searchQuery, (value) => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   searchDebounceTimer = setTimeout(() => {

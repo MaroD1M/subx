@@ -1,6 +1,6 @@
 # SubX 部署文档
 
-> 适用版本：v2.11.0
+> 适用版本：v2.11.1
 
 本文档覆盖单镜像部署、NAS、镜像与模型下载和反向代理。升级、备份、健康检查和常见问题见[相关文档](#7-相关文档)。使用说明请参阅 [使用文档](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
@@ -25,7 +25,7 @@ ASR 和 OCR 已完整内置在主镜像中，不需要额外镜像、服务或 C
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.11.0
+    image: ghcr.io/marod1m/subx:v2.11.1
     container_name: subx
     restart: unless-stopped
     ports:
@@ -110,7 +110,7 @@ http://<主机IP>:3000
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.11.0
+    image: ghcr.io/marod1m/subx:v2.11.1
     container_name: subx
     restart: unless-stopped
     ports:
@@ -172,11 +172,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.11.0
+# 默认拉取 v2.11.1
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.11.0
+./scripts/pull-image.sh --tag v2.11.1
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
