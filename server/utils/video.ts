@@ -175,6 +175,32 @@ export const VideoService = {
     },
 
     /**
+     * Extract a short audio window as raw 8kHz mono signed 16-bit PCM for waveform rendering.
+     */
+    async extractAudioPcm(videoFilePath: string, startSec: number, durationSec: number, outputPath: string, rootId?: string | null, audioTrackIndex?: number | null): Promise<string> {
+        const fullPath = await resolveMediaPath(videoFilePath, rootId)
+        return new Promise((resolve, reject) => {
+            const command = ffmpeg(fullPath)
+                .seekInput(Math.max(0, startSec))
+                .duration(Math.max(1, durationSec))
+                .outputOptions([
+                    audioTrackIndex != null ? `-map 0:${audioTrackIndex}` : '-map 0:a:0',
+                    '-vn',
+                    '-ac 1',
+                    '-ar 8000',
+                    '-c:a pcm_s16le',
+                    '-f s16le'
+                ])
+                .output(outputPath)
+            const cleanup = guardMediaCommand(command, '波形提取', reject)
+            command
+                .on('error', (err) => { cleanup(); reject(err) })
+                .on('end', () => { cleanup(); resolve(outputPath) })
+                .run()
+        })
+    },
+
+    /**
      * Compress extracted audio for cloud ASR uploads.
      */
     async compressAudioForCloud(inputPath: string, outputPath: string): Promise<string> {

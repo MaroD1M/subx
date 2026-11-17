@@ -13,7 +13,7 @@ export default defineEventHandler(() => {
     openapi: '3.1.0',
     info: {
       title: 'SubX API',
-      version: '2.10.0',
+      version: '2.10.1',
       description: 'SubX 任务、目录监控、通知与 API Token 接口。使用 Authorization: Bearer <token> 或 X-API-Token。'
     },
     servers: [{ url: '/' }],
@@ -36,7 +36,7 @@ export default defineEventHandler(() => {
             outputMode: { type: 'string', enum: ['translated', 'bilingual', 'original'] },
             model: { type: 'string' },
             stylePreset: { type: 'string' },
-            subtitleFormat: { type: 'string', enum: ['srt', 'ass', 'both'] },
+            subtitleFormat: { type: 'string', enum: ['srt', 'ass', 'vtt', 'ttml', 'both'] },
             subtitleStylePreset: { type: 'string', description: '兼容旧版字幕样式预设 ID' },
             subtitleStyle: {
               type: 'object',
@@ -79,7 +79,7 @@ export default defineEventHandler(() => {
           type: 'object',
           required: ['type', 'name'],
           properties: {
-            type: { type: 'string', enum: ['telegram', 'smtp', 'webhook', 'ntfy'] },
+            type: { type: 'string', enum: ['telegram', 'smtp', 'webhook', 'ntfy', 'discord', 'matrix', 'wecom'] },
             name: { type: 'string' },
             enabled: { type: 'boolean' },
             config: { type: 'object' }
@@ -136,6 +136,36 @@ export default defineEventHandler(() => {
         post: { summary: '生成或强制刷新 AI 校对与术语建议', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { kind: { type: 'string', enum: ['glossary', 'consistency'] }, refresh: { type: 'boolean' } } } } } }, responses: { '200': { description: 'OK' } } }
       },
       '/api/tasks/{id}/audio': { get: { summary: '字幕音频片段', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'start', in: 'query', schema: { type: 'number' } }, { name: 'end', in: 'query', schema: { type: 'number' } }], responses: { '200': { description: 'audio/mpeg' } } } },
+      '/api/task-queue': {
+        get: { summary: '任务队列状态', responses: { '200': { description: 'OK' } } }
+      },
+      '/api/task-queue/pause': { post: { summary: '暂停队列（不领取新任务）', responses: { '200': { description: 'OK' } } } },
+      '/api/task-queue/resume': { post: { summary: '恢复队列', responses: { '200': { description: 'OK' } } } },
+      '/api/task-batches': { get: { summary: '批次列表', parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/task-batches/{id}': {
+        get: { summary: '批次详情', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } },
+        patch: { summary: '更新批次优先级/计划时间/重试策略', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } }
+      },
+      '/api/task-batches/{id}/pause': { post: { summary: '暂停批次', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/task-batches/{id}/resume': { post: { summary: '恢复批次', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/task-batches/{id}/cancel': { post: { summary: '取消批次', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/task-batches/{id}/retry-failed': { post: { summary: '重试批次失败任务', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/tasks/{id}/waveform': { get: { summary: '字幕音频波形窗口', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'start', in: 'query', schema: { type: 'number' } }, { name: 'end', in: 'query', schema: { type: 'number' } }, { name: 'buckets', in: 'query', schema: { type: 'integer' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/tasks/{id}/versions': {
+        get: { summary: '字幕版本列表', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } },
+        post: { summary: '保存当前字幕版本', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } }
+      },
+      '/api/tasks/{id}/versions/{versionId}': { get: { summary: '版本详情', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'versionId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/tasks/{id}/versions/{versionId}/apply': { post: { summary: '应用版本/回滚工作区', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }, { name: 'versionId', in: 'path', required: true, schema: { type: 'integer' } }], responses: { '200': { description: 'OK' } } } },
+      '/api/tasks/{id}/ab': { post: { summary: '生成 A/B 翻译版本', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '202': { description: 'Accepted' } } } },
+      '/api/glossary': {
+        get: { summary: '术语库列表', responses: { '200': { description: 'OK' } } },
+        post: { summary: '新增或更新术语', responses: { '200': { description: 'OK' } } }
+      },
+      '/api/glossary/import': { post: { summary: '预览或导入 CSV/JSON 术语', responses: { '200': { description: 'OK' } } } },
+      '/api/glossary/export': { get: { summary: '导出术语库 CSV/JSON', responses: { '200': { description: 'OK' } } } },
+      '/api/glossary/snapshots': { get: { summary: '术语快照列表', responses: { '200': { description: 'OK' } } }, post: { summary: '创建术语快照', responses: { '200': { description: 'OK' } } } },
+      '/api/glossary/rollback': { post: { summary: '回滚术语快照', responses: { '200': { description: 'OK' } } } },
       '/api/watch-folders': {
         get: { summary: '监控目录列表', responses: { '200': { description: 'OK' } } },
         post: { summary: '新增监控目录', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/WatchFolder' } } } }, responses: { '200': { description: 'OK' } } }

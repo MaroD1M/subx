@@ -9,6 +9,7 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       file_path TEXT NOT NULL,
       root_id TEXT,
       series_key TEXT,
+      batch_id TEXT,
       source_type TEXT NOT NULL DEFAULT 'embedded',
       track_index INTEGER,
       model TEXT NOT NULL,
@@ -113,6 +114,66 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+
+    CREATE TABLE IF NOT EXISTS glossary_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL,
+      target TEXT NOT NULL,
+      source_lang TEXT NOT NULL DEFAULT '',
+      target_lang TEXT NOT NULL DEFAULT '',
+      scope_type TEXT NOT NULL DEFAULT 'global',
+      scope_key TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      priority INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      locked INTEGER NOT NULL DEFAULT 0,
+      version INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT NOT NULL DEFAULT '',
+      updated_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(scope_type, scope_key, source_lang, target_lang, source)
+    );
+
+    CREATE TABLE IF NOT EXISTS glossary_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_id INTEGER,
+      version INTEGER NOT NULL DEFAULT 1,
+      action TEXT NOT NULL DEFAULT 'update',
+      before_json TEXT NOT NULL DEFAULT 'null',
+      after_json TEXT NOT NULL DEFAULT 'null',
+      batch_id TEXT,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS glossary_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT '',
+      scope_type TEXT NOT NULL DEFAULT 'global',
+      scope_key TEXT NOT NULL DEFAULT '',
+      entries_json TEXT NOT NULL DEFAULT '[]',
+      entry_count INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS glossary_imports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT NOT NULL DEFAULT '',
+      format TEXT NOT NULL DEFAULT 'csv',
+      scope_type TEXT NOT NULL DEFAULT 'global',
+      scope_key TEXT NOT NULL DEFAULT '',
+      total INTEGER NOT NULL DEFAULT 0,
+      inserted INTEGER NOT NULL DEFAULT 0,
+      updated INTEGER NOT NULL DEFAULT 0,
+      skipped INTEGER NOT NULL DEFAULT 0,
+      errors_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS watch_folders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       root_id TEXT NOT NULL,
@@ -158,6 +219,10 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       event TEXT NOT NULL,
       title TEXT NOT NULL,
       body TEXT NOT NULL,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      title_template TEXT NOT NULL DEFAULT '',
+      body_template TEXT NOT NULL DEFAULT '',
+      format TEXT NOT NULL DEFAULT 'text',
       status TEXT NOT NULL DEFAULT 'pending',
       attempts INTEGER NOT NULL DEFAULT 0,
       max_attempts INTEGER NOT NULL DEFAULT 3,
@@ -239,7 +304,37 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       locked_at TEXT,
       heartbeat_at TEXT,
       last_error TEXT,
+      batch_id TEXT,
+      priority INTEGER NOT NULL DEFAULT 0,
+      scheduled_at TEXT,
+      retry_policy_json TEXT NOT NULL DEFAULT '{}',
+      retry_category TEXT,
+      last_retry_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS task_batches (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'queued',
+      priority INTEGER NOT NULL DEFAULT 0,
+      scheduled_at TEXT,
+      policy_json TEXT NOT NULL DEFAULT '{}',
+      task_count INTEGER NOT NULL DEFAULT 0,
+      completed_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      started_at TEXT,
+      finished_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS queue_control (
+      id INTEGER PRIMARY KEY,
+      paused INTEGER NOT NULL DEFAULT 0,
+      paused_at TEXT,
+      paused_by TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -248,6 +343,9 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       task_id TEXT NOT NULL,
       subtitle_ids_json TEXT NOT NULL DEFAULT '[]',
       status TEXT NOT NULL DEFAULT 'queued',
+      kind TEXT NOT NULL DEFAULT 'retranslate',
+      options_json TEXT NOT NULL DEFAULT '{}',
+      version_id INTEGER,
       total INTEGER NOT NULL DEFAULT 0,
       completed INTEGER NOT NULL DEFAULT 0,
       error TEXT,
@@ -291,6 +389,27 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(task_id, subtitle_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS task_review_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      version_no INTEGER NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL DEFAULT 'manual',
+      source TEXT NOT NULL DEFAULT 'system',
+      model TEXT,
+      provider_type TEXT,
+      fingerprint TEXT NOT NULL DEFAULT '',
+      settings_json TEXT NOT NULL DEFAULT '{}',
+      entries_json TEXT NOT NULL DEFAULT '[]',
+      entry_count INTEGER NOT NULL DEFAULT 0,
+      edited_count INTEGER NOT NULL DEFAULT 0,
+      quality_avg REAL,
+      note TEXT,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(task_id, version_no)
     );
 
     CREATE TABLE IF NOT EXISTS task_proofread_cache (

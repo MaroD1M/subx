@@ -13,17 +13,12 @@ import { formatDateTime, toUtcIsoString } from '~~/shared/time'
 import { ConfigService } from './config'
 import { decryptSecret, encryptSecret, isEncryptedSecret } from './secret'
 import { STYLE_PRESETS } from '../../shared/stylePresets'
+import { DEFAULT_NOTIFICATION_EVENT_KEYS, NOTIFICATION_EVENT_KEYS, NOTIFICATION_EVENT_LABELS } from '../../shared/notificationEvents'
+import { renderNotificationJsonTemplate, renderNotificationTemplate } from './notificationTemplates'
 import { asString, dispatchChannel, testNotificationProxy, validateHttpUrl, type NotificationPayload } from './notificationTransport'
 
 
-export const NOTIFICATION_EVENTS: NotificationEvent[] = [
-  'task_done',
-  'task_error',
-  'task_cancelled',
-  'low_confidence',
-  'watch_error',
-  'backfill_done'
-]
+export const NOTIFICATION_EVENTS: NotificationEvent[] = NOTIFICATION_EVENT_KEYS.filter(event => event !== 'test') as NotificationEvent[]
 
 const SECRET_FIELDS: Record<NotificationChannelType, string[]> = {
   telegram: ['botToken'],
@@ -35,20 +30,16 @@ const SECRET_FIELDS: Record<NotificationChannelType, string[]> = {
   wecom: ['url']
 }
 
-const EVENT_LABELS: Record<NotificationEvent, string> = {
-  task_done: '任务完成',
-  task_error: '任务失败',
-  task_cancelled: '任务取消',
-  low_confidence: '低置信度',
-  watch_error: '监控异常',
-  backfill_done: '回填完成',
-  test: '测试通知'
-}
+const EVENT_LABELS: Record<NotificationEvent, string> = NOTIFICATION_EVENT_LABELS as Record<NotificationEvent, string>
 
 const TASK_EVENT_STATUS: Record<string, string> = {
+  task_queued: '已入队',
+  task_started: '处理中',
+  task_retrying: '等待自动重试',
   task_done: '已完成',
   task_error: '失败',
   task_cancelled: '已取消',
+  task_review_required: '待人工核对',
   low_confidence: '待人工核对'
 }
 
@@ -112,7 +103,7 @@ function formatElapsed(createdAt: unknown, updatedAt: unknown): string {
 }
 
 function normalizeEvents(value: unknown): NotificationEvent[] {
-  const items = Array.isArray(value) ? value : NOTIFICATION_EVENTS
+  const items = Array.isArray(value) ? value : DEFAULT_NOTIFICATION_EVENT_KEYS
   const events = items
     .map(item => String(item))
     .filter((item): item is NotificationEvent => NOTIFICATION_EVENTS.includes(item as NotificationEvent))
@@ -134,6 +125,15 @@ function parseHeaders(value: unknown): Record<string, string> {
   }
 }
 
+function templateFields(raw: Record<string, any>) {
+  return {
+    titleTemplate: asString(raw.titleTemplate),
+    bodyTemplate: asString(raw.bodyTemplate),
+    webhookPayloadTemplate: asString(raw.webhookPayloadTemplate),
+    format: raw.format === 'markdown' ? 'markdown' : 'text'
+  }
+}
+
 export function sanitizeChannelConfig(type: NotificationChannelType, input: unknown): Record<string, any> {
   const raw = (input && typeof input === 'object') ? input as Record<string, any> : {}
   if (type === 'telegram') {
@@ -141,7 +141,8 @@ export function sanitizeChannelConfig(type: NotificationChannelType, input: unkn
       botToken: asString(raw.botToken),
       chatId: asString(raw.chatId),
       proxyUrl: validateHttpUrl(raw.proxyUrl, 'Telegram 代理地址'),
-      events: normalizeEvents(raw.events)
+      events: normalizeEvents(raw.events),
+      ...templateFields(raw)
     }
   }
   if (type === 'smtp') {
@@ -155,13 +156,15 @@ export function sanitizeChannelConfig(type: NotificationChannelType, input: unkn
       from: asString(raw.from),
       to: asString(raw.to),
       rejectUnauthorized: raw.rejectUnauthorized !== false,
-      events: normalizeEvents(raw.events)
+      events: normalizeEvents(raw.events),
+      ...templateFields(raw)
     }
   }
   if (type === 'discord') {
     return {
       url: validateHttpUrl(raw.url, 'Discord Webhook 地址'),
-      events: normalizeEvents(raw.events)
+      events: normalizeEvents(raw.events),
+      ...templateFields(raw)
     }
   }
   if (type === 'matrix') {
@@ -169,13 +172,15 @@ export function sanitizeChannelConfig(type: NotificationChannelType, input: unkn
       homeserverUrl: validateHttpUrl(raw.homeserverUrl, 'Matrix Homeserver 地址'),
       roomId: asString(raw.roomId),
       accessToken: asString(raw.accessToken),
-      events: normalizeEvents(raw.events)
+      events: normalizeEvents(raw.events),
+      ...templateFields(raw)
     }
   }
   if (type === 'wecom') {
     return {
       url: validateHttpUrl(raw.url, '企业微信 Webhook 地址'),
-      events: normalizeEvents(raw.events)
+      events: normalizeEvents(raw.events),
+      ...templateFields(raw)
     }
   }
   if (type === 'webhook') {
@@ -188,7 +193,8 @@ export function sanitizeChannelConfig(type: NotificationChannelType, input: unkn
       headers: parseHeaders(raw.headers),
       secret: asString(raw.secret),
       proxyUrl: validateHttpUrl(raw.proxyUrl, 'Webhook 代理地址'),
-      events: normalizeEvents(raw.events)
+      events: normalizeEvents(raw.events),
+      ...templateFields(raw)
     }
   }
   return {
@@ -197,7 +203,8 @@ export function sanitizeChannelConfig(type: NotificationChannelType, input: unkn
     token: asString(raw.token),
     priority: Math.min(5, Math.max(1, Number(raw.priority) || 3)),
     proxyUrl: validateHttpUrl(raw.proxyUrl, 'ntfy 代理地址'),
-    events: normalizeEvents(raw.events)
+    events: normalizeEvents(raw.events),
+    ...templateFields(raw)
   }
 }
 
@@ -317,7 +324,15 @@ async function processNotificationQueue(limit = 10) {
         continue
       }
       try {
-        await sendChannel(channel, { event: row.event, title: row.title, body: row.body })
+        let payload: any = null
+        try { payload = JSON.parse(String(row.payload_json || '{}')) } catch { payload = null }
+        await sendChannel(channel, {
+          event: row.event,
+          title: row.title,
+          body: row.body,
+          payload: channel.type === 'webhook' ? payload : undefined,
+          format: row.format
+        })
         db.prepare("UPDATE notification_deliveries SET status='sent', attempts=attempts + 1, last_error=NULL, updated_at=datetime('now') WHERE id = ?").run(row.id)
       } catch (e: any) {
         const attempts = Number(row.attempts || 0) + 1
@@ -378,7 +393,7 @@ export const NotificationService = {
     return useDb().prepare('DELETE FROM notification_channels WHERE id = ?').run(id).changes > 0
   },
 
-  async enqueue(event: NotificationEvent, title: string, body: string, options: { channelIds?: number[], dedupeKey?: string } = {}) {
+  async enqueue(event: NotificationEvent, title: string, body: string, options: { channelIds?: number[], dedupeKey?: string, context?: Record<string, any> } = {}) {
     if (event !== 'test') {
       const config = await ConfigService.getConfig()
       if (config.notificationEnabled === false) return 0
@@ -388,6 +403,14 @@ export const NotificationService = {
     const allowedIds = Array.isArray(options.channelIds) && options.channelIds.length
       ? new Set(options.channelIds.map(Number))
       : null
+    const context = {
+      event,
+      eventLabel: EVENT_LABELS[event] || event,
+      timestamp: new Date().toISOString(),
+      title,
+      body,
+      ...(options.context || {})
+    }
     let queued = 0
     for (const row of rows) {
       const channel = rowToChannel(row)
@@ -396,10 +419,33 @@ export const NotificationService = {
       const dedupeKey = options.dedupeKey
         ? `${options.dedupeKey}:${channel.id}`
         : `${event}:${randomUUID()}:${channel.id}`
+      const renderedTitle = renderNotificationTemplate(String(channel.config.titleTemplate || ''), context, title)
+      const renderedBody = renderNotificationTemplate(String(channel.config.bodyTemplate || ''), context, body)
+      let payload: any = context
+      if (channel.type === 'webhook') {
+        const fallbackPayload = { event, title: renderedTitle, body: renderedBody, timestamp: context.timestamp, payload: context }
+        try {
+          payload = String(channel.config.webhookPayloadTemplate || '').trim()
+            ? renderNotificationJsonTemplate(String(channel.config.webhookPayloadTemplate), context)
+            : fallbackPayload
+        } catch {
+          payload = fallbackPayload
+        }
+      }
       const info = db.prepare(`
-        INSERT OR IGNORE INTO notification_deliveries (channel_id, event, title, body, dedupe_key)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(channel.id, event, title, body, dedupeKey)
+        INSERT OR IGNORE INTO notification_deliveries (channel_id, event, title, body, payload_json, title_template, body_template, format, dedupe_key)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        channel.id,
+        event,
+        renderedTitle,
+        renderedBody,
+        JSON.stringify(payload),
+        String(channel.config.titleTemplate || ''),
+        String(channel.config.bodyTemplate || ''),
+        String(channel.config.format || 'text'),
+        dedupeKey
+      )
       if (info.changes > 0) queued++
     }
     if (queued > 0) void this.processQueue()
@@ -476,16 +522,85 @@ export const NotificationService = {
       }
     }
 
+    const context = {
+      task: {
+        id: task.task_id,
+        fileName,
+        filePath: task.file_path,
+        status: task.status,
+        statusLabel: TASK_EVENT_STATUS[event] || String(task.status || ''),
+        progress: Number(task.progress || 0),
+        model: asString(task.model),
+        targetLanguage: labelOf(TARGET_LANGUAGE_LABELS, task.target_lang),
+        outputMode: labelOf(OUTPUT_MODE_LABELS, outputMode),
+        sourceType: labelOf(SOURCE_TYPE_LABELS, sourceType),
+        outputPath: task.output_path || '',
+        error: task.error || '',
+        elapsed,
+        origin: task.origin === 'automation' ? '自动监控' : '手动创建'
+      },
+      batch: null,
+      watch: null,
+      url: String(process.env.SUBX_PUBLIC_URL || process.env.SUBX_BASE_URL || '')
+    }
+
     return this.enqueue(event, title, body, {
       channelIds,
-      dedupeKey: `${event}:${taskId}`
+      dedupeKey: `${event}:${taskId}`,
+      context
+    })
+  },
+
+  async notifyBatchEvent(batch: any, event: NotificationEvent) {
+    const titleMap: Record<string, string> = {
+      batch_created: 'SubX 批次已创建',
+      batch_started: 'SubX 批次开始执行',
+      batch_paused: 'SubX 批次已暂停',
+      batch_completed: 'SubX 批次完成',
+      batch_failed: 'SubX 批次失败'
+    }
+    const body = [
+      `批次：${batch.name || batch.id}`,
+      `状态：${EVENT_LABELS[event] || event}`,
+      `进度：${Number(batch.completedCount || 0)}/${Number(batch.taskCount || 0)}`,
+      `失败：${Number(batch.failedCount || 0)}`
+    ].join('\n')
+    return this.enqueue(event, titleMap[event] || EVENT_LABELS[event] || event, body, {
+      dedupeKey: `${event}:${batch.id}:${Number(batch.completedCount || 0)}:${Number(batch.failedCount || 0)}:${String(batch.status || '')}`,
+      context: {
+        batch: {
+          id: batch.id,
+          name: batch.name || '',
+          status: batch.status || '',
+          taskCount: Number(batch.taskCount || 0),
+          completedCount: Number(batch.completedCount || 0),
+          failedCount: Number(batch.failedCount || 0)
+        }
+      }
+    })
+  },
+
+  async notifyGlossaryEvent(event: NotificationEvent, context: Record<string, any>) {
+    const title = event === 'glossary_imported' ? 'SubX 术语库导入完成' : 'SubX 术语库已更新'
+    const glossary = context.glossary || {}
+    const body = [
+      `作用域：${glossary.scopeType === 'series' ? `系列 ${glossary.scopeKey || ''}` : '全局'}`,
+      `总计：${glossary.total || 0}`,
+      `新增：${glossary.inserted || 0}`,
+      `更新：${glossary.updated || 0}`,
+      `跳过：${glossary.skipped || 0}`
+    ].join('\n')
+    return this.enqueue(event, title, body, {
+      dedupeKey: `${event}:${Date.now()}`,
+      context
     })
   },
 
   async notifyWatchError(folderId: number, folderName: string, path: string, error: string) {
     const bucket = Math.floor(Date.now() / 5 / 60 / 1000)
     return this.enqueue('watch_error', 'SubX 监控目录异常', `目录：${folderName}\n路径：${path}\n错误：${error}`, {
-      dedupeKey: `watch_error:${folderId}:${bucket}`
+      dedupeKey: `watch_error:${folderId}:${bucket}`,
+      context: { watch: { folderName, path, error } }
     })
   },
 
@@ -493,7 +608,8 @@ export const NotificationService = {
     const bucket = Math.floor(Date.now() / 5 / 60 / 1000)
     const digest = createHash('sha256').update(`${folderId}:${queued}:${scanned}`).digest('hex').slice(0, 16)
     return this.enqueue('backfill_done', 'SubX 历史回填已入队', `目录：${folderName}\n扫描：${scanned} 个视频\n加入队列：${queued} 个`, {
-      dedupeKey: `backfill_done:${folderId}:${bucket}:${digest}`
+      dedupeKey: `backfill_done:${folderId}:${bucket}:${digest}`,
+      context: { watch: { folderName, path: '', error: '', scanned, queued } }
     })
   },
 

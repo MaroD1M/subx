@@ -200,6 +200,23 @@ test('automation notifications and API tabs are accessible', async ({ page }) =>
   await expectNoSeriousA11y(page)
 })
 
+test('glossary page creates a term and filters the list', async ({ page }) => {
+  await page.goto('/glossary')
+  await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+  await expect(page.getByRole('heading', { name: '术语库' })).toBeVisible()
+  await page.getByRole('button', { name: '新增术语' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await dialog.locator('input').nth(0).fill('E2E Term')
+  await dialog.locator('input').nth(1).fill('端到端术语')
+  await dialog.getByRole('button', { name: '新增' }).click()
+  await expect(page.getByText('E2E Term')).toBeVisible()
+  await page.getByLabel('搜索术语').fill('E2E Term')
+  await expect(page.getByText('E2E Term')).toBeVisible()
+  await expect(page.getByText('端到端术语')).toBeVisible()
+  await expectNoSeriousA11y(page)
+})
+
 test('monitor folder triggers on a new stable video', async ({ page }) => {
   const mediaDir = process.env.VIDEO_DIR || join(process.cwd(), '.test-artifacts', 'media')
   const dir = join(mediaDir, 'WatchTrigger')
@@ -329,6 +346,7 @@ test('settings storage tab is accessible', async ({ page }) => {
 
 test('auto backup settings persist after saving and reloading', async ({ page }) => {
   await page.goto('/settings?tab=storage')
+  await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
   await expect(page.getByText('自动备份').first()).toBeVisible()
   const backupSwitch = page.getByRole('switch', { name: '启用自动备份' })
   if (!(await backupSwitch.isChecked())) await backupSwitch.click()

@@ -128,7 +128,8 @@ export const QualityService = {
       type: normalizeProviderType(options.providerType),
       apiKey: options.apiKey,
       baseUrl: options.baseUrl,
-      model: options.model
+      model: options.model,
+      sessionId: `subx-quality-${taskId}`
     })
     const maxEntries = Math.max(1, Math.min(1000, Number(options.maxEntries) || 200))
     let selected = entries.filter(entry => String(entry.translatedText || '').trim())

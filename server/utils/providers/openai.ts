@@ -1,9 +1,45 @@
 import OpenAI from 'openai'
-import { EMPTY_USAGE, type BoundTranslationProvider, type ProviderRequest, type ProviderRuntimeConfig, type ProviderUsage } from './types'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { EMPTY_USAGE, type BoundTranslationProvider, type ProviderRequest, type ProviderRuntimeConfig, type ProviderType, type ProviderUsage } from './types'
 
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000
 const LIST_TIMEOUT_MS = 30 * 1000
 const IDLE_TIMEOUT_MS = 45 * 1000
+const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
+const OPENCODE_GO_BASE_URL = 'https://opencode.ai/inference/go/openai/v1'
+
+let cachedUserAgent = ''
+
+function subxUserAgent() {
+  if (cachedUserAgent) return cachedUserAgent
+  let version = String(process.env.SUBX_VERSION || process.env.npm_package_version || '').trim()
+  if (!version) {
+    try {
+      const packagePath = join(process.cwd(), 'package.json')
+      if (existsSync(packagePath)) {
+        version = String(JSON.parse(readFileSync(packagePath, 'utf-8'))?.version || '').trim()
+      }
+    } catch { /* version is only cosmetic */ }
+  }
+  cachedUserAgent = version ? `SubX/${version}` : 'SubX'
+  return cachedUserAgent
+}
+
+function defaultBaseUrl(type: ProviderType) {
+  return type === 'opencode-go' ? OPENCODE_GO_BASE_URL : DEFAULT_BASE_URL
+}
+
+function buildDefaultHeaders(config: ProviderRuntimeConfig, type: ProviderType) {
+  const headers: Record<string, string> = {
+    'User-Agent': subxUserAgent(),
+    ...(config.headers || {})
+  }
+  if (type === 'opencode-go') {
+    headers['x-opencode-session'] = String(config.sessionId || 'subx').trim() || 'subx'
+  }
+  return headers
+}
 
 function usageFrom(raw: any): ProviderUsage {
   return {
@@ -19,14 +55,16 @@ function combineSignal(signal: AbortSignal | undefined, idle: AbortController): 
   return signal
 }
 
-export function createOpenAIProvider(config: ProviderRuntimeConfig): BoundTranslationProvider {
+export function createOpenAIProvider(config: ProviderRuntimeConfig, providerType: ProviderType = 'openai-compatible'): BoundTranslationProvider {
+  const baseURL = String(config.baseUrl || '').trim().replace(/\/+$/, '') || defaultBaseUrl(providerType)
   const client = new OpenAI({
     apiKey: config.apiKey,
-    baseURL: config.baseUrl || 'https://api.openai.com/v1'
+    baseURL,
+    defaultHeaders: buildDefaultHeaders(config, providerType)
   })
 
   return {
-    type: 'openai-compatible',
+    type: providerType,
     supportsStreaming: true,
 
     async listModels() {

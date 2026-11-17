@@ -17,7 +17,8 @@ const IDENTITY_TABLES = new Set([
   'task_responses', 'transcription_runs', 'asr_segments', 'watch_folders', 'watch_events',
   'notification_channels', 'notification_deliveries', 'api_tokens', 'integration_events',
   'api_audit_logs', 'task_logs', 'task_review_entries', 'translation_quality_runs',
-  'translation_quality_entries'
+  'translation_quality_entries', 'task_review_versions', 'glossary_entries',
+  'glossary_versions', 'glossary_snapshots', 'glossary_imports'
 ])
 
 const BUFFER_BYTES = 32 * 1024 * 1024

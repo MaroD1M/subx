@@ -33,11 +33,12 @@ export default defineEventHandler(async (event) => {
   const total = Number(totalRow?.count || 0)
   const offset = (page - 1) * pageSize
   const rows = db.prepare(`
-    SELECT tasks.*,
+    SELECT tasks.*, tb.name AS batch_name, tb.status AS batch_status,
       (SELECT COUNT(*) FROM task_review_entries tre WHERE tre.task_id = tasks.task_id) AS review_entry_count
     FROM tasks
+    LEFT JOIN task_batches tb ON tb.id = tasks.batch_id
     ${where}
-    ORDER BY created_at DESC
+    ORDER BY tasks.created_at DESC
     LIMIT ? OFFSET ?
   `).all(...params, pageSize, offset) as any[]
 
@@ -63,6 +64,9 @@ export default defineEventHandler(async (event) => {
       filePath: task.file_path,
       rootId: task.root_id,
       seriesKey: task.series_key || undefined,
+      batchId: task.batch_id || undefined,
+      batchName: task.batch_name || undefined,
+      batchStatus: task.batch_status || undefined,
       rootName,
       sourceType: task.source_type,
       trackIndex: task.track_index,

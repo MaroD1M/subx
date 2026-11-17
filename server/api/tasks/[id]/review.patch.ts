@@ -1,6 +1,7 @@
 import { apiError } from '../../../utils/apiError'
 import { useDb } from '../../../utils/db'
 import { parseBody, reviewPatchSchema } from '../../../utils/validation'
+import { ReviewVersionService } from '../../../utils/reviewVersions'
 
 function parseReviewTime(value: unknown): number | null {
   const match = String(value || '').trim().match(/^(\d{1,3}):(\d{2}):(\d{2})[,.](\d{1,3})$/)
@@ -66,6 +67,17 @@ export default defineEventHandler(async (event) => {
     const sortOrder = Number.isFinite(Number(entry.sortOrder)) ? Number(entry.sortOrder) : null
     stmt.run(translatedText, finalText, reviewStatus, startTime, endTime, sortOrder, selected, edited, edited, edited, id, String(entry.subtitleId))
   }
+
+  try {
+    const auth = event.context.auth as { name?: string } | undefined
+    ReviewVersionService.snapshot(id, {
+      kind: 'save',
+      label: '手动保存',
+      source: 'user',
+      createdBy: auth?.name || '',
+      skipIfSame: true
+    })
+  } catch { /* version snapshots must not block saving */ }
 
   return { success: true, updated: entries.length }
 })

@@ -1,6 +1,6 @@
 # 环境变量参考
 
-> 适用版本：v2.10.0
+> 适用版本：v2.10.1
 >
 > 完整默认值同时以根目录 [`.env.example`](../../.env.example) 和 [`docker-compose.yml`](../../docker-compose.yml) 为准。
 

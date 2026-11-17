@@ -7,6 +7,7 @@ import { ReviewJobService } from '../utils/reviewJobs'
 import { startAutoBackupScheduler } from '../utils/backup'
 import { CoverageAutoFillService } from '../utils/coverageAutoFill'
 import { updateCoverageIndexForTask } from '../utils/libraryCoverage'
+import { TaskBatchService } from '../utils/taskBatches'
 
 let automationListenersRegistered = false
 const RECOVERY_INTERVAL_MS = 5 * 60 * 1000
@@ -19,22 +20,33 @@ function registerAutomationListeners() {
     WatchService.finishTask(taskId, 'done')
     IntegrationService.finishTask(taskId, 'done')
     updateCoverageIndexForTask(taskId)
+    const batch = TaskBatchService.refreshForTask(taskId)
+    if (batch?.status === 'completed') void NotificationService.notifyBatchEvent(batch, 'batch_completed').catch(error => console.warn('[Reconcile] Batch notification failed:', error?.message || error))
+    if (batch?.status === 'failed') void NotificationService.notifyBatchEvent(batch, 'batch_failed').catch(error => console.warn('[Reconcile] Batch notification failed:', error?.message || error))
     void NotificationService.notifyTaskEvent(taskId, 'task_done')
     void NotificationService.notifyTaskEvent(taskId, 'low_confidence')
   })
   taskEvents.on('review', ({ taskId }: { taskId: string }) => {
     updateCoverageIndexForTask(taskId)
+    const batch = TaskBatchService.refreshForTask(taskId)
+    if (batch?.status === 'completed') void NotificationService.notifyBatchEvent(batch, 'batch_completed').catch(error => console.warn('[Reconcile] Batch notification failed:', error?.message || error))
+    if (batch?.status === 'failed') void NotificationService.notifyBatchEvent(batch, 'batch_failed').catch(error => console.warn('[Reconcile] Batch notification failed:', error?.message || error))
+    void NotificationService.notifyTaskEvent(taskId, 'task_review_required').catch(error => console.warn('[Reconcile] Review notification failed:', error?.message || error))
   })
   taskEvents.on('error', ({ taskId }: { taskId: string }) => {
     WatchService.finishTask(taskId, 'error')
     IntegrationService.finishTask(taskId, 'error')
     updateCoverageIndexForTask(taskId)
+    const batch = TaskBatchService.refreshForTask(taskId)
+    if (batch?.status === 'completed') void NotificationService.notifyBatchEvent(batch, 'batch_completed').catch(error => console.warn('[Reconcile] Batch notification failed:', error?.message || error))
+    if (batch?.status === 'failed') void NotificationService.notifyBatchEvent(batch, 'batch_failed').catch(error => console.warn('[Reconcile] Batch notification failed:', error?.message || error))
     void NotificationService.notifyTaskEvent(taskId, 'task_error')
   })
   taskEvents.on('cancelled', ({ taskId }: { taskId: string }) => {
     WatchService.finishTask(taskId, 'cancelled')
     IntegrationService.finishTask(taskId, 'cancelled')
     updateCoverageIndexForTask(taskId)
+    TaskBatchService.refreshForTask(taskId)
     void NotificationService.notifyTaskEvent(taskId, 'task_cancelled')
   })
 }

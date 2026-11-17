@@ -1,4 +1,4 @@
-export type ProviderType = 'openai-compatible' | 'anthropic' | 'gemini'
+export type ProviderType = 'openai-compatible' | 'anthropic' | 'gemini' | 'opencode-go'
 
 export interface ProviderRuntimeConfig {
   type: ProviderType
@@ -7,6 +7,8 @@ export interface ProviderRuntimeConfig {
   model: string
   temperature?: number
   maxOutputTokens?: number
+  sessionId?: string
+  headers?: Record<string, string>
 }
 
 export interface ProviderRequest {

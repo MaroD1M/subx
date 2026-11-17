@@ -1080,6 +1080,68 @@ describe('core API integration', () => {
     expect(afterRevoke.status).toBe(401)
   })
 
+  it('supports glossary CRUD, import/export and snapshot rollback', async () => {
+    const created = await apiFetch('/api/glossary', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ source: 'ApiTerm', target: '接口术语', scopeType: 'series', scopeKey: 'api-series', sourceLang: 'en', targetLang: 'zh-CN' })
+    })
+    expect(created.status).toBe(200)
+    const createdEntry = (await created.json() as any).entry
+    expect(createdEntry.scopeType).toBe('series')
+
+    const list = await apiFetch('/api/glossary?scopeType=series&scopeKey=api-series', { headers: { cookie } })
+    expect(list.status).toBe(200)
+    expect((await list.json() as any).total).toBe(1)
+
+    const exported = await apiFetch('/api/glossary/export?scopeType=series&scopeKey=api-series&format=json', { headers: { cookie } })
+    expect(exported.status).toBe(200)
+    expect((await exported.json() as any).content).toContain('ApiTerm')
+
+    const preview = await apiFetch('/api/glossary/import', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ content: JSON.stringify([{ source: 'ApiTerm', target: '新译文', sourceLang: 'en', targetLang: 'zh-CN' }]), format: 'json', scopeType: 'series', scopeKey: 'api-series', strategy: 'overwrite', dryRun: true })
+    })
+    expect(preview.status).toBe(200)
+    expect((await preview.json() as any).updated).toBe(1)
+
+    const snapshot = await apiFetch('/api/glossary/snapshots', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'api-snapshot', scopeType: 'series', scopeKey: 'api-series' })
+    })
+    expect(snapshot.status).toBe(200)
+    const snapshotBody = await snapshot.json() as any
+    const snapshotId = snapshotBody.id
+    expect(snapshotId).toBeTruthy()
+
+    const updated = await apiFetch(`/api/glossary/${createdEntry.id}`, {
+      method: 'PATCH',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ target: '修改后' })
+    })
+    expect(updated.status).toBe(200)
+    const rollback = await apiFetch('/api/glossary/rollback', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ snapshotId })
+    })
+    expect(rollback.status).toBe(200)
+    const after = await apiFetch('/api/glossary?scopeType=series&scopeKey=api-series', { headers: { cookie } })
+    expect((await after.json() as any).entries[0].target).toBe('接口术语')
+  })
+
+  it('exposes task queue and batch status endpoints', async () => {
+    const queue = await apiFetch('/api/task-queue', { headers: { cookie } })
+    expect(queue.status).toBe(200)
+    expect(await queue.json()).toHaveProperty('control')
+
+    const batches = await apiFetch('/api/task-batches', { headers: { cookie } })
+    expect(batches.status).toBe(200)
+    expect(Array.isArray((await batches.json() as any).batches)).toBe(true)
+  })
+
   it('enforces the API token scope matrix across automation, config and token management', async () => {
     const automationRead = await createSessionToken('matrix-automation-read', ['automation:read'])
     const tasksRead = await createSessionToken('matrix-tasks-read', ['tasks:read'])

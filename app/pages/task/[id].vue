@@ -563,6 +563,8 @@ const outputModeLabels: Record<string, string> = {
 const subtitleFormatLabels: Record<string, string> = {
   srt: 'SRT',
   ass: 'ASS',
+  vtt: 'VTT',
+  ttml: 'TTML',
   both: 'SRT + ASS'
 }
 const bilingualLayoutLabels: Record<string, string> = {
@@ -609,7 +611,7 @@ const pageTitle = computed(() => {
   if (status === 'done') return '翻译任务完成 - SubX'
   if (status === 'error') return '翻译任务失败 - SubX'
   if (status === 'cancelled') return '翻译任务已取消 - SubX'
-  if (['queued', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(status)) return `翻译任务进行中 (${progress}%) - SubX`
+  if (['queued', 'retrying', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(status)) return `翻译任务进行中 (${progress}%) - SubX`
   return '翻译任务详情 - SubX'
 })
 
@@ -810,6 +812,7 @@ const statusLabel = computed(() => {
   if (pausePending.value) return '暂停中（等待当前分段完成）'
   switch (task.value.step) {
     case 'queued': return '队列中'
+    case 'retrying': return '等待自动重试'
     case 'probing': return '正在分析媒体'
     case 'extracting': return '正在提取字幕'
     case 'extracting_audio': return '正在提取音频'
@@ -1009,6 +1012,7 @@ const failureSummary = computed(() => {
 const stepIcon = computed(() => {
   switch (task.value.step) {
     case 'queued': return 'i-lucide-clock'
+    case 'retrying': return 'i-lucide-refresh-cw'
     case 'probing': return 'i-lucide-scan-search'
     case 'extracting': return 'i-lucide-scissors'
     case 'extracting_audio': return 'i-lucide-audio-lines'

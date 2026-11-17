@@ -125,7 +125,9 @@ describe('notification channels', () => {
       );
       CREATE TABLE notification_deliveries (
         id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
-        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        title TEXT NOT NULL, body TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}', title_template TEXT NOT NULL DEFAULT '', body_template TEXT NOT NULL DEFAULT '', format TEXT NOT NULL DEFAULT 'text',
+        status TEXT NOT NULL DEFAULT 'pending',
         attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
         next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
         dedupe_key TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -161,7 +163,9 @@ describe('notification channels', () => {
     db.exec(`
       CREATE TABLE notification_deliveries (
         id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
-        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        title TEXT NOT NULL, body TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}', title_template TEXT NOT NULL DEFAULT '', body_template TEXT NOT NULL DEFAULT '', format TEXT NOT NULL DEFAULT 'text',
+        status TEXT NOT NULL DEFAULT 'pending',
         attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
         next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
         dedupe_key TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -192,7 +196,9 @@ describe('notification channels', () => {
       );
       CREATE TABLE notification_deliveries (
         id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
-        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        title TEXT NOT NULL, body TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}', title_template TEXT NOT NULL DEFAULT '', body_template TEXT NOT NULL DEFAULT '', format TEXT NOT NULL DEFAULT 'text',
+        status TEXT NOT NULL DEFAULT 'pending',
         attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
         next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
         dedupe_key TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -224,7 +230,9 @@ describe('notification channels', () => {
       );
       CREATE TABLE notification_deliveries (
         id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
-        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        title TEXT NOT NULL, body TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}', title_template TEXT NOT NULL DEFAULT '', body_template TEXT NOT NULL DEFAULT '', format TEXT NOT NULL DEFAULT 'text',
+        status TEXT NOT NULL DEFAULT 'pending',
         attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
         next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
         dedupe_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -258,7 +266,9 @@ describe('notification channels', () => {
       );
       CREATE TABLE notification_deliveries (
         id INTEGER PRIMARY KEY AUTOINCREMENT, channel_id INTEGER NOT NULL, event TEXT NOT NULL,
-        title TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        title TEXT NOT NULL, body TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}', title_template TEXT NOT NULL DEFAULT '', body_template TEXT NOT NULL DEFAULT '', format TEXT NOT NULL DEFAULT 'text',
+        status TEXT NOT NULL DEFAULT 'pending',
         attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
         next_run_at TEXT NOT NULL DEFAULT (datetime('now')), last_error TEXT,
         dedupe_key TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now')),

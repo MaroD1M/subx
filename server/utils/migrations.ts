@@ -369,6 +369,422 @@ function ensurePauseRequestAndCoverageSnapshots(db: any, dialect: MigrationDiale
   ensureIndex(db, dialect, 'coverage_snapshots', 'idx_coverage_snapshots_scanned', 'scanned_at')
 }
 
+
+function ensureTaskBatches(db: any, dialect: MigrationDialect) {
+  if (dialect === 'sqlite') {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_jobs (
+        task_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'queued',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        next_run_at TEXT NOT NULL DEFAULT (datetime('now')),
+        locked_by TEXT,
+        locked_at TEXT,
+        heartbeat_at TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `)
+  } else {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_jobs (
+        task_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'queued',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        next_run_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        locked_by TEXT,
+        locked_at TIMESTAMPTZ,
+        heartbeat_at TIMESTAMPTZ,
+        last_error TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `)
+  }
+  ensureColumn(db, dialect, 'tasks', 'batch_id', 'TEXT')
+  ensureColumn(db, dialect, 'task_jobs', 'batch_id', 'TEXT')
+  ensureColumn(db, dialect, 'task_jobs', 'priority', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, dialect, 'task_jobs', 'scheduled_at', dialect === 'sqlite' ? 'TEXT' : 'TIMESTAMPTZ')
+  ensureColumn(db, dialect, 'task_jobs', 'retry_policy_json', "TEXT NOT NULL DEFAULT '{}'")
+  ensureColumn(db, dialect, 'task_jobs', 'retry_category', 'TEXT')
+  ensureColumn(db, dialect, 'task_jobs', 'last_retry_at', dialect === 'sqlite' ? 'TEXT' : 'TIMESTAMPTZ')
+
+  if (dialect === 'sqlite') {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_batches (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'queued',
+        priority INTEGER NOT NULL DEFAULT 0,
+        scheduled_at TEXT,
+        policy_json TEXT NOT NULL DEFAULT '{}',
+        task_count INTEGER NOT NULL DEFAULT 0,
+        completed_count INTEGER NOT NULL DEFAULT 0,
+        failed_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        started_at TEXT,
+        finished_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS queue_control (
+        id INTEGER PRIMARY KEY,
+        paused INTEGER NOT NULL DEFAULT 0,
+        paused_at TEXT,
+        paused_by TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+  } else {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_batches (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'queued',
+        priority INTEGER NOT NULL DEFAULT 0,
+        scheduled_at TIMESTAMPTZ,
+        policy_json TEXT NOT NULL DEFAULT '{}',
+        task_count INTEGER NOT NULL DEFAULT 0,
+        completed_count INTEGER NOT NULL DEFAULT 0,
+        failed_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        started_at TIMESTAMPTZ,
+        finished_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS queue_control (
+        id INTEGER PRIMARY KEY,
+        paused INTEGER NOT NULL DEFAULT 0,
+        paused_at TIMESTAMPTZ,
+        paused_by TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `)
+  }
+  db.prepare('INSERT OR IGNORE INTO queue_control (id) VALUES (1)').run()
+  ensureIndex(db, dialect, 'task_jobs', 'idx_task_jobs_claim', 'status, priority, next_run_at')
+  ensureIndex(db, dialect, 'tasks', 'idx_tasks_batch_id', 'batch_id')
+  ensureIndex(db, dialect, 'task_batches', 'idx_task_batches_created_at', 'created_at DESC')
+}
+
+
+function ensureGlossaryTables(db: any, dialect: MigrationDialect) {
+  if (dialect === 'sqlite') {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS glossary_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        target TEXT NOT NULL,
+        source_lang TEXT NOT NULL DEFAULT '',
+        target_lang TEXT NOT NULL DEFAULT '',
+        scope_type TEXT NOT NULL DEFAULT 'global',
+        scope_key TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        priority INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        locked INTEGER NOT NULL DEFAULT 0,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT NOT NULL DEFAULT '',
+        updated_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(scope_type, scope_key, source_lang, target_lang, source)
+      );
+      CREATE TABLE IF NOT EXISTS glossary_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_id INTEGER,
+        version INTEGER NOT NULL DEFAULT 1,
+        action TEXT NOT NULL DEFAULT 'update',
+        before_json TEXT NOT NULL DEFAULT 'null',
+        after_json TEXT NOT NULL DEFAULT 'null',
+        batch_id TEXT,
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS glossary_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL DEFAULT '',
+        scope_type TEXT NOT NULL DEFAULT 'global',
+        scope_key TEXT NOT NULL DEFAULT '',
+        entries_json TEXT NOT NULL DEFAULT '[]',
+        entry_count INTEGER NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS glossary_imports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        filename TEXT NOT NULL DEFAULT '',
+        format TEXT NOT NULL DEFAULT 'csv',
+        scope_type TEXT NOT NULL DEFAULT 'global',
+        scope_key TEXT NOT NULL DEFAULT '',
+        total INTEGER NOT NULL DEFAULT 0,
+        inserted INTEGER NOT NULL DEFAULT 0,
+        updated INTEGER NOT NULL DEFAULT 0,
+        skipped INTEGER NOT NULL DEFAULT 0,
+        errors_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `)
+  } else {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS glossary_entries (
+        id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+        source TEXT NOT NULL,
+        target TEXT NOT NULL,
+        source_lang TEXT NOT NULL DEFAULT '',
+        target_lang TEXT NOT NULL DEFAULT '',
+        scope_type TEXT NOT NULL DEFAULT 'global',
+        scope_key TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        priority INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        locked INTEGER NOT NULL DEFAULT 0,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT NOT NULL DEFAULT '',
+        updated_by TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(scope_type, scope_key, source_lang, target_lang, source)
+      );
+      CREATE TABLE IF NOT EXISTS glossary_versions (
+        id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+        entry_id INTEGER,
+        version INTEGER NOT NULL DEFAULT 1,
+        action TEXT NOT NULL DEFAULT 'update',
+        before_json TEXT NOT NULL DEFAULT 'null',
+        after_json TEXT NOT NULL DEFAULT 'null',
+        batch_id TEXT,
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS glossary_snapshots (
+        id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT '',
+        scope_type TEXT NOT NULL DEFAULT 'global',
+        scope_key TEXT NOT NULL DEFAULT '',
+        entries_json TEXT NOT NULL DEFAULT '[]',
+        entry_count INTEGER NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS glossary_imports (
+        id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+        filename TEXT NOT NULL DEFAULT '',
+        format TEXT NOT NULL DEFAULT 'csv',
+        scope_type TEXT NOT NULL DEFAULT 'global',
+        scope_key TEXT NOT NULL DEFAULT '',
+        total INTEGER NOT NULL DEFAULT 0,
+        inserted INTEGER NOT NULL DEFAULT 0,
+        updated INTEGER NOT NULL DEFAULT 0,
+        skipped INTEGER NOT NULL DEFAULT 0,
+        errors_json TEXT NOT NULL DEFAULT '[]',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `)
+  }
+
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO glossary_entries (
+      source, target, source_lang, target_lang, scope_type, scope_key, category, notes, priority, enabled, locked, version, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, '', '', ?, ?, '', '', 0, 1, 0, 1, 'migration', 'migration', datetime('now'), datetime('now'))
+  `)
+  const normalize = (input: unknown) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return {}
+    const result: Record<string, string> = {}
+    for (const [rawKey, rawValue] of Object.entries(input as Record<string, unknown>).slice(0, 500)) {
+      const key = String(rawKey ?? '').trim().slice(0, 200)
+      const value = String(rawValue ?? '').trim().slice(0, 2000)
+      if (key && value) result[key] = value
+    }
+    return result
+  }
+
+  try {
+    const row = db.prepare("SELECT value FROM config WHERE key = 'glossary'").get() as { value?: string } | undefined
+    if (row?.value) {
+      const glossary = normalize(JSON.parse(String(row.value)))
+      for (const [source, target] of Object.entries(glossary)) insert.run(source, target, 'global', '')
+    }
+  } catch { /* legacy glossary is best effort */ }
+
+  if (hasTable(db, dialect, 'series_profiles')) {
+    try {
+      const rows = db.prepare('SELECT series_key, glossary_json FROM series_profiles').all() as Array<{ series_key?: string, glossary_json?: string }>
+      for (const row of rows) {
+        const seriesKey = String(row.series_key || '')
+        if (!seriesKey || !row.glossary_json) continue
+        const glossary = normalize(JSON.parse(String(row.glossary_json)))
+        for (const [source, target] of Object.entries(glossary)) insert.run(source, target, 'series', seriesKey)
+      }
+    } catch { /* legacy series glossary is best effort */ }
+  }
+
+  ensureIndex(db, dialect, 'glossary_entries', 'idx_glossary_entries_scope', 'scope_type, scope_key, enabled')
+  ensureIndex(db, dialect, 'glossary_entries', 'idx_glossary_entries_source', 'source')
+  ensureIndex(db, dialect, 'glossary_entries', 'idx_glossary_entries_lang', 'source_lang, target_lang')
+  ensureIndex(db, dialect, 'glossary_versions', 'idx_glossary_versions_entry', 'entry_id, created_at DESC')
+  ensureIndex(db, dialect, 'glossary_imports', 'idx_glossary_imports_created', 'created_at DESC')
+}
+
+
+function ensureReviewVersions(db: any, dialect: MigrationDialect) {
+  if (dialect === 'sqlite') {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_review_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        version_no INTEGER NOT NULL,
+        label TEXT NOT NULL DEFAULT '',
+        kind TEXT NOT NULL DEFAULT 'manual',
+        source TEXT NOT NULL DEFAULT 'system',
+        model TEXT,
+        provider_type TEXT,
+        fingerprint TEXT NOT NULL DEFAULT '',
+        settings_json TEXT NOT NULL DEFAULT '{}',
+        entries_json TEXT NOT NULL DEFAULT '[]',
+        entry_count INTEGER NOT NULL DEFAULT 0,
+        edited_count INTEGER NOT NULL DEFAULT 0,
+        quality_avg REAL,
+        note TEXT,
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(task_id, version_no)
+      )
+    `)
+  } else {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_review_versions (
+        id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        version_no INTEGER NOT NULL,
+        label TEXT NOT NULL DEFAULT '',
+        kind TEXT NOT NULL DEFAULT 'manual',
+        source TEXT NOT NULL DEFAULT 'system',
+        model TEXT,
+        provider_type TEXT,
+        fingerprint TEXT NOT NULL DEFAULT '',
+        settings_json TEXT NOT NULL DEFAULT '{}',
+        entries_json TEXT NOT NULL DEFAULT '[]',
+        entry_count INTEGER NOT NULL DEFAULT 0,
+        edited_count INTEGER NOT NULL DEFAULT 0,
+        quality_avg DOUBLE PRECISION,
+        note TEXT,
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(task_id, version_no)
+      )
+    `)
+  }
+  ensureIndex(db, dialect, 'task_review_versions', 'idx_task_review_versions_task', 'task_id, created_at DESC')
+}
+
+
+function ensureReviewJobOptions(db: any, dialect: MigrationDialect) {
+  if (!hasTable(db, dialect, 'review_jobs')) {
+    if (dialect === 'sqlite') {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS review_jobs (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL,
+          subtitle_ids_json TEXT NOT NULL DEFAULT '[]',
+          status TEXT NOT NULL DEFAULT 'queued',
+          kind TEXT NOT NULL DEFAULT 'retranslate',
+          options_json TEXT NOT NULL DEFAULT '{}',
+          version_id INTEGER,
+          total INTEGER NOT NULL DEFAULT 0,
+          completed INTEGER NOT NULL DEFAULT 0,
+          error TEXT,
+          result_json TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          started_at TEXT,
+          finished_at TEXT
+        )
+      `)
+    } else {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS review_jobs (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL,
+          subtitle_ids_json TEXT NOT NULL DEFAULT '[]',
+          status TEXT NOT NULL DEFAULT 'queued',
+          kind TEXT NOT NULL DEFAULT 'retranslate',
+          options_json TEXT NOT NULL DEFAULT '{}',
+          version_id INTEGER,
+          total INTEGER NOT NULL DEFAULT 0,
+          completed INTEGER NOT NULL DEFAULT 0,
+          error TEXT,
+          result_json TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          started_at TIMESTAMPTZ,
+          finished_at TIMESTAMPTZ
+        )
+      `)
+    }
+  }
+  ensureColumn(db, dialect, 'review_jobs', 'kind', "TEXT NOT NULL DEFAULT 'retranslate'")
+  ensureColumn(db, dialect, 'review_jobs', 'options_json', "TEXT NOT NULL DEFAULT '{}'")
+  ensureColumn(db, dialect, 'review_jobs', 'version_id', 'INTEGER')
+  ensureIndex(db, dialect, 'review_jobs', 'idx_review_jobs_status', 'status, created_at')
+  ensureIndex(db, dialect, 'review_jobs', 'idx_review_jobs_task', 'task_id, created_at DESC')
+}
+
+
+function ensureNotificationTemplates(db: any, dialect: MigrationDialect) {
+  if (!hasTable(db, dialect, 'notification_deliveries')) {
+    if (dialect === 'sqlite') {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS notification_deliveries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          channel_id INTEGER NOT NULL,
+          event TEXT NOT NULL,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          max_attempts INTEGER NOT NULL DEFAULT 3,
+          next_run_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_error TEXT,
+          dedupe_key TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(dedupe_key)
+        )
+      `)
+    } else {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS notification_deliveries (
+          id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+          channel_id INTEGER NOT NULL,
+          event TEXT NOT NULL,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          max_attempts INTEGER NOT NULL DEFAULT 3,
+          next_run_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          last_error TEXT,
+          dedupe_key TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE(dedupe_key)
+        )
+      `)
+    }
+  }
+  ensureColumn(db, dialect, 'notification_deliveries', 'payload_json', "TEXT NOT NULL DEFAULT '{}'")
+  ensureColumn(db, dialect, 'notification_deliveries', 'title_template', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, dialect, 'notification_deliveries', 'body_template', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, dialect, 'notification_deliveries', 'format', "TEXT NOT NULL DEFAULT 'text'")
+}
+
 export const MIGRATIONS: Migration[] = [
   {
     version: 3,
@@ -498,6 +914,41 @@ export const MIGRATIONS: Migration[] = [
     name: 'pause-request-and-coverage-snapshots',
     up(db, dialect) {
       ensurePauseRequestAndCoverageSnapshots(db, dialect)
+    }
+  },
+  {
+    version: 13,
+    name: 'task-batches-and-queue-control',
+    up(db, dialect) {
+      ensureTaskBatches(db, dialect)
+    }
+  },
+  {
+    version: 14,
+    name: 'glossary-management',
+    up(db, dialect) {
+      ensureGlossaryTables(db, dialect)
+    }
+  },
+  {
+    version: 15,
+    name: 'review-versions',
+    up(db, dialect) {
+      ensureReviewVersions(db, dialect)
+    }
+  },
+  {
+    version: 16,
+    name: 'review-job-options',
+    up(db, dialect) {
+      ensureReviewJobOptions(db, dialect)
+    }
+  },
+  {
+    version: 17,
+    name: 'notification-templates',
+    up(db, dialect) {
+      ensureNotificationTemplates(db, dialect)
     }
   },
 ]

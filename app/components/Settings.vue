@@ -605,11 +605,13 @@ const asrComputeTypeItems = [
 ]
 const providerTypeItems = [
   { label: 'OpenAI 兼容（推荐）', value: 'openai-compatible' },
+  { label: 'OpenCode Go（订阅）', value: 'opencode-go' },
   { label: 'Anthropic 原生', value: 'anthropic' },
   { label: 'Gemini 原生', value: 'gemini' }
 ]
 const providerDefaultUrls: Record<string, string> = {
   'openai-compatible': 'https://api.openai.com/v1',
+  'opencode-go': 'https://opencode.ai/inference/go/openai/v1',
   anthropic: 'https://api.anthropic.com/v1',
   gemini: 'https://generativelanguage.googleapis.com/v1beta'
 }
@@ -820,6 +822,15 @@ watch(() => config.value.translationMode, (val) => {
   }
 })
 
+watch(() => config.value.fallbackProviderType, (type, previous) => {
+  if (!type || type === previous) return
+  const current = String(config.value.fallbackApiBaseUrl || '').trim()
+  const knownDefaults = Object.values(providerDefaultUrls)
+  if (!current || knownDefaults.includes(current)) {
+    config.value.fallbackApiBaseUrl = providerDefaultUrls[type] || current
+  }
+})
+
 watch(useManualModelInput, (val) => {
   if (!import.meta.client) return
   localStorage.setItem(MODEL_INPUT_MODE_KEY, val ? 'manual' : 'select')
@@ -848,7 +859,7 @@ async function tryFetchModels() {
   }
 }
 
-function applyProviderGuide(payload: { apiBaseUrl?: string, defaultModel?: string, useManualModelInput?: boolean, providerType?: 'openai-compatible' | 'anthropic' | 'gemini' }) {
+function applyProviderGuide(payload: { apiBaseUrl?: string, defaultModel?: string, useManualModelInput?: boolean, providerType?: 'openai-compatible' | 'anthropic' | 'gemini' | 'opencode-go' }) {
   if (payload.apiBaseUrl) config.value.apiBaseUrl = payload.apiBaseUrl
   if (payload.defaultModel) config.value.defaultModel = payload.defaultModel
   if (payload.providerType) config.value.providerType = payload.providerType

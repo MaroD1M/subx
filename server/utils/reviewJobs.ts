@@ -2,11 +2,13 @@ import { v4 as uuidv4 } from 'uuid'
 import { useDb } from './db'
 import { logger } from './logger'
 import { runReviewRetranslate } from './reviewRetranslate'
+import { runReviewAb } from './reviewAb'
 
 export interface ReviewJob {
   id: string
   taskId: string
   status: 'queued' | 'running' | 'done' | 'error'
+  kind: string
   total: number
   completed: number
   error: string | null
@@ -31,6 +33,7 @@ function mapJob(row: any): ReviewJob {
     id: String(row.id),
     taskId: String(row.task_id),
     status: String(row.status || 'queued') as ReviewJob['status'],
+    kind: String(row.kind || 'retranslate'),
     total: Number(row.total || 0),
     completed: Number(row.completed || 0),
     error: row.error ? String(row.error) : null,
@@ -45,7 +48,7 @@ function mapJob(row: any): ReviewJob {
 function claimJob(): any | null {
   const db = useDb()
   const candidate = db.prepare(`
-    SELECT id, task_id, subtitle_ids_json
+    SELECT id, task_id, subtitle_ids_json, kind, options_json
     FROM review_jobs
     WHERE status = 'queued'
     ORDER BY created_at ASC
@@ -65,24 +68,37 @@ async function runJob(job: any) {
   const jobId = String(job.id)
   try {
     const subtitleIds = JSON.parse(String(job.subtitle_ids_json || '[]')) as string[]
-    const result = await runReviewRetranslate({
-      taskId: String(job.task_id),
-      subtitleIds,
-      onProgress: (completed, total) => {
-        try {
-          db.prepare(`
-            UPDATE review_jobs
-            SET completed = ?, total = ?, updated_at = datetime('now')
-            WHERE id = ?
-          `).run(completed, total, jobId)
-        } catch { /* progress is best effort */ }
-      }
-    })
+    let options: any = {}
+    try { options = JSON.parse(String(job.options_json || '{}')) } catch { options = {} }
+    const onProgress = (completed: number, total: number) => {
+      try {
+        db.prepare(`
+          UPDATE review_jobs
+          SET completed = ?, total = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(completed, total, jobId)
+      } catch { /* progress is best effort */ }
+    }
+    const result = job.kind === 'ab'
+      ? await runReviewAb({
+          taskId: String(job.task_id),
+          subtitleIds,
+          source: options.source,
+          model: options.model,
+          label: options.label,
+          onProgress
+        })
+      : await runReviewRetranslate({
+          taskId: String(job.task_id),
+          subtitleIds,
+          onProgress
+        })
+    const versionId = job.kind === 'ab' ? Number((result as any)?.version?.id || 0) || null : null
     db.prepare(`
       UPDATE review_jobs
-      SET status = 'done', completed = total, result_json = ?, finished_at = datetime('now'), updated_at = datetime('now')
+      SET status = 'done', completed = total, result_json = ?, version_id = ?, finished_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ?
-    `).run(JSON.stringify(result), jobId)
+    `).run(JSON.stringify(result), versionId, jobId)
   } catch (error: any) {
     const message = String(error?.message || error || '核对重译失败')
     try {
@@ -117,29 +133,30 @@ export const ReviewJobService = {
     }
   },
 
-  create(taskId: string, subtitleIds: string[]) {
+  create(taskId: string, subtitleIds: string[], options: { kind?: 'retranslate' | 'ab', options?: Record<string, any> } = {}) {
     const db = useDb()
+    const kind = options.kind === 'ab' ? 'ab' : 'retranslate'
     const existing = db.prepare(`
       SELECT id FROM review_jobs
-      WHERE task_id = ? AND status IN ('queued', 'running')
+      WHERE task_id = ? AND kind = ? AND status IN ('queued', 'running')
       ORDER BY created_at DESC
       LIMIT 1
-    `).get(taskId) as { id?: string } | undefined
+    `).get(taskId, kind) as { id?: string } | undefined
     if (existing?.id) return this.get(existing.id)
 
     const id = uuidv4()
     const ids = Array.from(new Set(subtitleIds.map(String).filter(Boolean)))
     db.prepare(`
-      INSERT INTO review_jobs (id, task_id, subtitle_ids_json, status, total, completed, created_at, updated_at)
-      VALUES (?, ?, ?, 'queued', ?, 0, datetime('now'), datetime('now'))
-    `).run(id, taskId, JSON.stringify(ids), ids.length)
+      INSERT INTO review_jobs (id, task_id, subtitle_ids_json, status, kind, options_json, total, completed, created_at, updated_at)
+      VALUES (?, ?, ?, 'queued', ?, ?, ?, 0, datetime('now'), datetime('now'))
+    `).run(id, taskId, JSON.stringify(ids), kind, JSON.stringify(options.options || {}), ids.length)
     void this.kick()
     return this.get(id)
   },
 
   get(jobId: string): ReviewJob | null {
     const row = useDb().prepare(`
-      SELECT id, task_id, status, total, completed, error, result_json, created_at, updated_at, started_at, finished_at
+      SELECT id, task_id, status, kind, total, completed, error, result_json, created_at, updated_at, started_at, finished_at
       FROM review_jobs
       WHERE id = ?
     `).get(jobId)
@@ -148,7 +165,7 @@ export const ReviewJobService = {
 
   latestForTask(taskId: string): ReviewJob | null {
     const row = useDb().prepare(`
-      SELECT id, task_id, status, total, completed, error, result_json, created_at, updated_at, started_at, finished_at
+      SELECT id, task_id, status, kind, total, completed, error, result_json, created_at, updated_at, started_at, finished_at
       FROM review_jobs
       WHERE task_id = ?
       ORDER BY created_at DESC

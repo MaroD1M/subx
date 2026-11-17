@@ -7,6 +7,8 @@ import { toUtcIsoString } from '~~/shared/time'
 export const API_TOKEN_SCOPES = [
   'tasks:read',
   'tasks:write',
+  'glossary:read',
+  'glossary:write',
   'automation:read',
   'automation:write',
   'tokens:manage',
@@ -168,6 +170,12 @@ export function resolveApiTokenScope(method: string, pathname: string): string |
   if (path === '/api/health' || path === '/api/openapi.json') return 'public'
   if (path.startsWith('/api/auth/')) return 'public'
 
+  if (path === '/api/glossary' || path.startsWith('/api/glossary/')) {
+    return verb === 'GET' || verb === 'HEAD' ? 'glossary:read' : 'glossary:write'
+  }
+  if (path === '/api/task-queue' || path.startsWith('/api/task-queue/') || path === '/api/task-batches' || path.startsWith('/api/task-batches/')) {
+    return verb === 'GET' || verb === 'HEAD' ? 'tasks:read' : 'tasks:write'
+  }
   if (path === '/api/task' || path.startsWith('/api/tasks') || path.startsWith('/api/task/')) {
     if (path.endsWith('/download') || path.endsWith('/download-original')) return 'tasks:read'
     if (verb === 'GET' || verb === 'HEAD') return 'tasks:read'

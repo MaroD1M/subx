@@ -33,6 +33,9 @@ import { isPathInside } from './pathSafety'
 import { acquireOutputLocks } from './outputLock'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 import { CostService } from './cost'
+import { NotificationService } from './notifications'
+import { getTaskRetryContext, retryDelaySeconds, shouldRetryTaskError } from './taskRetry'
+import { toDbUtcTimestamp } from '~~/shared/time'
 import { buildChineseVariantPaths } from './chineseVariant'
 
 export const taskEvents = new EventEmitter()
@@ -72,8 +75,8 @@ export const TaskService = {
         const subtitleStyle = task.subtitleStyle ? normalizeSubtitleStyle(task.subtitleStyle, task.outputMode) : undefined
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, subtitle_style_json, bilingual_layout, force_retranslate, status, progress, track_policy_json, series_key, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, subtitle_style_json, bilingual_layout, force_retranslate, status, progress, track_policy_json, series_key, batch_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
             task.taskId,
@@ -105,9 +108,11 @@ export const TaskService = {
             'queued',
             0,
             JSON.stringify(task.trackPolicy || {}),
-            task.seriesKey || null
+            task.seriesKey || null,
+            task.batchId || null
         )
         writeTaskLog(task.taskId!, 'queued', 'info', '任务已创建，等待执行')
+        void NotificationService.notifyTaskEvent(task.taskId!, 'task_queued').catch(error => console.warn('[Task] Failed to enqueue task notification:', error?.message || error))
         if (task.seriesKey && task.filePath) {
             try {
                 SeriesService.ensureProfile(task.rootId, task.filePath)
@@ -133,6 +138,9 @@ export const TaskService = {
             filePath: task.file_path,
             rootId: task.root_id,
             seriesKey: task.series_key || undefined,
+            batchId: task.batch_id || undefined,
+            batchName: task.batch_name || undefined,
+            batchStatus: task.batch_status || undefined,
             sourceType: task.source_type,
             trackIndex: task.track_index,
             targetLanguage: task.target_lang,
@@ -288,6 +296,7 @@ export const TaskService = {
 
         try {
             const task = this.getTask(taskId)
+            void NotificationService.notifyTaskEvent(taskId, 'task_started').catch(error => console.warn('[Task] Failed to enqueue start notification:', error?.message || error))
             runtimeConfig = runtimeConfig || await ConfigService.getConfig()
             taskForCleanup = task
             const db = useDb()
@@ -307,7 +316,7 @@ export const TaskService = {
 
             const outputExt = task.subtitleFormat === 'both' ? 'ass' : (task.subtitleFormat || 'srt')
             const outputSuffix = task.outputMode === 'original' ? 'original' : String(task.targetLanguage || '')
-            if (!['srt', 'ass'].includes(outputExt) || !isSafeOutputSuffix(outputSuffix)) {
+            if (!['srt', 'ass', 'vtt', 'ttml'].includes(outputExt) || !isSafeOutputSuffix(outputSuffix)) {
                 throw new Error('输出格式或目标语言不合法')
             }
             const outputBaseName = deriveOutputBaseName(task.filePath, task.sourceType)
@@ -452,6 +461,30 @@ export const TaskService = {
             const safeMessage = runtimeConfig?.apiKey ? message.split(runtimeConfig.apiKey).join('***') : message
             const safeStack = runtimeConfig?.apiKey && e?.stack ? String(e.stack).split(runtimeConfig.apiKey).join('***') : String(e?.stack || '')
             const classified = classifyTaskError(safeMessage)
+            const retryContext = getTaskRetryContext(taskId)
+            if (retryContext
+                && retryContext.attempts < retryContext.maxAttempts
+                && shouldRetryTaskError(retryContext.policy, classified.type)) {
+                const delaySeconds = retryDelaySeconds(retryContext.policy, retryContext.attempts)
+                const nextRunAt = toDbUtcTimestamp(new Date(Date.now() + delaySeconds * 1000))
+                try {
+                    useDb().prepare(`
+                        UPDATE task_jobs
+                        SET status='queued', next_run_at=?, retry_category=?, last_retry_at=datetime('now'),
+                            last_error=?, locked_by=NULL, locked_at=NULL, heartbeat_at=NULL, updated_at=datetime('now')
+                        WHERE task_id = ?
+                    `).run(nextRunAt, classified.type, classified.summary, taskId)
+                } catch { /* retry bookkeeping is best effort */ }
+                const latest = readLatestTaskProgress(taskId)
+                await this.updateStatus(taskId, 'retrying', latest.progress, {
+                    stepProgress: latest.stepProgress ?? undefined,
+                    stepMessage: `第 ${retryContext.attempts} 次执行失败，${Math.round(delaySeconds)} 秒后自动重试`,
+                    log: `[自动重试] ${classified.summary}；将在 ${Math.round(delaySeconds)} 秒后重试（${retryContext.attempts}/${retryContext.maxAttempts}）。`,
+                    level: 'warn'
+                })
+                void NotificationService.notifyTaskEvent(taskId, 'task_retrying').catch(error => console.warn('[Task] Failed to enqueue retry notification:', error?.message || error))
+                return
+            }
             logger.error({
                 taskId,
                 baseUrl: runtimeConfig?.baseUrl || 'https://api.openai.com/v1',

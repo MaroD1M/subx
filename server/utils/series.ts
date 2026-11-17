@@ -1,6 +1,7 @@
 import { useDb } from './db'
 import { toUtcIsoString } from '~~/shared/time'
 import type { SeriesProfile, TranslationTask } from '~~/types'
+import { GlossaryService } from './glossary'
 
 const MAX_GLOSSARY_ENTRIES = 200
 const MAX_GLOSSARY_KEY_LENGTH = 200
@@ -189,7 +190,13 @@ export const SeriesService = {
         last_task_id = excluded.last_task_id,
         updated_at = datetime('now')
     `).run(seriesKey, rootId, title, background, JSON.stringify(glossary), summary, lastTaskId)
-
+    if (input.glossary !== undefined) {
+      try {
+        GlossaryService.replaceScopeFromMap('series', seriesKey, glossary, { actor: 'series-profile', syncLegacy: false })
+      } catch (error: any) {
+        console.warn('[Glossary] Failed to sync series glossary:', error?.message || error)
+      }
+    }
     return this.getProfileByKey(seriesKey)!
   },
 

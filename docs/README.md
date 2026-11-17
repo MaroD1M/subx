@@ -1,6 +1,6 @@
 # SubX 文档
 
-> 适用版本：v2.10.0
+> 适用版本：v2.10.1
 
 SubX 是面向 NAS 与自托管环境的 AI 字幕工作台：扫描媒体库、读取内嵌或外挂字幕、语音识别、图像字幕 OCR、调用 LLM 翻译，并输出 SRT/ASS。
 
@@ -24,6 +24,7 @@ SubX 是面向 NAS 与自托管环境的 AI 字幕工作台：扫描媒体库、
 | 用 Docker Compose 跑起来 | [部署文档](deployment.md) |
 | 接 Ollama 或局域网模型 | [翻译设置](guide/translation.md) |
 | 让翻译保留人物语气和术语 | [翻译设置](guide/translation.md) |
+| 管理全局/系列术语、导入导出和版本回滚 | [术语库管理](guide/translation.md#术语库管理) |
 | 给没有字幕的剧集听写 | [媒体库与语音识别](guide/media-asr.md) |
 | 处理图片字幕 | [图像字幕 OCR](guide/ocr.md) |
 | 新片自动翻译 | [自动化与集成](guide/automation.md) |

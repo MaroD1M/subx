@@ -22,7 +22,7 @@
 
         <UFormField label="Provider 类型">
           <USelect :model-value="config.providerType" :items="providerTypeItems" class="w-full" @update:model-value="patch('providerType', $event)" />
-          <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">OpenAI 兼容覆盖 Ollama/LM Studio/vLLM；Anthropic 和 Gemini 使用官方原生协议。</p>
+          <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">OpenAI 兼容覆盖 Ollama/LM Studio/vLLM；OpenCode Go 使用订阅网关；Anthropic 和 Gemini 使用官方原生协议。</p>
         </UFormField>
 
         <UFormField label="接口基础地址">

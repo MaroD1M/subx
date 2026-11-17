@@ -5,6 +5,7 @@ import { clearEmbeddedSubtitleCache, clearLibraryCoverageCache } from '../utils/
 import { configUpdateSchema, parseBody } from '../utils/validation'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
+import { GlossaryService } from '../utils/glossary'
 
 const ALLOWED_KEYS = new Set([
   'apiKey',
@@ -123,7 +124,7 @@ export default defineEventHandler(async (event) => {
     if (key === 'targetLanguage' && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,34}$/.test(String(value || '').trim())) {
       throw apiError(400, '目标语言格式不合法')
     }
-    if (key === 'subtitleFormat' && !['srt', 'ass', 'both'].includes(String(value))) {
+    if (key === 'subtitleFormat' && !['srt', 'ass', 'vtt', 'ttml', 'both'].includes(String(value))) {
       throw apiError(400, '字幕格式不合法')
     }
     if (key === 'subtitleStylePreset' && !body.subtitleStyle) {
@@ -136,6 +137,16 @@ export default defineEventHandler(async (event) => {
     if (key === 'subtitleStyle') {
       const current = await ConfigService.getConfig()
       await ConfigService.updateConfig(key, normalizeSubtitleStyle(value, String(body.outputMode || current.outputMode || 'bilingual')))
+      continue
+    }
+    if (key === 'glossary') {
+      await ConfigService.updateConfig(key, value && typeof value === 'object' && !Array.isArray(value) ? value : {})
+      try {
+        const map = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, string> : {}
+        GlossaryService.replaceScopeFromMap('global', '', map, { actor: 'config-api', syncLegacy: false })
+      } catch (error: any) {
+        console.warn('[Glossary] Failed to sync config glossary:', error?.message || error)
+      }
       continue
     }
     if (key === 'mediaRoots') {

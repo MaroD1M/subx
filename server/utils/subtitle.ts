@@ -27,7 +27,7 @@ const ASS_TEXT_SAMPLE_HEADER = `[Script Info]\nScriptType: V4.00+\n\n[V4+ Styles
 
 
 type OutputMode = 'translated' | 'bilingual' | 'original'
-type SubtitleFormat = 'srt' | 'ass' | 'both'
+type SubtitleFormat = 'srt' | 'ass' | 'vtt' | 'ttml' | 'both'
 type BilingualLayout = 'translated_first' | 'original_first'
 type TranslationValidationIssue = { id: string, reason: 'missing' | 'same_as_source' | 'latin_heavy' | 'bilingual_duplicate' | 'same_as_source_allowed' | 'suspected_contamination' | 'overlong_translation' | 'suspected_shift', original: string, translated: string, severity?: 'soft' | 'hard' }
 
@@ -308,6 +308,42 @@ export const SubtitleService = {
     const secs = Math.floor((safeMs % 60000) / 1000)
     const ms = safeMs % 1000
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`
+  },
+
+  msToVttTime(totalMs: number): string {
+    return this.msToSrtTime(totalMs).replace(',', '.')
+  },
+
+  buildVttContent(entries: SubtitleEntry[], outputMode: OutputMode, bilingualLayout: BilingualLayout): string {
+    const normalizedEntries = this.normalizeEntries(entries, outputMode, bilingualLayout)
+    const cues = normalizedEntries.map((entry, index) => {
+      const text = this.buildSrtText(entry.text, entry.prefixTag, entry.formattingTokens)
+        .replace(formattingPlaceholderPattern, '')
+      return `${index + 1}\n${this.msToVttTime(entry.startMs)} --> ${this.msToVttTime(entry.endMs)}\n${text}`
+    })
+    return `WEBVTT\n\n${cues.join('\n\n')}\n`
+  },
+
+  buildTtmlContent(entries: SubtitleEntry[], outputMode: OutputMode, bilingualLayout: BilingualLayout, language = 'und'): string {
+    const escapeXml = (value: unknown) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+    const paragraphs = entries.map(entry => {
+      const start = this.msToVttTime(this.srtTimeToMs(String(entry.startTime)))
+      const end = this.msToVttTime(this.srtTimeToMs(String(entry.endTime)))
+      const text = this.getDisplayText(entry, outputMode, bilingualLayout)
+        .replace(formattingPlaceholderPattern, '')
+        .replace(/<[^>]+>/g, '')
+        .split('\n')
+        .map(line => escapeXml(line))
+        .join('<br/>')
+      return `      <p begin="${start}" end="${end}">${text}</p>`
+    }).join('\n')
+    const lang = String(language || 'und').replace(/[^A-Za-z0-9_-]/g, '') || 'und'
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="${lang}">\n  <head>\n    <metadata/>\n  </head>\n  <body>\n    <div>\n${paragraphs}\n    </div>\n  </body>\n</tt>\n`
   },
 
   msToAssSeconds(totalMs: number): number {
@@ -882,6 +918,20 @@ export const SubtitleService = {
       atomicWriteFile(srtPath, srtContent)
       console.log(`[Subtitle] 输出 SRT: ${srtPath} (${srtEntries.length} 条)`)
       return srtPath
+    }
+
+    if (subtitleFormat === 'vtt') {
+      const vttPath = `${basePath}.vtt`
+      atomicWriteFile(vttPath, this.buildVttContent(entries, outputMode, bilingualLayout))
+      console.log(`[Subtitle] 输出 VTT: ${vttPath} (${srtEntries.length} 条)`)
+      return vttPath
+    }
+
+    if (subtitleFormat === 'ttml') {
+      const ttmlPath = `${basePath}.ttml`
+      atomicWriteFile(ttmlPath, this.buildTtmlContent(entries, outputMode, bilingualLayout))
+      console.log(`[Subtitle] 输出 TTML: ${ttmlPath} (${srtEntries.length} 条)`)
+      return ttmlPath
     }
 
     const sourceExt = sourceSubtitlePath?.split('.').pop()?.toLowerCase()

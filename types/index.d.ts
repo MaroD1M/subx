@@ -87,6 +87,9 @@ export interface TranslationTask {
   rootId?: string              // 媒体库 ID
   rootName?: string            // 媒体库名称
   seriesKey?: string           // 系列记忆 key
+  batchId?: string             // 批量任务批次 ID
+  batchName?: string           // 批次名称
+  batchStatus?: string         // 批次状态
   sourceType: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr'  // 自动 / 内嵌字幕 / 外挂字幕 / 语音识别 / 图像字幕 OCR
   trackIndex?: number          // 内嵌字幕轨道或音频轨道索引
   sourceLanguage?: string      // ASR 检测或指定的源语言
@@ -105,7 +108,7 @@ export interface TranslationTask {
   contentBackground?: string       // 剧情背景
   customInstructions?: string      // 额外翻译要求
   translationMode?: 'non_stream' | 'stream' // 翻译模式
-  subtitleFormat?: 'srt' | 'ass' | 'both'
+  subtitleFormat?: 'srt' | 'ass' | 'vtt' | 'ttml' | 'both'
   subtitleStylePreset?: string
   subtitleStyle?: SubtitleOutputStyle
   bilingualLayout?: 'translated_first' | 'original_first'
@@ -141,6 +144,7 @@ export type TaskStatus =
   | 'parsing'
   | 'translating'
   | 'exporting'
+  | 'retrying'
   | 'paused'
   | 'review'
   | 'done'
@@ -151,10 +155,10 @@ export type TaskStatus =
 export interface AppConfig {
   apiKey: string               // 加密存储
   apiBaseUrl: string           // 支持自定义 Base URL
-  providerType?: 'openai-compatible' | 'anthropic' | 'gemini' // Provider 协议类型
+  providerType?: 'openai-compatible' | 'anthropic' | 'gemini' | 'opencode-go' // Provider 协议类型
   defaultModel: string         // 默认模型
   fallbackProviderEnabled?: boolean // 主供应商失败后是否使用备用供应商
-  fallbackProviderType?: 'openai-compatible' | 'anthropic' | 'gemini'
+  fallbackProviderType?: 'openai-compatible' | 'anthropic' | 'gemini' | 'opencode-go'
   fallbackApiBaseUrl?: string
   fallbackApiKey?: string
   fallbackModel?: string
@@ -432,7 +436,25 @@ export interface WatchEvent {
 }
 
 export type NotificationChannelType = 'telegram' | 'smtp' | 'webhook' | 'ntfy' | 'discord' | 'matrix' | 'wecom'
-export type NotificationEvent = 'task_done' | 'task_error' | 'task_cancelled' | 'low_confidence' | 'watch_error' | 'backfill_done' | 'test'
+export type NotificationEvent =
+  | 'task_queued'
+  | 'task_started'
+  | 'task_retrying'
+  | 'task_done'
+  | 'task_error'
+  | 'task_cancelled'
+  | 'task_review_required'
+  | 'low_confidence'
+  | 'batch_created'
+  | 'batch_started'
+  | 'batch_paused'
+  | 'batch_completed'
+  | 'batch_failed'
+  | 'watch_error'
+  | 'backfill_done'
+  | 'glossary_imported'
+  | 'glossary_updated'
+  | 'test'
 
 export interface NotificationChannel {
   id: number

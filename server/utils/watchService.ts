@@ -230,6 +230,8 @@ export const WatchService = {
       event: row.event,
       title: row.title,
       body: row.body,
+      payload: (() => { try { return JSON.parse(String(row.payload_json || '{}')) } catch { return null } })(),
+      format: row.format || 'text',
       status: row.status,
       attempts: Number(row.attempts || 0),
       maxAttempts: Number(row.max_attempts || 3),

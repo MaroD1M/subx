@@ -13,6 +13,8 @@ export interface NotificationPayload {
   event: NotificationEvent
   title: string
   body: string
+  payload?: any
+  format?: string
 }
 
 export function asString(value: unknown): string {
@@ -170,7 +172,9 @@ async function sendSmtp(config: Record<string, any>, payload: NotificationPayloa
 async function sendWebhook(config: Record<string, any>, payload: NotificationPayload) {
   const url = validateHttpUrl(config.url, 'Webhook 地址')
   if (!url) throw new Error('Webhook 地址未配置')
-  const body = JSON.stringify({ event: payload.event, title: payload.title, body: payload.body, timestamp: new Date().toISOString() })
+  const body = payload.payload != null
+    ? JSON.stringify(payload.payload)
+    : JSON.stringify({ event: payload.event, title: payload.title, body: payload.body, timestamp: new Date().toISOString() })
   const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(config.headers || {}) }
   if (asString(config.secret)) {
     headers['X-SubX-Signature'] = `sha256=${createHmac('sha256', asString(config.secret)).update(body).digest('hex')}`

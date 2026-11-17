@@ -10,6 +10,7 @@ import { assertTaskNotCancelled, ensureTaskNotCancelled } from './taskState'
 import { analyzeSubtitleQuality } from './subtitleQuality'
 import { buildChineseVariantEntries, buildChineseVariantPaths } from './chineseVariant'
 import { CostService } from './cost'
+import { ReviewVersionService } from './reviewVersions'
 
 export interface FinalizeTaskOptions {
   taskId: string
@@ -134,6 +135,24 @@ export async function finalizeTaskOutput(options: FinalizeTaskOptions): Promise<
     writeTaskLog(taskId, 'exporting', 'warn', `[核对] 检测到 ${allIssues.length} 条字幕需注意：${preview}`)
   } else {
     persistReviewEntries(taskId, translatedEntries, [])
+  }
+  try {
+    ReviewVersionService.snapshot(taskId, {
+      kind: 'initial',
+      label: '初始翻译',
+      source: 'system',
+      model: task.model,
+      providerType: String(config.providerType || 'openai-compatible'),
+      settings: {
+        outputMode: task.outputMode,
+        subtitleFormat,
+        subtitleStylePreset,
+        subtitleStyleJson: subtitleStyle ? JSON.stringify(subtitleStyle) : '',
+        bilingualLayout
+      }
+    })
+  } catch (snapshotError: any) {
+    writeTaskLog(taskId, 'exporting', 'warn', `[版本] 初始版本快照失败：${snapshotError?.message || snapshotError}`)
   }
 
   await updateStatus(taskId, 'exporting', 95, { stepProgress: 100, stepMessage: '文件保存成功', log: `文件保存成功: ${savedPath}${embyVariantPath ? '（SubX/ 变体已同步）' : ''}` })

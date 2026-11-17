@@ -49,6 +49,12 @@ export function parseTimestamp(value: unknown): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
+export function toDbUtcTimestamp(value: unknown): string | null {
+  const parsed = parseTimestamp(value)
+  if (!parsed) return null
+  return parsed.toISOString().slice(0, 19).replace('T', ' ')
+}
+
 export function toUtcIsoString(value: unknown): string {
   if (value == null || value === '') return ''
   const parsed = parseTimestamp(value)

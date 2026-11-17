@@ -19,7 +19,8 @@
         <UPopover v-model:open="moreMenuOpen" :content="{ align: 'end' }">
           <UButton icon="i-lucide-ellipsis" color="neutral" variant="ghost" size="sm" aria-label="更多操作" title="更多操作" />
           <template #content>
-            <div class="w-48 p-1">
+            <div class="w-52 p-1">
+              <UButton label="历史版本 / A/B" icon="i-lucide-history" color="neutral" variant="ghost" class="w-full justify-start" @click="moreMenuOpen = false; openVersions()" />
               <UButton label="返回任务" icon="i-lucide-arrow-left" color="neutral" variant="ghost" class="w-full justify-start" :to="`/task/${taskId}`" @click="moreMenuOpen = false" />
               <UButton label="放弃成果" icon="i-lucide-trash-2" color="error" variant="ghost" class="w-full justify-start" @click="moreMenuOpen = false; discardReview()" />
             </div>
@@ -71,18 +72,19 @@
         <p class="text-xs font-semibold text-primary-800 dark:text-primary-200">音频片段 #{{ clipEntryId }} · {{ clipRangeText }}</p>
         <UButton icon="i-lucide-x" size="xs" color="neutral" variant="ghost" aria-label="关闭音频片段" @click="closeClip" />
       </div>
-      <audio :src="clipUrl" controls autoplay class="w-full" aria-label="字幕音频片段"></audio>
+      <audio ref="audioEl" :src="clipUrl" controls autoplay class="w-full" aria-label="字幕音频片段"></audio>
     </div>
 
-    <section class="app-section space-y-3" aria-labelledby="review-filters-heading">
-      <div class="flex flex-wrap items-start justify-between gap-2">
-        <div class="min-w-0">
-          <p id="review-filters-heading" class="app-section-title">筛选与搜索</p>
-          <p class="app-caption">先缩小范围，再勾选条目批量处理。</p>
-        </div>
-        <span v-if="hasActiveFilters" class="app-pill app-pill-primary">已启用 {{ activeFilterCount }} 个筛选</span>
-      </div>
+    <ReviewWaveform
+      v-if="!reviewLoading && entries.length && focusedSubtitleId"
+      :task-id="taskId"
+      :entries="entries"
+      :focused-subtitle-id="focusedSubtitleId"
+      @seek="playAt"
+      @update:time="applyWaveformTime"
+    />
 
+    <section class="space-y-2" aria-label="筛选与搜索">
       <div class="app-toolbar-row" role="toolbar" aria-label="筛选与搜索">
         <UInput v-model="searchQuery" icon="i-lucide-search" size="sm" placeholder="搜索原文 / 译文 / 编号" class="w-full sm:w-64" aria-label="搜索字幕内容" />
         <UButton
@@ -177,7 +179,6 @@
                   <USelect v-model="proofreadIssueFilter" :items="proofreadIssueFilterItems" size="sm" class="w-full" />
                 </UFormField>
               </div>
-              <p class="app-caption">译文与原文相同会忽略标点、空格、大小写和格式标签。AI 问题来自一致性检查缓存。</p>
             </div>
           </template>
         </UPopover>
@@ -330,7 +331,7 @@
           <div class="app-toolbar-row gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
             <USelect v-model="previewFormat" :items="previewFormatItems" size="xs" class="w-24" aria-label="预览格式" />
             <USelect v-model="bilingualLayout" :items="bilingualLayoutItems" size="xs" class="w-32" aria-label="双语布局" />
-            <span class="app-meta">{{ previewFormat === 'ass' ? 'ASS 样式预览' : 'SRT 文本预览' }}</span>
+            <span class="app-meta">{{ previewFormat === 'ass' ? 'ASS 样式预览' : previewFormat === 'vtt' ? 'VTT 文本预览' : previewFormat === 'ttml' ? 'TTML 预览' : 'SRT 文本预览' }}</span>
           </div>
           <div class="p-3">
             <div v-if="previewLoading" class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
@@ -364,9 +365,108 @@
       </div>
     </div>
 
+    <USlideover v-model:open="versionsOpen" title="版本与 A/B" description="回滚只修改核对工作区，不会覆盖已导出的文件。" :ui="{ content: 'w-full sm:max-w-5xl' }">
+      <template #body>
+        <div class="space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <UButton label="保存当前为版本" icon="i-lucide-save" size="sm" color="primary" variant="soft" :loading="versionSaving" @click="saveCurrentVersion" />
+            <UButton label="生成 A/B 版本" icon="i-lucide-git-compare" size="sm" color="neutral" variant="soft" @click="abOpen = true" />
+            <UButton label="刷新" icon="i-lucide-refresh-cw" size="sm" color="neutral" variant="ghost" :loading="versionsLoading" @click="loadVersions" />
+          </div>
+
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <UFormField label="对比 A">
+              <USelect v-model="compareA" :items="versionOptions" class="w-full" @update:model-value="loadCompareSide('a')" />
+            </UFormField>
+            <UFormField label="对比 B">
+              <USelect v-model="compareB" :items="versionOptions" class="w-full" @update:model-value="loadCompareSide('b')" />
+            </UFormField>
+          </div>
+
+          <div v-if="compareLoading" class="app-caption">正在加载版本内容...</div>
+          <template v-else-if="diffRows.length">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p class="app-section-title">差异 {{ diffRows.length }} 条</p>
+              <div class="flex gap-1">
+                <UButton label="全部采用 A" size="xs" color="neutral" variant="soft" @click="applyAllFromDiff('a')" />
+                <UButton label="全部采用 B" size="xs" color="primary" variant="soft" @click="applyAllFromDiff('b')" />
+              </div>
+            </div>
+            <div class="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+              <div v-for="row in diffRows" :key="row.subtitleId" class="rounded-xl border border-gray-100 p-3 dark:border-gray-800">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="min-w-0 truncate text-xs font-medium text-gray-500 dark:text-gray-400">#{{ row.subtitleId }} · {{ row.originalText }}</p>
+                  <span class="app-pill" :class="row.status === 'added' ? 'app-pill-success' : row.status === 'removed' ? 'app-pill-danger' : 'app-pill-warning'">{{ diffStatusLabel(row.status) }}</span>
+                </div>
+                <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div class="rounded-lg bg-gray-50 p-2 dark:bg-gray-900/50">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-[11px] font-semibold text-gray-500">A</span>
+                      <UButton label="采用 A" size="xs" color="neutral" variant="ghost" @click="applyDiffRow(row, 'a')" />
+                    </div>
+                    <p class="mt-1 whitespace-pre-wrap text-xs leading-5">{{ row.aText || '（空）' }}</p>
+                    <p class="app-meta mt-1">{{ row.aTime }}</p>
+                  </div>
+                  <div class="rounded-lg bg-primary-50/60 p-2 dark:bg-primary-950/20">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-[11px] font-semibold text-primary-700 dark:text-primary-300">B</span>
+                      <UButton label="采用 B" size="xs" color="primary" variant="ghost" @click="applyDiffRow(row, 'b')" />
+                    </div>
+                    <p class="mt-1 whitespace-pre-wrap text-xs leading-5">{{ row.bText || '（空）' }}</p>
+                    <p class="app-meta mt-1">{{ row.bTime }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <p v-else-if="compareA && compareB" class="app-caption">两个版本没有差异。</p>
+
+          <div class="border-t border-gray-100 pt-3 dark:border-gray-800">
+            <p class="app-section-title">版本列表</p>
+            <div class="mt-2 max-h-60 space-y-2 overflow-y-auto">
+              <div v-for="version in versions" :key="version.id" class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-100 p-3 dark:border-gray-800">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium">v{{ version.versionNo }} · {{ version.label || version.kind }}</p>
+                  <p class="app-meta">{{ formatDate(version.createdAt) }} · {{ version.model || '-' }} · {{ version.entryCount }} 条 · 修改 {{ version.editedCount }} 条</p>
+                </div>
+                <div class="flex gap-1">
+                  <UButton label="设为 A" size="xs" color="neutral" variant="ghost" @click="compareA = version.id; loadCompareSide('a')" />
+                  <UButton label="设为 B" size="xs" color="neutral" variant="ghost" @click="compareB = version.id; loadCompareSide('b')" />
+                  <UButton label="回滚" size="xs" color="warning" variant="soft" @click="applyVersion(version)" />
+                </div>
+              </div>
+              <p v-if="!versions.length" class="app-caption text-center">暂无版本</p>
+            </div>
+          </div>
+        </div>
+      </template>
+    </USlideover>
+
+    <UModal v-model:open="abOpen" title="生成 A/B 版本" description="用另一个模型生成对比版本，不覆盖当前工作区。">
+      <template #body>
+        <div class="space-y-3">
+          <UFormField label="B 版本来源">
+            <USelect v-model="abForm.source" :items="abSourceItems" class="w-full" />
+          </UFormField>
+          <UFormField label="模型">
+            <UInput v-model="abForm.model" :placeholder="abForm.source === 'fallback' ? '留空使用备用模型' : '留空使用当前默认模型'" class="w-full" />
+          </UFormField>
+          <UFormField label="版本标签">
+            <UInput v-model="abForm.label" placeholder="例如：GPT-5.6 对比" class="w-full" />
+          </UFormField>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton label="取消" color="neutral" variant="ghost" @click="abOpen = false" />
+          <UButton label="开始生成" color="primary" :loading="abStarting" @click="startAb" />
+        </div>
+      </template>
+    </UModal>
+
     <ReviewGuideModal v-model:open="guideOpen" />
 
-    <USlideover v-model:open="previewOpen" title="字幕预览" description="查看当前导出设置的 SRT/ASS 预览。" :ui="{ content: 'w-full sm:max-w-2xl' }">
+    <USlideover v-model:open="previewOpen" title="字幕预览" description="查看当前导出设置的预览。" :ui="{ content: 'w-full sm:max-w-2xl' }">
       <template #body>
         <div class="space-y-4">
           <div class="flex flex-wrap items-center gap-2">
@@ -421,6 +521,9 @@
 
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
+import { formatDateTime } from '~~/shared/time'
+import { diffReviewEntries, type ReviewDiffRow } from '~~/shared/reviewDiff'
+import { useReviewHistory } from '~/composables/useReviewHistory'
 
 definePageMeta({ key: route => String(route.params.id || '') })
 import {
@@ -443,6 +546,7 @@ import {
 } from '~~/shared/reviewFilters'
 
 const ReviewProofreadPanel = defineAsyncComponent(() => import('~/components/ReviewProofreadPanel.vue'))
+const ReviewWaveform = defineAsyncComponent(() => import('~/components/ReviewWaveform.vue'))
 
 useHead({
   title: '字幕核对 - SubX'
@@ -466,6 +570,7 @@ const retranslateProgress = ref<{ completed: number, total: number } | null>(nul
 const clipUrl = ref('')
 const clipEntryId = ref('')
 const clipRangeText = ref('')
+const audioEl = ref<HTMLAudioElement | null>(null)
 type ProofreadKind = 'glossary' | 'consistency'
 interface ProofreadState {
   result: any | null
@@ -479,6 +584,40 @@ const proofreadStates = reactive<Record<ProofreadKind, ProofreadState>>({
 })
 const proofreadKind = ref<ProofreadKind>('consistency')
 const proofreadRevision = ref(0)
+const timeZone = useTimeZone()
+const versionsOpen = ref(false)
+const versionsLoading = ref(false)
+const versionSaving = ref(false)
+const versions = ref<any[]>([])
+const versionCache = ref<Record<number, any[]>>({})
+const compareA = ref<string | number | null>(null)
+const compareB = ref<string | number | null>(null)
+const compareLoading = ref(false)
+const compareEntriesA = ref<any[]>([])
+const compareEntriesB = ref<any[]>([])
+const abOpen = ref(false)
+const abStarting = ref(false)
+const abSourceItems = [
+  { label: '当前 Provider + 其他模型', value: 'primary' },
+  { label: '备用 Provider', value: 'fallback' }
+]
+const abForm = reactive({ source: 'primary' as 'primary' | 'fallback', model: '', label: '' })
+const versionOptions = computed(() => [
+  { label: '当前工作区', value: 'current' },
+  ...versions.value.map(version => ({
+    label: `v${version.versionNo} · ${version.label || version.kind} · ${formatDate(version.createdAt)}`,
+    value: version.id
+  }))
+])
+const currentCompareEntries = computed(() => entries.value.map(entry => ({
+  subtitleId: entry.subtitleId,
+  originalText: entry.originalText,
+  translatedText: entry.translatedText,
+  finalText: entry.finalText,
+  startTime: entry.startTime,
+  endTime: entry.endTime
+})))
+const diffRows = computed<ReviewDiffRow[]>(() => diffReviewEntries(compareEntriesA.value, compareEntriesB.value))
 const proofreadIssueFilter = ref('all')
 const proofreadDrawerOpen = ref(false)
 const applyingTerms = ref(false)
@@ -491,11 +630,11 @@ let previewRequestId = 0
 let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null
 const previewContent = ref('')
 const previewOpen = ref(false)
-const previewFormat = ref<'srt' | 'ass'>('srt')
+const previewFormat = ref<'srt' | 'ass' | 'vtt' | 'ttml'>('srt')
 const bilingualLayout = ref<'translated_first' | 'original_first'>('translated_first')
 const exportMode = ref<'translated' | 'bilingual' | 'original'>('translated')
 const exportStyle = ref<string>('mono_clean')
-const exportFormat = ref<'srt' | 'ass'>('srt')
+const exportFormat = ref<'srt' | 'ass' | 'vtt' | 'ttml'>('srt')
 const taskSubtitleStyle = ref<SubtitleOutputStyle | undefined>()
 const styleDrawerOpen = ref(false)
 const searchQuery = ref('')
@@ -521,6 +660,7 @@ const pageSizeItems = [
 ]
 const summary = reactive({ total: 0, needsReview: 0, edited: 0 })
 const entries = ref<any[]>([])
+const reviewHistory = useReviewHistory(entries, { limit: 30 })
 const taskMeta = reactive({ outputMode: 'translated', bilingualLayout: 'translated_first' as 'translated_first' | 'original_first' })
 const lastClickedIndex = ref(-1)
 const entrySnapshots = ref<Record<string, { translatedText: string, finalText: string, reviewStatus: string, edited: boolean, startTime: string, endTime: string }>>({})
@@ -549,6 +689,22 @@ function formatSecondsToSrtTime(value: number) {
   const seconds = Math.floor((totalMs % 60000) / 1000)
   const milliseconds = totalMs % 1000
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`
+}
+
+function playAt(seconds: number) {
+  const start = Math.max(0, Number(seconds) || 0)
+  const end = start + 15
+  clipEntryId.value = '波形'
+  clipRangeText.value = `${formatSecondsToSrtTime(start)} → ${formatSecondsToSrtTime(end)}`
+  clipUrl.value = `/api/tasks/${taskId}/audio?start=${encodeURIComponent(start.toFixed(3))}&end=${encodeURIComponent(end.toFixed(3))}&t=${Date.now()}`
+}
+
+function applyWaveformTime(payload: { subtitleId: string, startTime: string, endTime: string }) {
+  const entry = entries.value.find(item => String(item.subtitleId) === String(payload.subtitleId))
+  if (!entry) return
+  entry.startTime = payload.startTime
+  entry.endTime = payload.endTime
+  markEdited(entry)
 }
 
 function playClip(entry: any) {
@@ -802,7 +958,9 @@ function closeClip() {
 
 const previewFormatItems = [
   { label: 'SRT', value: 'srt' },
-  { label: 'ASS', value: 'ass' }
+  { label: 'ASS', value: 'ass' },
+  { label: 'VTT', value: 'vtt' },
+  { label: 'TTML', value: 'ttml' }
 ]
 
 const exportModeItems = [
@@ -826,7 +984,9 @@ function updateExportStyle(value: SubtitleOutputStyle) {
 
 const exportFormatItems = [
   { label: 'SRT', value: 'srt' },
-  { label: 'ASS', value: 'ass' }
+  { label: 'ASS', value: 'ass' },
+  { label: 'VTT', value: 'vtt' },
+  { label: 'TTML', value: 'ttml' }
 ]
 
 const bilingualLayoutItems = [
@@ -1626,8 +1786,9 @@ async function loadReview() {
     exportMode.value = taskMeta.outputMode as any
     taskSubtitleStyle.value = res.task?.subtitleStyle || undefined
     exportStyle.value = normalizeSubtitleStylePreset(res.task?.subtitleStylePreset || res.task?.subtitleStyle?.presetId || 'bilingual_simple', exportMode.value)
-    exportFormat.value = (res.task?.subtitleFormat === 'ass' ? 'ass' : 'srt')
+    exportFormat.value = ['ass', 'vtt', 'ttml'].includes(String(res.task?.subtitleFormat)) ? res.task.subtitleFormat : 'srt'
     entries.value = res.entries || []
+    reviewHistory.reset()
     lastClickedIndex.value = -1
     rebuildSnapshots(res.entries || [])
 
@@ -1981,13 +2142,220 @@ function focusEntryByOffset(offset: number) {
   })
 }
 
+async function loadVersions() {
+  versionsLoading.value = true
+  try {
+    const response: any = await $fetch(`/api/tasks/${taskId}/versions`)
+    versions.value = response.versions || []
+  } catch (error: any) {
+    toast.add({ title: '版本加载失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+  } finally {
+    versionsLoading.value = false
+  }
+}
+
+async function openVersions() {
+  versionsOpen.value = true
+  await loadVersions()
+  if (!compareA.value && versions.value.length) compareA.value = versions.value[versions.value.length - 1]?.id || null
+  if (!compareB.value) compareB.value = 'current'
+  await Promise.all([loadCompareSide('a'), loadCompareSide('b')])
+}
+
+async function entriesForVersion(target: string | number | null) {
+  if (target === null || target === '') return []
+  if (target === 'current') return currentCompareEntries.value
+  const id = Number(target)
+  if (!Number.isInteger(id) || id <= 0) return []
+  if (versionCache.value[id]) return versionCache.value[id]!
+  const response: any = await $fetch(`/api/tasks/${taskId}/versions/${id}`)
+  const entries = response?.version?.entries || []
+  versionCache.value[id] = entries
+  return entries
+}
+
+async function loadCompareSide(side: 'a' | 'b') {
+  const target = side === 'a' ? compareA.value : compareB.value
+  compareLoading.value = true
+  try {
+    const result = await entriesForVersion(target)
+    if (side === 'a') compareEntriesA.value = result
+    else compareEntriesB.value = result
+  } catch (error: any) {
+    toast.add({ title: '版本内容加载失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+  } finally {
+    compareLoading.value = false
+  }
+}
+
+function applyDiffRow(row: ReviewDiffRow, side: 'a' | 'b') {
+  const entry = entries.value.find(item => String(item.subtitleId) === row.subtitleId)
+  if (!entry) return
+  const text = side === 'a' ? row.aText : row.bText
+  entry.translatedText = text
+  entry.finalText = text
+  entry.reviewStatus = 'edited'
+  entry.edited = true
+}
+
+function applyAllFromDiff(side: 'a' | 'b') {
+  for (const row of diffRows.value) applyDiffRow(row, side)
+  toast.add({ title: `已采用 ${side.toUpperCase()} 的 ${diffRows.value.length} 条差异`, description: '修改尚未保存，请点击“保存修改”。', color: 'success' })
+}
+
+async function applyVersion(version: any) {
+  if (!(await confirm({
+    title: `回滚到 v${version.versionNo}？`,
+    description: `将用该版本替换当前核对工作区（${version.entryCount} 条字幕），不会自动覆盖已导出的文件。回滚会生成一个新的历史版本。`,
+    confirmLabel: '回滚',
+    color: 'warning'
+  }))) return
+  try {
+    const result: any = await $fetch(`/api/tasks/${taskId}/versions/${version.id}/apply`, { method: 'POST' })
+    versionsOpen.value = false
+    await Promise.all([loadReview(), loadPreview(), refreshProofreadCacheState()])
+    toast.add({ title: '已回滚', description: `已应用 ${result.applied || version.entryCount} 条字幕；需要时请重新导出。`, color: 'success' })
+  } catch (error: any) {
+    toast.add({ title: '回滚失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+  }
+}
+
+async function saveCurrentVersion() {
+  const label = typeof window !== 'undefined' ? window.prompt('版本标签', '手动版本') : '手动版本'
+  if (label === null) return
+  versionSaving.value = true
+  try {
+    await $fetch(`/api/tasks/${taskId}/versions`, { method: 'POST', body: { label: label || '手动版本' } })
+    await loadVersions()
+    toast.add({ title: '版本已保存', color: 'success' })
+  } catch (error: any) {
+    toast.add({ title: '保存版本失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+  } finally {
+    versionSaving.value = false
+  }
+}
+
+async function startAb() {
+  abStarting.value = true
+  try {
+    await saveChanges(false)
+    const response: any = await $fetch(`/api/tasks/${taskId}/ab`, {
+      method: 'POST',
+      body: { source: abForm.source, model: abForm.model.trim() || undefined, label: abForm.label.trim() || undefined }
+    })
+    const job = response?.job
+    if (!job?.id) throw new Error('未能创建 A/B 任务')
+    toast.add({ title: 'A/B 版本生成中', description: '完成后会在版本列表中显示', color: 'info' })
+    await waitForReviewJob(job.id)
+    abOpen.value = false
+    await loadVersions()
+    versionsOpen.value = true
+    toast.add({ title: 'A/B 版本已生成', color: 'success' })
+  } catch (error: any) {
+    toast.add({ title: 'A/B 生成失败', description: error?.data?.message || error?.message || '请稍后重试', color: 'error' })
+  } finally {
+    abStarting.value = false
+  }
+}
+
+function diffStatusLabel(status: ReviewDiffRow['status']) {
+  return status === 'added' ? '新增' : status === 'removed' ? '删除' : '修改'
+}
+
+function formatDate(value: string | undefined) {
+  return formatDateTime(value, timeZone)
+}
+
+function undoReview() {
+  if (reviewHistory.undo()) {
+    toast.add({ title: '已撤销', description: '可继续按 Ctrl/Cmd+Shift+Z 重做', color: 'neutral' })
+  }
+}
+
+function redoReview() {
+  if (reviewHistory.redo()) {
+    toast.add({ title: '已重做', color: 'neutral' })
+  }
+}
+
+function nudgeFocusedTime(deltaMs: number) {
+  const entry = entries.value.find(item => String(item.subtitleId) === focusedSubtitleId.value)
+  if (!entry) return
+  const start = srtTimeToSeconds(entry.startTime)
+  const end = srtTimeToSeconds(entry.endTime)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return
+  entry.startTime = formatSecondsToSrtTime(Math.max(0, start + deltaMs / 1000))
+  entry.endTime = formatSecondsToSrtTime(Math.max(0.001, end + deltaMs / 1000))
+  markEdited(entry)
+}
+
+function toggleAudioPlayback() {
+  const audio = audioEl.value
+  if (!audio) return
+  if (audio.paused) void audio.play().catch(() => undefined)
+  else audio.pause()
+}
+
+function focusSearchInput() {
+  const input = document.querySelector('input[aria-label="搜索字幕内容"]') as HTMLInputElement | null
+  input?.focus()
+}
+
+function closeReviewLayers() {
+  if (versionsOpen.value || abOpen.value || previewOpen.value || exportSettingsOpen.value || styleDrawerOpen.value || proofreadDrawerOpen.value) {
+    versionsOpen.value = false
+    abOpen.value = false
+    previewOpen.value = false
+    exportSettingsOpen.value = false
+    styleDrawerOpen.value = false
+    proofreadDrawerOpen.value = false
+    return true
+  }
+  return false
+}
+
 function handleShortcut(event: KeyboardEvent) {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+  const mod = event.metaKey || event.ctrlKey
+  const key = event.key.toLowerCase()
+  if (mod && key === 's') {
     event.preventDefault()
     void saveChanges().catch(() => {})
     return
   }
+  if (mod && key === 'z') {
+    if (isEditableTarget(event.target)) return
+    event.preventDefault()
+    if (event.shiftKey) redoReview()
+    else undoReview()
+    return
+  }
+  if (mod && key === 'y') {
+    if (isEditableTarget(event.target)) return
+    event.preventDefault()
+    redoReview()
+    return
+  }
   if (isEditableTarget(event.target)) return
+  if (event.key === 'Escape') {
+    if (closeReviewLayers()) event.preventDefault()
+    return
+  }
+  if (event.key === '/' && !mod && !event.altKey) {
+    event.preventDefault()
+    focusSearchInput()
+    return
+  }
+  if (event.code === 'Space' && clipUrl.value) {
+    event.preventDefault()
+    toggleAudioPlayback()
+    return
+  }
+  if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+    event.preventDefault()
+    const step = event.shiftKey ? 100 : 10
+    nudgeFocusedTime(event.key === 'ArrowUp' ? -step : step)
+    return
+  }
   if (event.key === 'j' || event.key === 'J') {
     event.preventDefault()
     focusEntryByOffset(1)

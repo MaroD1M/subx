@@ -11,9 +11,9 @@ export default defineEventHandler(async (event) => {
 
     const query = getQuery(event)
     const requestFormat = String(query.format || '').toLowerCase()
-    const validFormats = ['srt', 'ass']
+    const validFormats = ['srt', 'ass', 'vtt', 'ttml']
     if (requestFormat && !validFormats.includes(requestFormat)) {
-        throw apiError(400, `Invalid format: ${requestFormat}. Use srt or ass`)
+        throw apiError(400, `Invalid format: ${requestFormat}. Use srt, ass, vtt or ttml`)
     }
 
     const db = useDb()
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (requestFormat) {
-        const altPath = outputPath.replace(/\.(srt|ass)$/, `.${requestFormat}`)
+        const altPath = outputPath.replace(/\.(srt|ass|vtt|ttml)$/, `.${requestFormat}`)
         if (existsSync(altPath)) {
             outputPath = altPath
         } else {
@@ -46,8 +46,13 @@ export default defineEventHandler(async (event) => {
 
     const fileName = basename(outputPath)
 
+    const contentType = outputPath.endsWith('.ttml')
+      ? 'application/ttml+xml; charset=utf-8'
+      : outputPath.endsWith('.vtt')
+        ? 'text/vtt; charset=utf-8'
+        : 'text/plain; charset=utf-8'
     setHeaders(event, {
-        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Type': contentType,
         'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     })
 

@@ -28,7 +28,8 @@ export default defineEventHandler(async (event) => {
             type: providerType,
             apiKey,
             baseUrl: baseURL,
-            model: ''
+            model: '',
+            sessionId: 'subx-models'
         })
         const models = await provider.listModels()
         console.log(`[Model List] 成功获取 ${models.length} 个模型`)

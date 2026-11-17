@@ -116,6 +116,8 @@ const subtitleStyle = computed(() => normalizeSubtitleStyle(props.config.subtitl
 const subtitleFormatItems = [
   { label: 'SRT', value: 'srt' },
   { label: 'ASS', value: 'ass' },
+  { label: 'VTT', value: 'vtt' },
+  { label: 'TTML', value: 'ttml' },
   { label: 'SRT + ASS', value: 'both' }
 ]
 const bilingualLayoutItems = [

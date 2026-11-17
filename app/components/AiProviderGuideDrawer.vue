@@ -126,7 +126,7 @@ import { AI_PROVIDER_GUIDES, type AiProviderCompatibility, type AiProviderGuide 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  apply: [payload: { apiBaseUrl?: string, defaultModel?: string, useManualModelInput?: boolean, providerType?: 'openai-compatible' | 'anthropic' | 'gemini' }]
+  apply: [payload: { apiBaseUrl?: string, defaultModel?: string, useManualModelInput?: boolean, providerType?: 'openai-compatible' | 'anthropic' | 'gemini' | 'opencode-go' }]
 }>()
 
 const openState = computed({

@@ -10,7 +10,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const query = getQuery(event)
-  const format = String(query.format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt'
+  const requestedFormat = String(query.format || 'srt').toLowerCase()
+  const format = ['srt', 'ass', 'vtt', 'ttml'].includes(requestedFormat) ? requestedFormat : 'srt'
   const requestedBilingualLayout = String(query.bilingualLayout || '')
   const requestedOutputMode = String(query.outputMode || '')
   const requestedStylePreset = String(query.subtitleStylePreset || '')
@@ -40,6 +41,14 @@ export default defineEventHandler(async (event) => {
 
   const outputMode = (requestedOutputMode || task?.output_mode || 'translated') as any
   const bilingualLayout = (requestedBilingualLayout === 'translated_first' || requestedBilingualLayout === 'original_first') ? requestedBilingualLayout : (task?.bilingual_layout || 'translated_first')
+
+  if (format === 'vtt') {
+    return { content: SubtitleService.buildVttContent(entries as any, outputMode, bilingualLayout), count: rows.length, format }
+  }
+
+  if (format === 'ttml') {
+    return { content: SubtitleService.buildTtmlContent(entries as any, outputMode, bilingualLayout, String(task?.target_lang || 'und')), count: rows.length, format }
+  }
 
   if (format === 'ass') {
     const storedStyle = (() => {

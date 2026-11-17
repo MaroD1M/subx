@@ -5,7 +5,7 @@ import { createGeminiProvider } from './gemini'
 
 export function normalizeProviderType(value: unknown): ProviderType {
   const type = String(value || 'openai-compatible')
-  return type === 'anthropic' || type === 'gemini' ? type : 'openai-compatible'
+  return type === 'anthropic' || type === 'gemini' || type === 'opencode-go' ? type : 'openai-compatible'
 }
 
 export function createProvider(config: ProviderRuntimeConfig): BoundTranslationProvider {
@@ -14,6 +14,8 @@ export function createProvider(config: ProviderRuntimeConfig): BoundTranslationP
       return createAnthropicProvider(config)
     case 'gemini':
       return createGeminiProvider(config)
+    case 'opencode-go':
+      return createOpenAIProvider(config, 'opencode-go')
     default:
       return createOpenAIProvider(config)
   }

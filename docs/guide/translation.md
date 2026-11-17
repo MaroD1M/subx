@@ -1,6 +1,6 @@
 # 翻译设置
 
-> 适用版本：v2.10.0
+> 适用版本：v2.10.1
 >
 > 前置条件：已完成 [快速开始](../getting-started.md)。
 
@@ -21,13 +21,13 @@
 
 Docker 内不要写 `localhost`，请使用 NAS 局域网 IP、容器服务名或 `host.docker.internal`。如果模型列表接口不可用，请开启“手动填写模型名称”。
 
-Anthropic 和 Gemini 使用各自原生协议，当前以非流式请求为主；OpenAI 兼容模式支持流式输出。
+Anthropic 和 Gemini 使用各自原生协议，当前以非流式请求为主；OpenAI 兼容模式支持流式输出。OpenCode Go 通过 OpenAI 兼容的 Go 网关接入，当前阶段只使用 Chat Completions 协议。
 
 | 设置项 | 说明 |
 |--------|------|
 | 接口密钥 | 大语言模型的 API Key，必填 |
-| Provider 类型 | OpenAI 兼容 / Anthropic 原生 / Gemini 原生 |
-| 接口基础地址 | OpenAI 兼容默认 `https://api.openai.com/v1`；Anthropic 默认 `https://api.anthropic.com/v1`；Gemini 默认 `https://generativelanguage.googleapis.com/v1beta` |
+| Provider 类型 | OpenAI 兼容 / OpenCode Go / Anthropic 原生 / Gemini 原生 |
+| 接口基础地址 | OpenAI 兼容默认 `https://api.openai.com/v1`；OpenCode Go 默认 `https://opencode.ai/inference/go/openai/v1`；Anthropic 默认 `https://api.anthropic.com/v1`；Gemini 默认 `https://generativelanguage.googleapis.com/v1beta` |
 | 默认模型 | 用于翻译的模型名称，支持获取列表或手动输入 |
 
 ## 默认翻译行为
@@ -37,6 +37,15 @@ Anthropic 和 Gemini 使用各自原生协议，当前以非流式请求为主�
 | 目标语言 | 翻译的目标语言，默认 `zh-CN`（简体中文） |
 | 输出模式 | 仅译文 / 双语对照 / 仅导出原字幕 |
 | 翻译模式 | 非流式（推荐）/ 流式（兼容性较弱） |
+
+### OpenCode Go
+
+选择 Provider 类型「OpenCode Go」，填入 OpenCode Console 创建的 API Key，基础地址使用默认值 `https://opencode.ai/inference/go/openai/v1` 即可。
+
+- SubX 会自动发送 `x-opencode-session` 和 `SubX/<version>` User-Agent；会话 ID 按任务隔离。
+- 当前阶段只使用 OpenAI Chat Completions 协议；如果某个模型返回协议不支持，请先切换模型或使用 OpenAI 兼容供应商。
+- 模型列表来自 Go 网关；列表失败时可以手动填写模型 ID，例如 `deepseek-v4.1-flash`。
+- 免费模型通常只允许在 OpenCode 客户端内使用，第三方客户端可能返回 403；订阅额度和区域限制以 OpenCode Console 为准。
 
 ## 性能参数
 
@@ -130,12 +139,24 @@ Anthropic 和 Gemini 使用各自原生协议，当前以非流式请求为主�
 遇到双关语时优先保留人物语气，不必逐字直译。
 ```
 
+## 术语库管理
+
+「术语库」页面独立管理全局和系列术语：
+
+- 每条术语支持原文、译文、源/目标语言、作用域、分类、备注、优先级、启用和锁定。
+- 系列术语优先于全局术语；同 scope 下优先级高的条目后应用。
+- 支持 CSV / JSON 导入导出；导入前可预览新增、更新、跳过和错误。
+- 每次修改记录逐条审计；可创建命名快照并整体回滚。
+- 核对页 AI 校对加入术语时写入全局术语库；系列术语可在术语库页面维护。
+
+> 旧版设置页的全局术语表会自动迁移到术语库；保存旧接口时也会同步，兼容历史客户端。
+
 ## 术语表与高级设置
 
 | 设置项 | 说明 |
 |--------|------|
 | 流式使用量统计 | 仅在使用流式模式时建议开启，可获取精确 token 用量 |
-| 术语表 | 在设置页的“术语表”区域维护原文/译文键值对，如 `Jedi -> 绝地` |
+| 术语表 | 推荐在「术语库」页面维护；旧版设置页的键值对仍兼容并自动同步到术语库 |
 
 ---
 

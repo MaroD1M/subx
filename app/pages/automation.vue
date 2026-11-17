@@ -575,21 +575,36 @@
             </UFormField>
           </template>
 
-          <div class="space-y-2">
-            <p class="text-xs font-medium text-gray-600 dark:text-gray-300">通知事件</p>
-            <div class="flex flex-wrap gap-2" role="group" aria-label="通知事件选择">
-              <UButton
-                v-for="event in notificationEvents"
-                :key="event"
-                :label="eventLabel(event)"
-                size="xs"
-                :color="channelForm.config.events.includes(event) ? 'primary' : 'neutral'"
-                :variant="channelForm.config.events.includes(event) ? 'solid' : 'soft'"
-                :aria-pressed="channelForm.config.events.includes(event)"
-                @click="toggleChannelEvent(event)"
-              />
+          <UFormField label="通知事件">
+            <USelectMenu
+              v-model="channelForm.config.events"
+              :items="notificationEventOptions"
+              multiple
+              value-key="value"
+              class="w-full"
+              aria-label="通知事件选择"
+            >
+              <template #default="{ modelValue }">
+                <span class="truncate">{{ eventSelectionSummary(modelValue) }}</span>
+              </template>
+            </USelectMenu>
+          </UFormField>
+
+          <details class="rounded-lg border border-gray-100 dark:border-gray-800">
+            <summary class="cursor-pointer px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300">消息模板（可选）</summary>
+            <div class="space-y-3 border-t border-gray-100 p-3 dark:border-gray-800">
+              <UFormField label="标题">
+                <UInput v-model="channelForm.config.titleTemplate" placeholder="留空使用默认标题" class="w-full" />
+              </UFormField>
+              <UFormField label="正文">
+                <UTextarea v-model="channelForm.config.bodyTemplate" :rows="3" placeholder="留空使用默认正文" class="w-full" />
+              </UFormField>
+              <UFormField v-if="channelForm.type === 'webhook'" label="Webhook JSON">
+                <UTextarea v-model="channelForm.config.webhookPayloadTemplate" :rows="4" placeholder='{"event":"{{event}}","file":"{{task.fileName}}"}' class="w-full font-mono text-xs" />
+              </UFormField>
+              <p class="app-caption break-words">变量：{{ notificationTemplateVariableText }}</p>
             </div>
-          </div>
+          </details>
         </div>
       </template>
       <template #footer>
@@ -615,6 +630,7 @@
 <script setup lang="ts">
 import type { NotificationChannel, NotificationChannelType, NotificationEvent, WatchEvent, WatchFolder, WatchOutputPolicy, WatchRules } from '~~/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
+import { DEFAULT_NOTIFICATION_EVENT_KEYS, NOTIFICATION_EVENT_LABELS, NOTIFICATION_EVENT_KEYS, NOTIFICATION_TEMPLATE_VARIABLES } from '~~/shared/notificationEvents'
 import { createSubtitleStyle, getSubtitleStylePresetOptions, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '~~/shared/subtitleStyles'
 import { AUTOMATION_TEMPLATES } from '~~/shared/automationTemplates'
 import { formatDateTime } from '~~/shared/time'
@@ -757,6 +773,8 @@ const sourceTypeOptions = [
 const subtitleFormatOptions = [
   { label: 'SRT', value: 'srt' },
   { label: 'ASS', value: 'ass' },
+  { label: 'VTT', value: 'vtt' },
+  { label: 'TTML', value: 'ttml' },
   { label: 'SRT + ASS', value: 'both' }
 ]
 const bilingualLayoutOptions = [
@@ -774,7 +792,15 @@ const channelTypeOptions = [
   { label: 'Matrix', value: 'matrix' },
   { label: '企业微信', value: 'wecom' }
 ]
-const notificationEvents: NotificationEvent[] = ['task_done', 'task_error', 'task_cancelled', 'low_confidence', 'watch_error', 'backfill_done']
+const notificationEvents = NOTIFICATION_EVENT_KEYS.filter(event => event !== 'test') as NotificationEvent[]
+const notificationTemplateVariableText = NOTIFICATION_TEMPLATE_VARIABLES.join('、')
+const notificationEventOptions = computed(() => notificationEvents.map(event => ({ label: eventLabel(event), value: event })))
+function eventSelectionSummary(value: unknown) {
+  const count = Array.isArray(value) ? value.length : 0
+  if (!count) return '未选择'
+  if (count === notificationEvents.length) return '全部事件'
+  return `已选 ${count} 个事件`
+}
 
 const defaultRules = (): WatchRules => ({
   extensions: ['.mkv', '.mp4', '.avi', '.webm', '.ts', '.m2ts', '.mts', '.mov'],
@@ -969,16 +995,16 @@ const channelModalOpen = ref(false)
 const savingChannel = ref(false)
 const testingChannelId = ref(0)
 const testingChannelProxy = ref(false)
-const secretPlaceholder = '已设置，留空不修改'
-const channelForm = reactive<any>({ id: null, type: 'telegram' as NotificationChannelType, name: '', enabled: true, config: { events: [...notificationEvents] }, headersText: '' })
+const channelForm = reactive<any>({ id: null, type: 'telegram' as NotificationChannelType, name: '', enabled: true, config: { events: [...DEFAULT_NOTIFICATION_EVENT_KEYS], titleTemplate: '', bodyTemplate: '', webhookPayloadTemplate: '', format: 'text' }, headersText: '' })
+const secretPlaceholder = computed(() => channelForm.id ? '已设置，留空不修改' : '')
 function defaultChannelConfig(type: NotificationChannelType) {
-  if (type === 'telegram') return { botToken: '', chatId: '', proxyUrl: '', events: [...notificationEvents] }
-  if (type === 'smtp') return { host: '', port: 587, secure: false, user: '', password: '', from: '', to: '', events: [...notificationEvents] }
-  if (type === 'webhook') return { url: '', method: 'POST', headers: {}, secret: '', proxyUrl: '', events: [...notificationEvents] }
-  if (type === 'discord') return { url: '', events: [...notificationEvents] }
-  if (type === 'matrix') return { homeserverUrl: '', roomId: '', accessToken: '', events: [...notificationEvents] }
-  if (type === 'wecom') return { url: '', events: [...notificationEvents] }
-  return { url: 'https://ntfy.sh', topic: '', token: '', priority: 3, proxyUrl: '', events: [...notificationEvents] }
+  if (type === 'telegram') return { botToken: '', chatId: '', proxyUrl: '', events: [...DEFAULT_NOTIFICATION_EVENT_KEYS], titleTemplate: '', bodyTemplate: '', webhookPayloadTemplate: '', format: 'text' }
+  if (type === 'smtp') return { host: '', port: 587, secure: false, user: '', password: '', from: '', to: '', events: [...DEFAULT_NOTIFICATION_EVENT_KEYS], titleTemplate: '', bodyTemplate: '', webhookPayloadTemplate: '', format: 'text' }
+  if (type === 'webhook') return { url: '', method: 'POST', headers: {}, secret: '', proxyUrl: '', events: [...DEFAULT_NOTIFICATION_EVENT_KEYS], titleTemplate: '', bodyTemplate: '', webhookPayloadTemplate: '', format: 'text' }
+  if (type === 'discord') return { url: '', events: [...DEFAULT_NOTIFICATION_EVENT_KEYS], titleTemplate: '', bodyTemplate: '', webhookPayloadTemplate: '', format: 'text' }
+  if (type === 'matrix') return { homeserverUrl: '', roomId: '', accessToken: '', events: [...DEFAULT_NOTIFICATION_EVENT_KEYS], titleTemplate: '', bodyTemplate: '', webhookPayloadTemplate: '', format: 'text' }
+  if (type === 'wecom') return { url: '', events: [...DEFAULT_NOTIFICATION_EVENT_KEYS], titleTemplate: '', bodyTemplate: '', webhookPayloadTemplate: '', format: 'text' }
+  return { url: 'https://ntfy.sh', topic: '', token: '', priority: 3, proxyUrl: '', events: [...DEFAULT_NOTIFICATION_EVENT_KEYS], titleTemplate: '', bodyTemplate: '', webhookPayloadTemplate: '', format: 'text' }
 }
 function openChannelModal(channel?: NotificationChannel) {
   if (channel) {
@@ -986,7 +1012,7 @@ function openChannelModal(channel?: NotificationChannel) {
     channelForm.type = channel.type
     channelForm.name = channel.name
     channelForm.enabled = channel.enabled
-    channelForm.config = { ...defaultChannelConfig(channel.type), ...channel.config, events: [...(channel.config.events || notificationEvents)] }
+    channelForm.config = { ...defaultChannelConfig(channel.type), ...channel.config, events: [...(channel.config.events || DEFAULT_NOTIFICATION_EVENT_KEYS)] }
     channelForm.headersText = channel.config.headers && typeof channel.config.headers === 'object'
       ? (Object.keys(channel.config.headers).length ? JSON.stringify(channel.config.headers, null, 2) : '')
       : ''
@@ -1011,15 +1037,11 @@ function channelTypeLabel(type: string) {
   return ({ telegram: 'Telegram', smtp: '邮件', webhook: 'Webhook', ntfy: 'ntfy', discord: 'Discord', matrix: 'Matrix', wecom: '企业微信' } as Record<string, string>)[type] || type
 }
 function eventLabel(event: string) {
-  return ({ task_done: '任务完成', task_error: '任务失败', task_cancelled: '任务取消', low_confidence: '低置信度', watch_error: '监控异常', backfill_done: '回填完成' } as Record<string, string>)[event] || event
+  return NOTIFICATION_EVENT_LABELS[event] || event
 }
 function channelEventText(channel: NotificationChannel) {
   const list = Array.isArray(channel.config.events) ? channel.config.events : notificationEvents
   return list.map(eventLabel).join('、')
-}
-function toggleChannelEvent(event: NotificationEvent) {
-  const list = channelForm.config.events as string[]
-  channelForm.config.events = list.includes(event) ? list.filter(item => item !== event) : [...list, event]
 }
 async function saveChannel() {
   savingChannel.value = true

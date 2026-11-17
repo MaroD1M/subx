@@ -80,6 +80,9 @@ export function useDb() {
     CREATE INDEX IF NOT EXISTS idx_task_logs_task_id ON task_logs(task_id, id);
     CREATE INDEX IF NOT EXISTS idx_integration_events_dedupe ON integration_events(source, event, path, status, created_at);
     CREATE INDEX IF NOT EXISTS idx_task_jobs_status ON task_jobs(status, next_run_at);
+    CREATE INDEX IF NOT EXISTS idx_task_jobs_claim ON task_jobs(status, priority, next_run_at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_batch_id ON tasks(batch_id);
+    CREATE INDEX IF NOT EXISTS idx_task_batches_created_at ON task_batches(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_transcription_runs_task_id ON transcription_runs(task_id);
     CREATE INDEX IF NOT EXISTS idx_asr_segments_run_id ON asr_segments(run_id);
     CREATE INDEX IF NOT EXISTS idx_watch_events_folder_status ON watch_events(folder_id, status, created_at);
@@ -94,6 +97,7 @@ export function useDb() {
     CREATE INDEX IF NOT EXISTS idx_task_review_entries_task_id ON task_review_entries(task_id);
     CREATE INDEX IF NOT EXISTS idx_task_review_entries_status ON task_review_entries(task_id, review_status);
     CREATE INDEX IF NOT EXISTS idx_task_review_entries_sort ON task_review_entries(task_id, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_task_review_versions_task ON task_review_versions(task_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_translation_quality_runs_task ON translation_quality_runs(task_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_translation_quality_entries_run ON translation_quality_entries(run_id);
     CREATE INDEX IF NOT EXISTS idx_translation_quality_entries_task ON translation_quality_entries(task_id, subtitle_id);
@@ -101,6 +105,11 @@ export function useDb() {
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_translations_cache_updated_at ON translations_cache(updated_at);
     CREATE INDEX IF NOT EXISTS idx_asr_checkpoints_updated_at ON asr_checkpoints(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_glossary_entries_scope ON glossary_entries(scope_type, scope_key, enabled);
+    CREATE INDEX IF NOT EXISTS idx_glossary_entries_source ON glossary_entries(source);
+    CREATE INDEX IF NOT EXISTS idx_glossary_entries_lang ON glossary_entries(source_lang, target_lang);
+    CREATE INDEX IF NOT EXISTS idx_glossary_versions_entry ON glossary_versions(entry_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_glossary_imports_created ON glossary_imports(created_at DESC);
   `)
 
   return _db

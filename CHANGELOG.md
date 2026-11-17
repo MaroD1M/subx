@@ -1,17 +1,32 @@
 # Changelog
 
-## Unreleased
+## v2.10.1 - 2026-11-17
+
+### Added
+
+- 新增批量任务编排：批次实体、优先级、一次性定时执行、全局/批次暂停、失败自动重试策略。
+- 新增独立术语库：全局/系列作用域、语言对、分类、备注、启停和锁定、CSV/JSON 导入导出、逐条审计、命名快照与整体回滚。
+- 新增字幕版本快照、A/B 对比、逐条采用和一键回滚；支持当前 Provider 换模型或备用 Provider 生成 B 版本。
+- 新增核对页撤销/重做、快捷键扩展、音频波形对齐、字幕边界拖动和 VTT/TTML 导出。
+- 新增通知事件目录、标题/正文模板、Webhook 自定义 JSON payload 和模板变量。
+- 新增 OpenCode Go Provider：支持 Go 网关、模型列表、`x-opencode-session`、SubX User-Agent 和真实端点 smoke test。
+- 新增 `docs/README.md` 文档索引、`CONTRIBUTING.md`、`SECURITY.md`、Issue/PR 模板，以及 `npm run docs:check` 文档校验。
 
 ### Changed
 
 - 重构文档结构：README 收敛为项目门面，使用文档拆分为快速开始和 `docs/guide/*`，部署参数、升级、运维和故障排查独立成页。
 - 开发文档移至 `docs/development/`，修正实测指南章节编号，PostgreSQL 文档改为运行时参考。
-- README 不再维护版本升级说明，升级步骤统一放在 `docs/reference/upgrade.md`，版本变更统一以本文件为准。
+- 优化前端交互层级：术语库改为紧凑工具栏和列表、历史队列/批次压缩展示、核对页减少说明文字并将版本入口收进更多菜单、自动化通知模板与文件浏览器批量高级项折叠。
+- 核对页波形按当前字幕按需显示，缩小高度并提供 2m/5m/10m 窗口；差异状态改为中文短标签。
 
-### Added
+### Fixed
 
-- 新增 `docs/README.md` 文档索引、`CONTRIBUTING.md`、`SECURITY.md`、Issue/PR 模板。
-- 新增 `npm run docs:check`，校验文档本地链接、锚点、图片、版本号和引用的环境变量，并接入 CI。
+- 修复批次编辑保存时 SQL 重复 `UPDATE` 导致接口失败的问题。
+- 修复旧版术语同步可能误删语言对术语的问题。
+- 修复任务创建、重试和批次通知中未捕获异步异常的问题。
+- 修复历史页 VTT/TTML 任务显示错误下载格式的问题。
+- 修复波形组件在 SSR 阶段请求接口的潜在问题。
+- 修复自动备份 E2E 在 Vue hydration 完成前点击导致偶发失败的问题。
 
 ## v2.10.0 - 2026-11-12
 

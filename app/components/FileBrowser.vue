@@ -88,44 +88,58 @@
         <UButton label="清除筛选" size="xs" color="neutral" variant="ghost" icon="i-lucide-x" @click="searchQuery = ''" />
       </div>
 
-      <div v-if="batchMode" class="mb-3 space-y-2.5 rounded-lg border border-primary-100 bg-primary-50/50 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0">
-            <p class="text-xs font-semibold text-primary-800 dark:text-primary-200">批量轨道策略</p>
-            <p class="app-caption text-primary-800 dark:text-primary-200">目录勾选只加入视频文件；同名外挂字幕会由视频自动匹配，不会单独重复入队。</p>
-          </div>
-          <UBadge color="primary" variant="subtle" size="sm" class="shrink-0">{{ selectedFileCount }} 个文件</UBadge>
+      <div v-if="batchMode" class="mb-3 space-y-2 rounded-lg border border-primary-100 bg-primary-50/50 p-3 dark:border-primary-900/40 dark:bg-primary-950/20">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-list-plus" class="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-300" />
+          <p class="min-w-0 flex-1 truncate text-xs font-semibold text-primary-800 dark:text-primary-200">批量任务</p>
+          <UBadge color="primary" variant="subtle" size="sm">{{ selectedFileCount }} 个文件</UBadge>
         </div>
-        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <UFormField label="字幕语言优先">
-            <USelect v-model="batchPolicy.subtitleLanguage" :items="trackLanguageOptions" class="w-full" />
+        <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <UFormField label="名称" class="col-span-2 lg:col-span-1">
+            <UInput v-model="batchPolicy.name" placeholder="可选" class="w-full" aria-label="批次名称" />
           </UFormField>
-          <UFormField label="音轨语言优先（ASR）">
-            <USelect v-model="batchPolicy.audioLanguage" :items="trackLanguageOptions" class="w-full" />
+          <UFormField label="优先级">
+            <UInputNumber v-model="batchPolicy.priority" :min="-1000" :max="1000" class="w-full" aria-label="批次优先级" />
+          </UFormField>
+          <UFormField label="计划时间">
+            <UInput v-model="batchPolicy.scheduledAt" type="datetime-local" class="w-full" aria-label="计划执行时间" />
+          </UFormField>
+          <UFormField label="失败重试">
+            <USelect v-model="batchPolicy.retryPreset" :items="batchRetryPresetOptions" class="w-full" aria-label="失败重试策略" />
           </UFormField>
         </div>
-        <div class="app-field-row rounded-lg border-primary-100/70 bg-white/70 dark:border-primary-900/30 dark:bg-gray-950/30">
-          <div class="min-w-0">
-            <p class="text-xs font-medium text-gray-700 dark:text-gray-200">同集多版本自动去重</p>
-            <p class="app-caption">同一目录下相同 SxxExx 只保留体积最大的版本。</p>
-          </div>
-          <USwitch v-model="batchPolicy.dedupeEpisodes" aria-label="同集多版本自动去重" />
-        </div>
-        <details class="rounded-lg border border-primary-100/70 bg-white/60 p-2 dark:border-primary-900/30 dark:bg-gray-950/30">
-          <summary class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300">高级轨道选项</summary>
-          <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
-              <span>优先默认轨</span>
-              <USwitch v-model="batchPolicy.preferDefault" aria-label="优先默认轨" />
-            </label>
-            <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
-              <span>允许强制轨</span>
-              <USwitch v-model="batchPolicy.allowForcedSubtitle" aria-label="允许强制字幕轨" />
-            </label>
-            <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
-              <span>无字幕时 ASR</span>
-              <USwitch v-model="batchPolicy.fallbackToAsr" aria-label="无字幕时自动语音识别" />
-            </label>
+        <details class="rounded-lg bg-white/60 px-2.5 py-1.5 dark:bg-gray-950/30">
+          <summary class="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">
+            <UIcon name="i-lucide-sliders-horizontal" class="h-3.5 w-3.5" />
+            轨道与去重
+          </summary>
+          <div class="mt-2 space-y-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <UFormField label="字幕语言">
+                <USelect v-model="batchPolicy.subtitleLanguage" :items="trackLanguageOptions" class="w-full" />
+              </UFormField>
+              <UFormField label="音轨语言">
+                <USelect v-model="batchPolicy.audioLanguage" :items="trackLanguageOptions" class="w-full" />
+              </UFormField>
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
+                <span>同集去重</span>
+                <USwitch v-model="batchPolicy.dedupeEpisodes" aria-label="同集多版本自动去重" />
+              </label>
+              <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
+                <span>优先默认轨</span>
+                <USwitch v-model="batchPolicy.preferDefault" aria-label="优先默认轨" />
+              </label>
+              <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
+                <span>允许强制轨</span>
+                <USwitch v-model="batchPolicy.allowForcedSubtitle" aria-label="允许强制字幕轨" />
+              </label>
+              <label class="app-field-row gap-2 text-xs text-gray-600 dark:text-gray-300">
+                <span>无字幕时 ASR</span>
+                <USwitch v-model="batchPolicy.fallbackToAsr" aria-label="无字幕时自动语音识别" />
+              </label>
+            </div>
           </div>
         </details>
       </div>
@@ -514,6 +528,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from '~~/shared/time'
 import { defineAsyncComponent } from 'vue'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { LANGUAGE_OPTIONS } from '~~/shared/languages'
@@ -560,6 +575,10 @@ function switchMobileTab(tab: 'files' | 'settings') {
 }
 const batchMode = ref(false)
 const batchPolicy = reactive({
+  name: '',
+  priority: 0,
+  scheduledAt: '',
+  retryPreset: 'default',
   dedupeEpisodes: true,
   subtitleLanguage: 'auto',
   audioLanguage: 'auto',
@@ -567,6 +586,24 @@ const batchPolicy = reactive({
   allowForcedSubtitle: false,
   fallbackToAsr: true
 })
+const batchRetryPresetOptions = [
+  { label: '默认（3 次，指数退避）', value: 'default' },
+  { label: '快速（2 次，约 30 秒）', value: 'quick' },
+  { label: '持续（5 次，最长 10 分钟）', value: 'persistent' },
+  { label: '不自动重试', value: 'off' }
+]
+function batchRetryPolicy() {
+  switch (batchPolicy.retryPreset) {
+    case 'quick':
+      return { maxAttempts: 2, backoff: 'exponential', baseSeconds: 15, maxSeconds: 60 }
+    case 'persistent':
+      return { maxAttempts: 5, backoff: 'exponential', baseSeconds: 30, maxSeconds: 600 }
+    case 'off':
+      return { maxAttempts: 1, retryOn: [] }
+    default:
+      return { maxAttempts: 3, backoff: 'exponential', baseSeconds: 30, maxSeconds: 600 }
+  }
+}
 const trackLanguageOptions = [
   { label: '不指定（默认轨优先）', value: 'auto' },
   { label: '中文优先', value: 'zh' },
@@ -944,6 +981,8 @@ const outputModeItems = [
 const subtitleFormatItems = [
   { label: 'SRT', value: 'srt' },
   { label: 'ASS', value: 'ass' },
+  { label: 'VTT', value: 'vtt' },
+  { label: 'TTML', value: 'ttml' },
   { label: 'SRT + ASS', value: 'both' }
 ]
 const bilingualLayoutItems = [
@@ -1557,6 +1596,12 @@ async function startBatchTasks() {
       method: 'POST',
       body: {
         files: selected.map(node => ({ path: node.path, rootId: node.rootId || activeRootId.value })),
+        batch: {
+          name: batchPolicy.name.trim() || undefined,
+          priority: Number(batchPolicy.priority) || 0,
+          scheduledAt: batchPolicy.scheduledAt ? new Date(batchPolicy.scheduledAt).toISOString() : undefined,
+          retryPolicy: batchRetryPolicy()
+        },
         dedupeEpisodes: batchPolicy.dedupeEpisodes,
         trackPolicy: {
           subtitleLanguage: batchPolicy.subtitleLanguage === 'auto' ? undefined : batchPolicy.subtitleLanguage,
@@ -1570,8 +1615,9 @@ async function startBatchTasks() {
     })
     const skipped = Number(res.skippedDuplicates || 0)
     const reused = Number(res.reusedActive || 0)
-    const description = `共创建 ${res.taskIds?.length || selected.length} 个任务${skipped ? `，跳过 ${skipped} 个同集重复版本` : ''}${reused ? `，复用 ${reused} 个运行中任务` : ''}`
-    toast.add({ title: '已加入队列', description, color: 'success' })
+    const scheduled = batchPolicy.scheduledAt ? `，计划执行 ${formatDateTime(new Date(batchPolicy.scheduledAt))}` : ''
+    const description = `共创建 ${res.taskIds?.length || selected.length} 个任务${scheduled}${skipped ? `，跳过 ${skipped} 个同集重复版本` : ''}${reused ? `，复用 ${reused} 个运行中任务` : ''}`
+    toast.add({ title: res.batchId ? '批次已创建' : '已加入队列', description, color: 'success' })
     clearFileSelection()
     navigateTo('/history')
   } catch (e: any) {

@@ -7,12 +7,14 @@ const tempRoot = mkdtempSync(join(tmpdir(), 'subx-task-queue-'))
 let db: any
 let TaskQueue: typeof import('../taskQueue').TaskQueue
 let isTaskCancelled: typeof import('../taskState').isTaskCancelled
+let QueueControlService: typeof import('../queueControl').QueueControlService
 
 beforeAll(async () => {
   process.env.DB_PATH = join(tempRoot, 'test.db')
   db = (await import('../db')).useDb()
   TaskQueue = (await import('../taskQueue')).TaskQueue
   isTaskCancelled = (await import('../taskState')).isTaskCancelled
+  QueueControlService = (await import('../queueControl')).QueueControlService
 })
 
 afterAll(() => {
@@ -56,6 +58,61 @@ describe('task queue', () => {
 
     expect(queue.pause('queue-queued-pause')).toEqual({ paused: true, pending: false })
     expect((db.prepare('SELECT status FROM task_jobs WHERE task_id = ?').get('queue-queued-pause') as any).status).toBe('paused')
+  })
+
+  it('claims higher priority jobs first when concurrency is limited', async () => {
+    db.prepare("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('concurrency', '1', datetime('now'))").run()
+    const order: string[] = []
+    const processed = new Set<string>()
+    const queue = new TaskQueue({
+      getTask: (taskId) => ({ taskId, status: processed.has(taskId) ? 'done' : 'queued' } as any),
+      process: async (taskId) => {
+        order.push(taskId)
+        await new Promise(resolve => setTimeout(resolve, 40))
+        processed.add(taskId)
+      }
+    })
+    for (const [taskId, priority] of [['priority-low', 0], ['priority-high', 10]] as const) {
+      db.prepare("INSERT INTO tasks (task_id, file_path, model, status) VALUES (?, '/tmp/demo.srt', 'm', 'queued')").run(taskId)
+      db.prepare("INSERT INTO task_jobs (task_id, status, priority, next_run_at) VALUES (?, 'queued', ?, datetime('now'))").run(taskId, priority)
+    }
+    await queue.wake()
+    await expect.poll(() => order.length, { timeout: 3000 }).toBe(2)
+    expect(order).toEqual(['priority-high', 'priority-low'])
+    db.prepare("INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('concurrency', '3', datetime('now'))").run()
+  })
+
+  it('does not claim a job before its scheduled time', async () => {
+    const processed: string[] = []
+    const queue = new TaskQueue({
+      getTask: (taskId) => ({ taskId, status: processed.includes(taskId) ? 'done' : 'queued' } as any),
+      process: async (taskId) => { processed.push(taskId) }
+    })
+    db.prepare("INSERT INTO tasks (task_id, file_path, model, status) VALUES ('scheduled-task', '/tmp/demo.srt', 'm', 'queued')").run()
+    await queue.add('scheduled-task', undefined, { scheduledAt: new Date(Date.now() + 60_000).toISOString() })
+    await new Promise(resolve => setTimeout(resolve, 60))
+    expect(processed).not.toContain('scheduled-task')
+
+    db.prepare("UPDATE task_jobs SET next_run_at = datetime('now', '-1 seconds') WHERE task_id = 'scheduled-task'").run()
+    await queue.wake()
+    await expect.poll(() => processed, { timeout: 2000 }).toContain('scheduled-task')
+  })
+
+  it('pauses claiming new jobs until the queue is resumed', async () => {
+    QueueControlService.setPaused(true, 'test')
+    const processed: string[] = []
+    const queue = new TaskQueue({
+      getTask: (taskId) => ({ taskId, status: processed.includes(taskId) ? 'done' : 'queued' } as any),
+      process: async (taskId) => { processed.push(taskId) }
+    })
+    db.prepare("INSERT INTO tasks (task_id, file_path, model, status) VALUES ('paused-queue-task', '/tmp/demo.srt', 'm', 'queued')").run()
+    await queue.add('paused-queue-task')
+    await new Promise(resolve => setTimeout(resolve, 60))
+    expect(processed).not.toContain('paused-queue-task')
+
+    QueueControlService.setPaused(false)
+    await queue.wake()
+    await expect.poll(() => processed, { timeout: 2000 }).toContain('paused-queue-task')
   })
 
   it('claims a queued task and supports cancellation', async () => {

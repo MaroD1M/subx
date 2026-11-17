@@ -6,11 +6,23 @@ import { createProvider, normalizeProviderType } from './providers/registry'
 import { TRANSLATION_CONTEXT_WINDOW } from './translation'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { apiError } from './apiError'
+import { GlossaryService } from './glossary'
+import { ReviewVersionService } from './reviewVersions'
+
+export interface ReviewProviderOverride {
+  type: string
+  apiKey: string
+  baseUrl?: string
+  model: string
+}
 
 export interface ReviewRetranslateOptions {
   taskId: string
   subtitleIds: string[]
   onProgress?: (completed: number, total: number) => void
+  providerOverride?: ReviewProviderOverride
+  persist?: boolean
+  sessionId?: string
 }
 
 export interface ReviewRetranslateResult {
@@ -19,7 +31,7 @@ export interface ReviewRetranslateResult {
 }
 
 export async function runReviewRetranslate(options: ReviewRetranslateOptions): Promise<ReviewRetranslateResult> {
-  const { taskId, subtitleIds, onProgress } = options
+  const { taskId, subtitleIds, onProgress, providerOverride, persist = true } = options
   const db = useDb()
   const task = db.prepare('SELECT * FROM tasks WHERE task_id = ?').get(taskId) as any
   if (!task) {
@@ -46,11 +58,14 @@ export async function runReviewRetranslate(options: ReviewRetranslateOptions): P
   db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, 'review', 'translation', 'info', ?, datetime('now'))")
     .run(taskId, '[核对重译] 已开始重新翻译 ' + subtitleIds.length + ' 条字幕，本次将直接请求模型并跳过任务级缓存。')
 
+  const providerType = normalizeProviderType(providerOverride?.type || (config as any).providerType)
+  const providerModel = providerOverride?.model || task.model
   const provider = createProvider({
-    type: normalizeProviderType((config as any).providerType),
-    apiKey: config.apiKey,
-    baseUrl: config.apiBaseUrl,
-    model: task.model
+    type: providerType,
+    apiKey: providerOverride?.apiKey ?? config.apiKey,
+    baseUrl: providerOverride?.baseUrl ?? config.apiBaseUrl,
+    model: providerModel,
+    sessionId: options.sessionId || `subx-review-${taskId}`
   })
 
   const selectedEntries = rows.map(row => ({
@@ -104,9 +119,9 @@ export async function runReviewRetranslate(options: ReviewRetranslateOptions): P
       provider,
       chunk as any,
       task.target_lang,
-      config.glossary || {},
+      GlossaryService.resolve(task.series_key || '', { configGlossary: config.glossary || {}, targetLanguage: task.target_lang }),
       previousContext as any,
-      task.model,
+      providerModel,
       taskId,
       index,
       stylePrompt,
@@ -134,46 +149,72 @@ export async function runReviewRetranslate(options: ReviewRetranslateOptions): P
     issueMap.set(String(issue.id), list)
   }
 
+  if (persist) {
+    try {
+      ReviewVersionService.snapshot(taskId, {
+        kind: 'save',
+        label: '重译前',
+        source: 'system',
+        model: task.model,
+        providerType: String(config.providerType || 'openai-compatible'),
+        skipIfSame: true
+      })
+    } catch { /* version snapshots are best effort */ }
+  }
+
   const stmt = db.prepare(`
     UPDATE task_review_entries
     SET translated_text = ?, final_text = ?, review_status = ?, review_reasons = ?, quality_score = NULL, quality_issues = '[]', edited = 0, updated_at = datetime('now')
     WHERE task_id = ? AND subtitle_id = ?
   `)
 
-  db.exec('BEGIN')
-  let updated: any[] = []
-  try {
-    updated = reviewedResults.map((entry: any) => {
-      const reasons = issueMap.get(String(entry.id)) || []
-      const status = reasons.length === 0
-        ? (SubtitleService.normalizeComparisonText(entry.translatedText) === SubtitleService.normalizeComparisonText(entry.text) ? 'accepted_same' : 'translated')
-        : 'needs_review'
-
-      stmt.run(
-        String(entry.translatedText || ''),
-        String(entry.translatedText || entry.text || ''),
-        status,
-        JSON.stringify(reasons),
-        taskId,
-        String(entry.id)
-      )
-
-      return {
-        subtitleId: String(entry.id),
-        translatedText: entry.translatedText || '',
-        finalText: entry.translatedText || entry.text || '',
-        reviewStatus: status,
-        reviewReasons: reasons
+  let updated: any[] = reviewedResults.map((entry: any) => {
+    const reasons = issueMap.get(String(entry.id)) || []
+    const status = reasons.length === 0
+      ? (SubtitleService.normalizeComparisonText(entry.translatedText) === SubtitleService.normalizeComparisonText(entry.text) ? 'accepted_same' : 'translated')
+      : 'needs_review'
+    return {
+      subtitleId: String(entry.id),
+      translatedText: entry.translatedText || '',
+      finalText: entry.translatedText || entry.text || '',
+      reviewStatus: status,
+      reviewReasons: reasons
+    }
+  })
+  if (persist) {
+    db.exec('BEGIN')
+    try {
+      for (const entry of updated) {
+        stmt.run(
+          entry.translatedText,
+          entry.finalText,
+          entry.reviewStatus,
+          JSON.stringify(entry.reviewReasons),
+          taskId,
+          entry.subtitleId
+        )
       }
-    })
-    db.exec('COMMIT')
-  } catch (error) {
-    try { db.exec('ROLLBACK') } catch { /* ignore rollback failure */ }
-    throw error
+      db.exec('COMMIT')
+    } catch (error) {
+      try { db.exec('ROLLBACK') } catch { /* ignore rollback failure */ }
+      throw error
+    }
   }
 
   db.prepare("INSERT INTO task_logs (task_id, step, category, level, message, created_at) VALUES (?, 'review', 'translation', 'info', ?, datetime('now'))")
     .run(taskId, `[核对重译] 已按 ${chunks.length} 个分块重新翻译 ${updated.length} 条字幕（已跳过任务级缓存）。`)
+
+  if (persist) {
+    try {
+      ReviewVersionService.snapshot(taskId, {
+        kind: 'retranslate',
+        label: `AI 重译 ${updated.length} 条`,
+        source: 'system',
+        model: providerModel,
+        providerType: String(providerType)
+      })
+    } catch { /* version snapshots are best effort */ }
+  }
 
   return { chunks: chunks.length, entries: updated }
 }

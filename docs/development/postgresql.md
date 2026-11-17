@@ -1,10 +1,10 @@
 # PostgreSQL 运行时与迁移
 
-> 适用版本：v2.10.0
+> 适用版本：v2.10.1
 >
 > 本文档面向维护者和有高并发/多主机需求的部署者。单 NAS、单容器默认使用 SQLite，不需要阅读本文。
 >
-> 结论：v2.10.0 已支持可选 PostgreSQL 运行时；未设置 `DATABASE_URL` 时继续使用 SQLite。
+> 结论：v2.10.1 已支持可选 PostgreSQL 运行时；未设置 `DATABASE_URL` 时继续使用 SQLite。
 
 ## 当前架构
 

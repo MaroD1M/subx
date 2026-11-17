@@ -8,8 +8,8 @@
     </div>
     <p v-if="currentPreset" class="text-xs leading-5 text-gray-500 dark:text-gray-400">{{ currentPreset.description }}</p>
 
-    <div v-if="subtitleFormat === 'srt'" class="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
-      SRT 不保存字体、颜色和描边。切换到 ASS 或 SRT + ASS 后，下列样式才会生效。
+    <div v-if="!['ass', 'both'].includes(String(subtitleFormat))" class="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+      SRT 不保存字体、颜色和描边；VTT / TTML 同样不保存样式。切换到 ASS 或 SRT + ASS 后，下列样式才会生效。
     </div>
     <div v-else-if="draft.presetId === 'inherit'" class="rounded-xl border border-sky-200 bg-sky-50/70 px-3 py-2 text-xs leading-5 text-sky-800 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-200">
       已选择“沿用原样式”：会保留源 ASS 的字体、颜色和定位，下方自定义字段不会覆盖源样式。
@@ -219,7 +219,7 @@ import { useServerFonts } from '../composables/useServerFonts'
 const props = defineProps<{
   modelValue: SubtitleOutputStyle
   outputMode: 'translated' | 'bilingual' | 'original'
-  subtitleFormat?: 'srt' | 'ass' | 'both'
+  subtitleFormat?: 'srt' | 'ass' | 'vtt' | 'ttml' | 'both'
   bilingualLayout?: 'translated_first' | 'original_first'
   previewSource?: {
     taskId?: string
@@ -284,10 +284,10 @@ let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const previewSourceKey = computed(() => `${props.previewSource?.taskId || ''}|${props.previewSource?.filePath || ''}|${props.previewSource?.rootId || ''}`)
 const hasPreviewSource = computed(() => Boolean(props.previewSource && (props.previewSource.taskId || props.previewSource.filePath)))
-const canRealPreview = computed(() => hasPreviewSource.value && props.subtitleFormat !== 'srt' && draft.value.presetId !== 'inherit')
+const canRealPreview = computed(() => hasPreviewSource.value && ['ass', 'both'].includes(String(props.subtitleFormat)) && draft.value.presetId !== 'inherit')
 const realPreviewDisabledReason = computed(() => {
   if (!props.previewSource || (!props.previewSource.taskId && !props.previewSource.filePath)) return '选择视频后可启用实景预览；设置页仅显示示例背景。'
-  if (props.subtitleFormat === 'srt') return 'SRT 不保存字体和颜色，无法生成带样式的实景预览。'
+  if (!['ass', 'both'].includes(String(props.subtitleFormat))) return '当前格式不保存字体和颜色，无法生成带样式的实景预览。'
   if (draft.value.presetId === 'inherit') return '“沿用原样式”暂不支持实景预览。'
   return ''
 })
@@ -301,7 +301,7 @@ const currentPreset = computed(() => getSubtitleStylePresetDefinition(draft.valu
 const showBoth = computed(() => props.outputMode === 'bilingual')
 const showOriginal = computed(() => props.outputMode !== 'translated')
 const showTranslated = computed(() => props.outputMode !== 'original')
-const typographyDisabled = computed(() => props.subtitleFormat === 'srt' || draft.value.presetId === 'inherit')
+const typographyDisabled = computed(() => !['ass', 'both'].includes(String(props.subtitleFormat)) || draft.value.presetId === 'inherit')
 const displayMode = computed(() => props.outputMode === 'bilingual' ? '双语' : props.outputMode === 'original' ? '单语原文' : '单语译文')
 const alignmentItems = [
   { label: '底部', value: 'bottom' },

@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/github/license/MaroD1M/subx)](LICENSE)
 [![GHCR](https://img.shields.io/badge/ghcr.io-subx-blue?logo=github)](https://github.com/MaroD1M/subx/pkgs/container/subx)
 
-当前版本：**v2.10.0** · [文档索引](docs/README.md) · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
+当前版本：**v2.10.1** · [文档索引](docs/README.md) · [使用文档](docs/usage.md) · [部署文档](docs/deployment.md) · [更新日志](CHANGELOG.md)
 
 SubX 是面向 NAS 与自托管环境的 AI 字幕工作台。它会扫描媒体库，读取内嵌/外挂字幕，或通过语音识别与图像字幕 OCR 生成文本，再调用 LLM 翻译，最终输出可核对的 SRT/ASS。API Key、字幕、媒体和模型都可以留在自己的机器上。
 
@@ -50,9 +50,10 @@ SubX 是面向 NAS 与自托管环境的 AI 字幕工作台。它会扫描媒体
 - **语音识别**：内置 faster-whisper / Silero VAD，可选 whisper.cpp 和云 ASR 兜底；有字幕也可强制重听。
 - **图像字幕**：内置 Tesseract / RapidOCR，处理 PGS / VobSub / DVD，长片支持 PGS 直通和分段断点。
 - **核对导出**：三栏编辑、批量重译、时间轴调整、实时预览，输出单语/双语 SRT/ASS。
-- **自动化**：目录监控、覆盖检查、历史回填、规则过滤、通知、API Token 和调用审计。
+- **自动化**：目录监控、覆盖检查、历史回填、规则过滤、批次优先级/定时/暂停/重试、通知模板、API Token 和调用审计。
+- **术语与版本**：独立术语库、系列作用域、导入导出、版本审计与回滚、字幕 A/B 对比和历史版本恢复。
 - **外部集成**：Sonarr、Radarr、Jellyfin、Plex、Emby、Bazarr Webhook 和路径映射。
-- **本地优先**：OpenAI 兼容、Anthropic、Gemini 协议，也可接 Ollama / LM Studio / llama.cpp / vLLM。
+- **本地优先**：OpenAI 兼容、OpenCode Go、Anthropic、Gemini 协议，也可接 Ollama / LM Studio / llama.cpp / vLLM。
 
 ## 快速开始
 
@@ -63,7 +64,7 @@ SubX 是面向 NAS 与自托管环境的 AI 字幕工作台。它会扫描媒体
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.10.0
+    image: ghcr.io/marod1m/subx:v2.10.1
     container_name: subx
     restart: unless-stopped
     ports:
@@ -150,7 +151,7 @@ docker compose up -d
 - **媒体处理**：FFmpeg / ffprobe
 - **语音识别**：内置 faster-whisper / Silero VAD，可选 whisper.cpp、GPU sidecar
 - **OCR**：内置 Tesseract / RapidOCR
-- **AI**：OpenAI 兼容、Anthropic 原生、Gemini 原生
+- **AI**：OpenAI 兼容、OpenCode Go、Anthropic 原生、Gemini 原生
 - **测试**：Vitest + Playwright + axe-core
 - **部署**：Docker / docker-compose / GitHub Actions
 

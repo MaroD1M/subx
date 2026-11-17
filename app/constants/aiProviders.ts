@@ -2,7 +2,7 @@ export type AiProviderCompatibility = 'official' | 'openai-compatible' | 'partia
 
 export interface AiProviderGuide {
   id: string
-  providerType?: 'openai-compatible' | 'anthropic' | 'gemini'
+  providerType?: 'openai-compatible' | 'anthropic' | 'gemini' | 'opencode-go'
   name: string
   badge?: string
   compatibility: AiProviderCompatibility
@@ -61,6 +61,32 @@ export const AI_PROVIDER_GUIDES: AiProviderGuide[] = [
     notes: [
       '更推荐开启“手动填写模型名称”。',
       '如果模型列表接口不可用，通常不影响实际翻译调用。'
+    ]
+  },
+  {
+    id: 'opencode-go',
+    name: 'OpenCode Go',
+    providerType: 'opencode-go',
+    badge: '订阅',
+    compatibility: 'openai-compatible',
+    description: 'OpenCode Go 订阅网关，按 OpenAI Chat Completions 协议接入，适合使用 Go 订阅里可用的编码/通用模型。',
+    officialUrl: 'https://opencode.ai/auth',
+    officialLabel: '前往 OpenCode Console',
+    apiBaseUrl: 'https://opencode.ai/inference/go/openai/v1',
+    defaultModel: 'deepseek-v4.1-flash',
+    recommendManualModel: false,
+    supportsModelList: true,
+    steps: [
+      '在 OpenCode Console 订阅 Go 或 Go Plus，并创建 API Key。',
+      'Provider 类型选择 OpenCode Go。',
+      '接口基础地址填写 https://opencode.ai/inference/go/openai/v1。',
+      '点击获取模型列表，选择可用模型；列表失败时可手动填写模型 ID。'
+    ],
+    notes: [
+      'SubX 会自动发送 x-opencode-session 和 SubX User-Agent。',
+      'Go 网关按模型计费，部分模型可能受区域、隐私设置或订阅额度限制。',
+      '免费模型通常只允许在 OpenCode 客户端内使用，第三方客户端可能返回 403。',
+      '当前阶段仅使用 OpenAI Chat Completions；协议不兼容的模型请切换供应商或等待后续版本。'
     ]
   },
   {

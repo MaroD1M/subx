@@ -2,7 +2,7 @@
   <AppContainer size="wide" class="space-y-6">
     <PageHeader
       title="翻译历史"
-      description="查看任务结果、失败原因与历史日志，进入详情后可继续、核对或重新翻译。"
+      description="查看任务状态与结果，进入详情继续、核对或重试。"
       :breadcrumb="[{ label: '首页', icon: 'i-lucide-home', to: '/' }, { label: '历史', icon: 'i-lucide-history' }]"
     />
 
@@ -15,6 +15,63 @@
       <div class="app-toolbar-row">
         <UButton v-if="searchQuery || statusFilter !== 'all'" label="清空筛选" icon="i-lucide-filter-x" size="sm" color="neutral" variant="ghost" @click="clearFilters" />
         <UButton label="清空历史" icon="i-lucide-trash-2" size="sm" color="error" variant="ghost" @click="isClearModalOpen = true" />
+      </div>
+    </div>
+
+    <div v-if="showQueuePanel" class="surface-card p-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex min-w-0 flex-1 items-center gap-2">
+          <UIcon name="i-lucide-activity" class="h-4 w-4 shrink-0" :class="queueControl?.paused ? 'text-amber-500' : 'text-primary-600 dark:text-primary-400'" />
+          <span class="text-sm font-medium">{{ queueControl?.paused ? '队列已暂停' : '队列' }}</span>
+          <span class="app-meta truncate">
+            <template v-if="queueJobs?.queued">排队 {{ queueJobs.queued }}</template>
+            <template v-if="queueJobs?.running"> · 运行 {{ queueJobs.running }}</template>
+            <template v-if="queueJobs?.paused"> · 暂停 {{ queueJobs.paused }}</template>
+          </span>
+        </div>
+        <UButton
+          v-if="!queueControl?.paused"
+          icon="i-lucide-pause"
+          size="xs"
+          color="warning"
+          variant="soft"
+          :loading="queueUpdating"
+          aria-label="暂停队列"
+          title="暂停队列"
+          @click="setQueuePaused(true)"
+        />
+        <UButton
+          v-else
+          icon="i-lucide-play"
+          size="xs"
+          color="primary"
+          variant="soft"
+          :loading="queueUpdating"
+          aria-label="恢复队列"
+          title="恢复队列"
+          @click="setQueuePaused(false)"
+        />
+      </div>
+
+      <div v-if="activeBatches.length" class="mt-2.5 space-y-1.5 border-t border-gray-100 pt-2.5 dark:border-gray-800">
+        <div v-for="batch in activeBatches" :key="batch.id" class="rounded-lg bg-gray-50/70 px-2.5 py-2 dark:bg-gray-900/40">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ batch.name || '未命名批次' }}</span>
+            <span v-if="batch.priority" class="app-meta whitespace-nowrap" title="优先级">P{{ batch.priority }}</span>
+            <span class="app-pill" :class="batchStatusClass(batch.status)">{{ batchStatusLabel(batch.status) }}</span>
+            <span class="app-meta whitespace-nowrap tabular-nums">{{ batch.completedCount }}/{{ batch.taskCount }}<template v-if="batch.failedCount"> · 失败 {{ batch.failedCount }}</template></span>
+            <span v-if="batch.scheduledAt && batch.status === 'scheduled'" class="app-meta whitespace-nowrap">{{ formatDate(batch.scheduledAt) }}</span>
+            <div class="flex shrink-0 items-center">
+              <UButton v-if="batch.status === 'paused'" icon="i-lucide-play" size="xs" color="primary" variant="ghost" :loading="batchActionId === batch.id" aria-label="恢复批次" title="恢复批次" @click="resumeBatch(batch.id)" />
+              <UButton v-else-if="['queued', 'scheduled', 'running'].includes(batch.status)" icon="i-lucide-pause" size="xs" color="warning" variant="ghost" :loading="batchActionId === batch.id" aria-label="暂停批次" title="暂停批次" @click="pauseBatch(batch.id)" />
+              <UButton v-if="batch.failedCount" icon="i-lucide-refresh-cw" size="xs" color="warning" variant="ghost" :loading="batchActionId === batch.id" aria-label="重试失败任务" title="重试失败任务" @click="retryFailedBatch(batch.id)" />
+              <UButton v-if="!['completed', 'failed', 'cancelled'].includes(batch.status)" icon="i-lucide-octagon-x" size="xs" color="error" variant="ghost" :loading="batchActionId === batch.id" aria-label="取消批次" title="取消批次" @click="cancelBatch(batch.id)" />
+            </div>
+          </div>
+          <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-gray-200/70 dark:bg-gray-800">
+            <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${batch.taskCount ? Math.round(batch.completedCount / batch.taskCount * 100) : 0}%` }" />
+          </div>
+        </div>
       </div>
     </div>
 
@@ -234,6 +291,7 @@ const statusOptions = [
   { label: '待核对', value: 'review' },
   { label: '已暂停', value: 'paused' },
   { label: '翻译中', value: 'translating' },
+  { label: '自动重试', value: 'retrying' },
   { label: '排队中', value: 'queued' }
 ]
 const taskQuery = computed(() => ({
@@ -243,6 +301,14 @@ const taskQuery = computed(() => ({
   q: debouncedSearch.value.trim()
 }))
 const { data, pending, refresh } = await useFetch('/api/tasks', { query: taskQuery })
+const { data: queueData, refresh: refreshQueue } = await useFetch('/api/task-queue')
+const { data: batchData, refresh: refreshBatches } = await useFetch('/api/task-batches', { query: { limit: 20 } })
+const queueControl = computed(() => queueData.value?.control)
+const queueJobs = computed(() => queueData.value?.jobs)
+const queueUpdating = ref(false)
+const batchActionId = ref('')
+const activeBatches = computed(() => (batchData.value?.batches || []).filter(batch => ['scheduled', 'queued', 'running', 'paused'].includes(String(batch.status))))
+const showQueuePanel = computed(() => Boolean(queueControl.value?.paused || activeBatches.value.length || queueJobs.value?.queued || queueJobs.value?.running))
 watch(searchQuery, (value) => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   searchDebounceTimer = setTimeout(() => {
@@ -277,8 +343,10 @@ let liveRefreshTimer = null
 function refreshLiveTasks() {
   if (typeof document === 'undefined') return
   if (document.visibilityState !== 'visible') return
-  if (pending.value || !hasActiveTasks.value) return
-  void refresh()
+  if (pending.value) return
+  if (hasActiveTasks.value || activeBatches.value.length || queueJobs.value?.queued || queueJobs.value?.running) {
+    void Promise.all([refresh(), refreshQueue(), refreshBatches()])
+  }
 }
 
 function startLiveRefresh() {
@@ -310,6 +378,98 @@ onBeforeUnmount(() => {
   stopLiveRefresh()
   document.removeEventListener('visibilitychange', handleHistoryVisibilityChange)
 })
+async function setQueuePaused(paused) {
+  queueUpdating.value = true
+  try {
+    await $fetch(`/api/task-queue/${paused ? 'pause' : 'resume'}`, { method: 'POST' })
+    toast.add({ title: paused ? '队列已暂停' : '队列已恢复', description: paused ? '不会领取新任务，运行中的任务继续完成' : '等待中的任务会继续执行', color: 'success' })
+    await Promise.all([refreshQueue(), refreshBatches(), refresh()])
+  } catch (e) {
+    toast.add({ title: '操作失败', description: e?.data?.message || e?.message || '无法更新队列状态', color: 'error' })
+  } finally {
+    queueUpdating.value = false
+  }
+}
+
+async function pauseBatch(batchId) {
+  batchActionId.value = batchId
+  try {
+    await $fetch(`/api/task-batches/${batchId}/pause`, { method: 'POST' })
+    toast.add({ title: '批次已暂停', description: '运行中的任务会继续完成', color: 'success' })
+    await Promise.all([refreshBatches(), refreshQueue(), refresh()])
+  } catch (e) {
+    toast.add({ title: '暂停失败', description: e?.data?.message || e?.message || '无法暂停批次', color: 'error' })
+  } finally {
+    batchActionId.value = ''
+  }
+}
+
+async function resumeBatch(batchId) {
+  batchActionId.value = batchId
+  try {
+    await $fetch(`/api/task-batches/${batchId}/resume`, { method: 'POST' })
+    toast.add({ title: '批次已恢复', description: '等待中的任务会继续执行', color: 'success' })
+    await Promise.all([refreshBatches(), refreshQueue(), refresh()])
+  } catch (e) {
+    toast.add({ title: '恢复失败', description: e?.data?.message || e?.message || '无法恢复批次', color: 'error' })
+  } finally {
+    batchActionId.value = ''
+  }
+}
+
+async function retryFailedBatch(batchId) {
+  batchActionId.value = batchId
+  try {
+    const res = await $fetch(`/api/task-batches/${batchId}/retry-failed`, { method: 'POST' })
+    toast.add({ title: '已重新加入队列', description: `创建了 ${res.taskIds?.length || 0} 个重试任务`, color: 'success' })
+    await Promise.all([refreshBatches(), refreshQueue(), refresh()])
+  } catch (e) {
+    toast.add({ title: '重试失败', description: e?.data?.message || e?.message || '无法重试批次失败任务', color: 'error' })
+  } finally {
+    batchActionId.value = ''
+  }
+}
+
+async function cancelBatch(batchId) {
+  if (!(await confirm({
+    title: '取消这个批次？',
+    description: '等待中和暂停中的任务会取消，运行中的任务也会停止；已完成任务不受影响。',
+    confirmLabel: '取消批次',
+    color: 'error'
+  }))) return
+  batchActionId.value = batchId
+  try {
+    await $fetch(`/api/task-batches/${batchId}/cancel`, { method: 'POST' })
+    toast.add({ title: '批次已取消', description: '未完成任务已停止', color: 'success' })
+    await Promise.all([refreshBatches(), refreshQueue(), refresh()])
+  } catch (e) {
+    toast.add({ title: '取消失败', description: e?.data?.message || e?.message || '无法取消批次', color: 'error' })
+  } finally {
+    batchActionId.value = ''
+  }
+}
+
+function batchStatusLabel(status) {
+  return {
+    draft: '草稿',
+    scheduled: '已计划',
+    queued: '排队中',
+    running: '运行中',
+    paused: '已暂停',
+    completed: '已完成',
+    failed: '失败',
+    cancelled: '已取消'
+  }[String(status || '')] || String(status || '-')
+}
+
+function batchStatusClass(status) {
+  if (status === 'running') return 'app-pill-primary'
+  if (status === 'paused' || status === 'scheduled') return 'app-pill-warning'
+  if (status === 'failed' || status === 'cancelled') return 'app-pill-danger'
+  if (status === 'completed') return 'app-pill-success'
+  return 'app-pill-neutral'
+}
+
 async function clearHistory() {
   isClearing.value = true
   try {
@@ -399,11 +559,17 @@ function rowActionItems(task) {
   const items = []
   const format = String(task?.subtitle_format || task?.subtitleFormat || 'srt')
   if (task?.status === 'done') {
-    if (format !== 'ass') {
-      items.push({ label: '下载 SRT', icon: 'i-lucide-file-text', onSelect: () => downloadSubtitle(task.taskId, 'srt') })
-    }
-    if (format !== 'srt') {
-      items.push({ label: '下载 ASS', icon: 'i-lucide-file-code', onSelect: () => downloadSubtitle(task.taskId, 'ass') })
+    if (format === 'vtt') {
+      items.push({ label: '下载 VTT', icon: 'i-lucide-file-text', onSelect: () => downloadSubtitle(task.taskId, 'vtt') })
+    } else if (format === 'ttml') {
+      items.push({ label: '下载 TTML', icon: 'i-lucide-file-code', onSelect: () => downloadSubtitle(task.taskId, 'ttml') })
+    } else {
+      if (format !== 'ass') {
+        items.push({ label: '下载 SRT', icon: 'i-lucide-file-text', onSelect: () => downloadSubtitle(task.taskId, 'srt') })
+      }
+      if (format !== 'srt') {
+        items.push({ label: '下载 ASS', icon: 'i-lucide-file-code', onSelect: () => downloadSubtitle(task.taskId, 'ass') })
+      }
     }
   }
   if (!isActiveStatus(task?.status)) {
@@ -438,7 +604,7 @@ function formatDate(value) {
 }
 
 function isActiveStatus(status) {
-  return ['queued', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(String(status || ''))
+  return ['queued', 'retrying', 'probing', 'extracting', 'extracting_audio', 'transcribing', 'ocr', 'parsing', 'translating', 'exporting'].includes(String(status || ''))
 }
 
 function isPausePending(task) {
@@ -462,6 +628,8 @@ const outputModeLabels = {
 const subtitleFormatLabels = {
   srt: 'SRT',
   ass: 'ASS',
+  vtt: 'VTT',
+  ttml: 'TTML',
   both: 'SRT + ASS'
 }
 

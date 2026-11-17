@@ -2,8 +2,8 @@ import { z } from 'zod'
 import type { H3Event } from 'h3'
 
 const outputModeSchema = z.enum(['translated', 'bilingual', 'original'])
-const subtitleFormatSchema = z.enum(['srt', 'ass', 'both'])
-const singleSubtitleFormatSchema = z.enum(['srt', 'ass'])
+const subtitleFormatSchema = z.enum(['srt', 'ass', 'vtt', 'ttml', 'both'])
+const singleSubtitleFormatSchema = z.enum(['srt', 'ass', 'vtt', 'ttml'])
 export const languageTagSchema = z.string().min(1).max(35).regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, '目标语言格式不合法')
 const bilingualLayoutSchema = z.enum(['translated_first', 'original_first'])
 
@@ -64,7 +64,34 @@ export const taskCreateSchema = z.object({
     z.string(),
     z.object({ path: z.string(), rootId: z.string().optional() })
   ])).optional(),
-  retryTaskId: z.string().optional()
+  retryTaskId: z.string().optional(),
+  batch: z.object({
+    name: z.string().max(160).optional(),
+    priority: z.coerce.number().int().min(-1000).max(1000).optional(),
+    scheduledAt: z.string().optional(),
+    retryPolicy: z.object({
+      maxAttempts: z.coerce.number().int().min(1).max(10).optional(),
+      backoff: z.enum(['fixed', 'exponential']).optional(),
+      baseSeconds: z.coerce.number().int().min(5).max(3600).optional(),
+      maxSeconds: z.coerce.number().int().min(5).max(86400).optional(),
+      retryOn: z.array(z.string()).optional()
+    }).optional()
+  }).optional()
+}).passthrough()
+
+const taskRetryPolicySchema = z.object({
+  maxAttempts: z.coerce.number().int().min(1).max(10).optional(),
+  backoff: z.enum(['fixed', 'exponential']).optional(),
+  baseSeconds: z.coerce.number().int().min(5).max(3600).optional(),
+  maxSeconds: z.coerce.number().int().min(5).max(86400).optional(),
+  retryOn: z.array(z.string()).optional()
+}).passthrough()
+
+export const taskBatchUpdateSchema = z.object({
+  name: z.string().max(160).optional(),
+  priority: z.coerce.number().int().min(-1000).max(1000).optional(),
+  scheduledAt: z.string().nullable().optional(),
+  retryPolicy: taskRetryPolicySchema.optional()
 }).passthrough()
 
 export const configUpdateSchema = z.record(z.string(), z.unknown())
@@ -114,6 +141,18 @@ export const previewFrameSchema = z.object({
   bilingualLayout: bilingualLayoutSchema.optional(),
   originalText: z.string().max(1000).optional(),
   translatedText: z.string().max(1000).optional()
+}).passthrough()
+
+export const reviewVersionCreateSchema = z.object({
+  label: z.string().max(160).optional(),
+  note: z.string().max(2000).optional()
+}).passthrough()
+
+export const reviewAbSchema = z.object({
+  source: z.enum(['primary', 'fallback']).optional(),
+  model: z.string().max(160).optional(),
+  label: z.string().max(160).optional(),
+  subtitleIds: z.array(z.union([z.string(), z.number()])).max(20000).optional()
 }).passthrough()
 
 export const proofreadRequestSchema = z.preprocess(value => value ?? {}, z.object({
@@ -175,6 +214,56 @@ export const notificationChannelSchema = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
   enabled: z.boolean().optional()
 })
+
+const glossaryScopeSchema = z.enum(['global', 'series'])
+const glossaryEntryFieldsSchema = z.object({
+  source: z.string().min(1).max(200),
+  target: z.string().min(1).max(2000),
+  sourceLang: z.string().max(35).optional(),
+  targetLang: z.string().max(35).optional(),
+  scopeType: glossaryScopeSchema.optional(),
+  scopeKey: z.string().max(500).optional(),
+  category: z.string().max(80).optional(),
+  notes: z.string().max(2000).optional(),
+  priority: z.coerce.number().int().min(-1000).max(1000).optional(),
+  enabled: z.boolean().optional(),
+  locked: z.boolean().optional()
+}).passthrough()
+
+export const glossaryEntrySchema = glossaryEntryFieldsSchema
+export const glossaryUpdateSchema = glossaryEntryFieldsSchema.partial().passthrough()
+export const glossaryBulkSchema = z.object({
+  entries: z.array(glossaryEntryFieldsSchema).min(1).max(5000),
+  actor: z.string().max(120).optional()
+}).passthrough()
+export const glossaryImportSchema = z.object({
+  content: z.string().min(1),
+  format: z.enum(['csv', 'json']).optional(),
+  scopeType: glossaryScopeSchema.optional(),
+  scopeKey: z.string().max(500).optional(),
+  strategy: z.enum(['skip', 'overwrite']).optional(),
+  dryRun: z.boolean().optional(),
+  filename: z.string().max(200).optional()
+}).passthrough()
+export const glossarySnapshotSchema = z.object({
+  name: z.string().max(160).optional(),
+  scopeType: glossaryScopeSchema.optional(),
+  scopeKey: z.string().max(500).optional(),
+  note: z.string().max(2000).optional()
+}).passthrough()
+export const glossaryRollbackSchema = z.object({
+  snapshotId: z.coerce.number().int().positive()
+}).passthrough()
+export const glossaryListQuerySchema = z.object({
+  scopeType: z.string().optional(),
+  scopeKey: z.string().optional(),
+  q: z.string().optional(),
+  sourceLang: z.string().optional(),
+  targetLang: z.string().optional(),
+  enabled: z.preprocess(value => value === undefined || value === '' ? undefined : (value === true || value === 'true' || value === '1' ? true : (value === false || value === 'false' || value === '0' ? false : undefined)), z.boolean().optional()),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(500).default(50)
+}).passthrough()
 
 export const apiTokenCreateSchema = z.object({
   name: z.string().min(1).max(80),

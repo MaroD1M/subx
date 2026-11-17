@@ -1,6 +1,6 @@
 # SubX 部署文档
 
-> 适用版本：v2.10.0
+> 适用版本：v2.10.1
 
 本文档覆盖单镜像部署、NAS、镜像与模型下载、反向代理和拆分部署。升级、备份、健康检查和常见问题见[相关文档](#8-相关文档)。使用说明请参阅 [使用文档](usage.md)。仓库根目录的 [`docker-compose.yml`](../docker-compose.yml) 是带完整注释的模板。
 
@@ -25,7 +25,7 @@ OCR 使用镜像内置的 Tesseract 语言包和 RapidOCR，不需要额外下�
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.10.0
+    image: ghcr.io/marod1m/subx:v2.10.1
     container_name: subx
     restart: unless-stopped
     ports:
@@ -113,7 +113,7 @@ http://<主机IP>:3000
 ```yaml
 services:
   subx:
-    image: ghcr.io/marod1m/subx:v2.10.0
+    image: ghcr.io/marod1m/subx:v2.10.1
     container_name: subx
     restart: unless-stopped
     ports:
@@ -175,11 +175,11 @@ Docker 本身会显示每个 layer 的下载进度。拉取被中断后，已下
 辅助脚本：
 
 ```bash
-# 默认拉取 v2.10.0
+# 默认拉取 v2.10.1
 ./scripts/pull-image.sh
 
 # 指定版本
-./scripts/pull-image.sh --tag v2.10.0
+./scripts/pull-image.sh --tag v2.10.1
 
 # 使用 compose 文件中的 subx 服务
 ./scripts/pull-image.sh --compose
@@ -297,7 +297,7 @@ docker compose --profile asr up -d asr
 http://subx-asr:8000
 ```
 
-独立镜像：`ghcr.io/marod1m/subx-asr:v2.10.0`。模型目录为 `./data/models/asr`。
+独立镜像：`ghcr.io/marod1m/subx-asr:v2.10.1`。模型目录为 `./data/models/asr`。
 
 ### 7.2 独立 OCR 容器
 

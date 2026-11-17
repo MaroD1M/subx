@@ -12,6 +12,8 @@ import { findActiveTaskDuplicate, isActiveTaskStatus } from '../utils/taskDedupe
 import { SeriesService, seriesKeyFromPath } from '../utils/series'
 import { MetadataService } from '../utils/metadata'
 import { CostService } from '../utils/cost'
+import { TaskBatchService } from '../utils/taskBatches'
+import { NotificationService } from '../utils/notifications'
 import type { TrackPolicy } from '~~/types'
 
 export default defineEventHandler(async (event) => {
@@ -23,6 +25,13 @@ export default defineEventHandler(async (event) => {
   if (!budget.allowed) {
     throw apiError(429, budget.message || '本月翻译预算已用完')
   }
+  const batch = body.batch ? TaskBatchService.create(body.batch) : null
+  const batchOptions = batch ? {
+    batchId: batch.id,
+    priority: batch.priority,
+    scheduledAt: batch.scheduledAt || null,
+    retryPolicy: batch.retryPolicy
+  } : {}
   const taskIds: string[] = []
   let reusedActive = 0
   const allStylePresets = [...STYLE_PRESETS, ...(Array.isArray(config.customStylePresets) ? config.customStylePresets : [])]
@@ -34,7 +43,7 @@ export default defineEventHandler(async (event) => {
       await globalTaskQueue.add(taskId, {
         apiKey: config.apiKey,
         baseUrl: config.apiBaseUrl
-      })
+      }, batchOptions)
     } catch (error: any) {
       await TaskService.updateStatus(taskId, 'error', 0, {
         error: '任务入队失败',
@@ -97,7 +106,8 @@ export default defineEventHandler(async (event) => {
       subtitleStylePreset: requestedStyle.presetId,
       subtitleStyle: requestedStyle,
       bilingualLayout: requestedLayout,
-      trackPolicy: policy
+      trackPolicy: policy,
+      batchId: batch?.id
     })
 
     if ((persistSeriesProfile || metadataFound) && (resolvedTitle || resolvedBackground)) {
@@ -146,10 +156,15 @@ export default defineEventHandler(async (event) => {
       subtitleStyle: oldTask.subtitleStyle ? normalizeSubtitleStyle(oldTask.subtitleStyle, oldTask.outputMode || 'translated') : undefined,
       bilingualLayout: (oldTask.bilingualLayout || config.bilingualLayout || 'translated_first') as any,
       trackPolicy: oldTask.trackPolicy,
-      forceRetranslate: true
+      forceRetranslate: true,
+      batchId: batch?.id
     })
 
     await enqueueTask(newTaskId)
+    if (batch) {
+      const refreshed = TaskBatchService.refresh(batch.id)
+      if (refreshed) void NotificationService.notifyBatchEvent(refreshed, 'batch_created').catch(error => console.warn('[Task] Failed to enqueue batch notification:', error?.message || error))
+    }
     return { taskId: newTaskId, taskIds: [newTaskId], retriedFrom: body.retryTaskId }
   }
 
@@ -183,9 +198,14 @@ export default defineEventHandler(async (event) => {
     if (taskIds.length === 0) {
       throw apiError(400, 'No valid files or tracks found')
     }
+    if (batch) {
+      const refreshed = TaskBatchService.refresh(batch.id)
+      if (refreshed) void NotificationService.notifyBatchEvent(refreshed, 'batch_created').catch(error => console.warn('[Task] Failed to enqueue batch notification:', error?.message || error))
+    }
     return {
       taskIds,
       taskId: taskIds[0],
+      batchId: batch?.id,
       skippedDuplicates: deduped.skipped.length,
       duplicateGroups: deduped.duplicateGroups,
       reusedActive
@@ -197,5 +217,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const result = await processFile(filePath, sourceType || 'embedded', trackIndex || 0, rootId, trackPolicy, true)
-  return { taskId: result.taskId, taskIds: [result.taskId], reusedActive: result.reused ? 1 : 0 }
+  if (batch) {
+    const refreshed = TaskBatchService.refresh(batch.id)
+    if (refreshed) void NotificationService.notifyBatchEvent(refreshed, 'batch_created').catch(error => console.warn('[Task] Failed to enqueue batch notification:', error?.message || error))
+  }
+  return { taskId: result.taskId, taskIds: [result.taskId], batchId: batch?.id, reusedActive: result.reused ? 1 : 0 }
 })

@@ -10,6 +10,7 @@ import type { BoundTranslationProvider } from './providers/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
 import { resolveSeriesTranslationContext, SeriesService } from './series'
 import { TranslationMemoryService } from './translationMemory'
+import { GlossaryService } from './glossary'
 import type { TranslationTask, SubtitleEntry, TaskStatus } from '~~/types'
 
 interface TranslateSubtitlesOptions {
@@ -46,7 +47,8 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
         type: normalizeProviderType((config as any).providerType),
         apiKey: runtimeConfig.apiKey,
         baseUrl: runtimeConfig.baseUrl,
-        model: task.model
+        model: task.model,
+        sessionId: `subx-task-${taskId}`
     })
     const fallbackModel = String(config.fallbackModel || '').trim()
     let fallbackProvider: BoundTranslationProvider | null = null
@@ -56,7 +58,8 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
                 type: normalizeProviderType((config as any).fallbackProviderType),
                 apiKey: String(config.fallbackApiKey || '').trim() || 'not-needed',
                 baseUrl: String(config.fallbackApiBaseUrl || '').trim() || undefined,
-                model: fallbackModel
+                model: fallbackModel,
+                sessionId: `subx-task-${taskId}-fallback`
             })
         } catch (error: any) {
             console.warn('[Fallback] Failed to initialize fallback provider:', error?.message || error)
@@ -74,8 +77,12 @@ export async function translateSubtitles(options: TranslateSubtitlesOptions): Pr
             console.warn('[Series] Failed to load series profile:', error?.message || error)
         }
     }
-    const resolvedContext = resolveSeriesTranslationContext(task, config.glossary || {}, seriesProfile)
-    const glossary = resolvedContext.glossary
+    const profileForContext = seriesProfile ? { ...seriesProfile, glossary: {} } : seriesProfile
+    const resolvedContext = resolveSeriesTranslationContext(task, {}, profileForContext)
+    const glossary = GlossaryService.resolve(task.seriesKey || '', {
+        configGlossary: config.glossary || {},
+        targetLanguage: task.targetLanguage
+    })
 
     const allStylePresets = [...STYLE_PRESETS, ...(Array.isArray(config.customStylePresets) ? config.customStylePresets : [])]
     const stylePresetConfig = allStylePresets.find(s => s.id === task.stylePreset)

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { STYLE_PRESETS } from './shared/stylePresets'
 
-const NAV_ICONS = ['home', 'history', 'library-big', 'list-checks', 'workflow', 'settings']
+const NAV_ICONS = ['home', 'history', 'library-big', 'list-checks', 'workflow', 'settings', 'book-open']
 const FEATURE_ICONS = [
   'activity', 'brain-circuit', 'calendar-check-2', 'chart-no-axes-combined',
   'chevron-down', 'chevron-up', 'circle-dashed', 'clock-3', 'loader-2',

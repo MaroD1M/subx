@@ -14,6 +14,7 @@ import { normalizeSubtitleStyle } from '~~/shared/subtitleStyles'
 import { TranslationMemoryService } from '../../../utils/translationMemory'
 import { buildChineseVariantEntries, buildChineseVariantPaths } from '../../../utils/chineseVariant'
 import { CostService } from '../../../utils/cost'
+import { ReviewVersionService } from '../../../utils/reviewVersions'
 
 function backupExistingOutput(outputPath: string): string {
   if (!existsSync(outputPath)) return ''
@@ -60,14 +61,15 @@ export default defineEventHandler(async (event) => {
   const config = await ConfigService.getConfig()
   const inputPath = await resolveMediaPath(task.file_path, task.root_id)
   const root = await getMediaRoot(task.root_id)
-  const subtitleFormat = body.subtitleFormat || (String(task.subtitle_format || 'srt').toLowerCase() === 'ass' ? 'ass' : 'srt')
+  const requestedFormat = String(body.subtitleFormat || task.subtitle_format || 'srt').toLowerCase()
+  const subtitleFormat = ['srt', 'ass', 'vtt', 'ttml'].includes(requestedFormat) ? requestedFormat : 'srt'
   const requestedOutputMode = String(body.outputMode || task.output_mode || 'translated')
   const storedStyle = (() => {
     try { return task.subtitle_style_json ? JSON.parse(task.subtitle_style_json) : undefined } catch { return undefined }
   })()
   const requestedStyle = normalizeSubtitleStyle(body.subtitleStyle || body.subtitleStylePreset || storedStyle || task.subtitle_style_preset || 'bilingual_simple', requestedOutputMode)
   const outputSuffix = requestedOutputMode === 'original' ? 'original' : String(task.target_lang || '')
-  if (!['srt', 'ass'].includes(subtitleFormat) || !isSafeOutputSuffix(outputSuffix)) {
+  if (!['srt', 'ass', 'vtt', 'ttml'].includes(subtitleFormat) || !isSafeOutputSuffix(outputSuffix)) {
     throw apiError(400, '导出格式或目标语言不合法')
   }
 
@@ -114,7 +116,7 @@ export default defineEventHandler(async (event) => {
       entries as any,
       outputPath,
       requestedOutputMode as any,
-      subtitleFormat,
+      subtitleFormat as any,
       requestedStyle.presetId,
       body.bilingualLayout || task.bilingual_layout || 'translated_first',
       sourceSubtitlePath,
@@ -127,7 +129,7 @@ export default defineEventHandler(async (event) => {
           variantEntries as any,
           variantPath,
           requestedOutputMode as any,
-          subtitleFormat,
+          subtitleFormat as any,
           requestedStyle.presetId,
           body.bilingualLayout || task.bilingual_layout || 'translated_first',
           sourceSubtitlePath,
@@ -157,6 +159,23 @@ export default defineEventHandler(async (event) => {
       log: '字幕核对完成，已导出最终文件。'
     })
     try { TranslationMemoryService.learnFromReviewTask(id) } catch { /* memory learning is best-effort */ }
+    try {
+      const auth = event.context.auth as { name?: string } | undefined
+      ReviewVersionService.snapshot(id, {
+        kind: 'export',
+        label: '导出结果',
+        source: 'user',
+        createdBy: auth?.name || '',
+        skipIfSame: true,
+        settings: {
+          outputMode: requestedOutputMode,
+          subtitleFormat,
+          subtitleStylePreset: requestedStyle.presetId,
+          subtitleStyleJson: JSON.stringify(requestedStyle),
+          bilingualLayout: body.bilingualLayout || task.bilingual_layout || 'translated_first'
+        }
+      })
+    } catch { /* version snapshots must not block export */ }
     await CostService.recordTaskCost(id)
 
     return { success: true, outputPath: savedPath, backupPath, variantPaths }

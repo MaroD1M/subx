@@ -113,6 +113,8 @@ const scopeOptions = [
   { label: '自动化写入', value: 'automation:write' },
   { label: 'Token 管理', value: 'tokens:manage' },
   { label: '系统管理', value: 'system:admin' },
+  { label: '术语库只读', value: 'glossary:read' },
+  { label: '术语库写入', value: 'glossary:write' },
   { label: '全部权限', value: '*' }
 ]
 
