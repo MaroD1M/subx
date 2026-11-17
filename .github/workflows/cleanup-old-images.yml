@@ -21,7 +21,7 @@ concurrency:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
       - name: Delete old tagged package versions
         env:
@@ -63,11 +63,14 @@ jobs:
               echo "::endgroup::"
               continue
             fi
-            while IFS= read -r id; do
-              [ -z "$id" ] && continue
-              echo "Deleting $pkg version $id"
-              gh api --method DELETE "users/$OWNER_LOWER/packages/container/$pkg/versions/$id" >/dev/null 2>&1 || echo "  delete skipped"
-            done < /tmp/legacy-versions.txt
+            count=$(grep -c . /tmp/legacy-versions.txt 2>/dev/null || true)
+            echo "Removing $count versions from $pkg"
+            export OWNER_LOWER pkg
+            delete_legacy_version() {
+              gh api --method DELETE "users/$OWNER_LOWER/packages/container/$pkg/versions/$1" >/dev/null 2>&1 || echo "  delete skipped $1"
+            }
+            export -f delete_legacy_version
+            xargs -P 4 -n 1 bash -c 'delete_legacy_version "$0"' < /tmp/legacy-versions.txt
             echo "::endgroup::"
           done
 
