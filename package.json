@@ -32,7 +32,7 @@
     "ass-compiler": "^0.1.x",
     "better-sqlite3": "^11.x",
     "chardet": "2.2.0",
-    "chokidar": "^4.0.3",
+    "chokidar": "^6.0.0",
     "fluent-ffmpeg": "^2.1.3",
     "iconv-lite": "0.7.3",
     "js-sha256": "^0.11.1",
