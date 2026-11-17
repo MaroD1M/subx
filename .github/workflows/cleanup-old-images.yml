@@ -73,6 +73,11 @@ jobs:
             }
             export -f delete_legacy_version
             xargs -P 4 -n 1 bash -c 'delete_legacy_version "$0"' < /tmp/legacy-versions.txt
+            remaining=$(grep -c . /tmp/legacy-versions.txt 2>/dev/null || true)
+            if [ "${remaining:-0}" -gt 0 ]; then
+              echo "Remaining protected versions: $remaining; attempting whole-package deletion"
+              gh api --method DELETE "user/packages/container/$pkg" 2>&1 || echo "  package delete failed"
+            fi
             echo "::endgroup::"
           done
 
