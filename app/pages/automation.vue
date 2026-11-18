@@ -594,15 +594,42 @@
             <summary class="cursor-pointer px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300">消息模板（可选）</summary>
             <div class="space-y-3 border-t border-gray-100 p-3 dark:border-gray-800">
               <UFormField label="标题">
-                <UInput v-model="channelForm.config.titleTemplate" placeholder="留空使用默认标题" class="w-full" />
+                <UInput id="notification-template-title" v-model="channelForm.config.titleTemplate" placeholder="留空使用默认标题" class="w-full" @focus="templateVariableTarget = 'title'" />
               </UFormField>
               <UFormField label="正文">
-                <UTextarea v-model="channelForm.config.bodyTemplate" :rows="3" placeholder="留空使用默认正文" class="w-full" />
+                <UTextarea id="notification-template-body" v-model="channelForm.config.bodyTemplate" :rows="3" placeholder="留空使用默认正文" class="w-full" @focus="templateVariableTarget = 'body'" />
               </UFormField>
               <UFormField v-if="channelForm.type === 'webhook'" label="Webhook JSON">
-                <UTextarea v-model="channelForm.config.webhookPayloadTemplate" :rows="4" placeholder='{"event":"{{event}}","file":"{{task.fileName}}"}' class="w-full font-mono text-xs" />
+                <UTextarea id="notification-template-webhook" v-model="channelForm.config.webhookPayloadTemplate" :rows="4" placeholder='{"event":"{{event}}","file":"{{task.fileName}}"}' class="w-full font-mono text-xs" @focus="templateVariableTarget = 'webhook'" />
               </UFormField>
-              <p class="app-caption break-words">变量：{{ notificationTemplateVariableText }}</p>
+
+              <div class="rounded-lg border border-gray-100 dark:border-gray-800">
+                <div class="flex flex-wrap items-center gap-2 border-b border-gray-100 px-2.5 py-2 dark:border-gray-800">
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-200">变量说明与快捷插入</span>
+                  <USelect v-model="templateVariableTarget" :items="templateVariableTargetOptions" size="xs" class="w-28" aria-label="插入变量位置" />
+                  <UInput v-model="templateVariableSearch" icon="i-lucide-search" size="xs" placeholder="筛选变量" class="ml-auto w-full sm:w-44" aria-label="筛选模板变量" />
+                </div>
+                <div class="max-h-60 space-y-2 overflow-y-auto p-2">
+                  <div v-for="group in notificationTemplateVariableGroups" :key="group.category" class="space-y-1">
+                    <p class="px-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">{{ group.label }}</p>
+                    <button
+                      v-for="variable in group.variables"
+                      :key="variable.key"
+                      type="button"
+                      class="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-primary-50/70 dark:hover:bg-primary-950/20"
+                      @click="insertNotificationTemplateVariable(variable.key)"
+                    >
+                      <code class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-primary-700 dark:bg-gray-800 dark:text-primary-300">{{ notificationTemplateToken(variable.key) }}</code>
+                      <span class="min-w-0 flex-1">
+                        <span class="block text-xs font-medium text-gray-700 dark:text-gray-200">{{ variable.label }}</span>
+                        <span class="app-caption block">{{ variable.description }}</span>
+                      </span>
+                      <span class="hidden max-w-40 truncate text-[11px] text-gray-400 lg:block" :title="variable.example">{{ variable.example }}</span>
+                    </button>
+                  </div>
+                  <p v-if="!notificationTemplateVariableGroups.length" class="app-caption py-3 text-center">没有匹配的变量</p>
+                </div>
+              </div>
             </div>
           </details>
         </div>
@@ -630,7 +657,7 @@
 <script setup lang="ts">
 import type { NotificationChannel, NotificationChannelType, NotificationEvent, WatchEvent, WatchFolder, WatchOutputPolicy, WatchRules } from '~~/types'
 import { STYLE_PRESETS } from '~~/shared/stylePresets'
-import { DEFAULT_NOTIFICATION_EVENT_KEYS, NOTIFICATION_EVENT_LABELS, NOTIFICATION_EVENT_KEYS, NOTIFICATION_TEMPLATE_VARIABLES } from '~~/shared/notificationEvents'
+import { DEFAULT_NOTIFICATION_EVENT_KEYS, NOTIFICATION_EVENT_LABELS, NOTIFICATION_EVENT_KEYS, NOTIFICATION_TEMPLATE_VARIABLE_DEFINITIONS } from '~~/shared/notificationEvents'
 import { createSubtitleStyle, getSubtitleStylePresetOptions, normalizeSubtitleStyle, normalizeSubtitleStylePreset } from '~~/shared/subtitleStyles'
 import { AUTOMATION_TEMPLATES } from '~~/shared/automationTemplates'
 import { formatDateTime } from '~~/shared/time'
@@ -793,8 +820,69 @@ const channelTypeOptions = [
   { label: '企业微信', value: 'wecom' }
 ]
 const notificationEvents = NOTIFICATION_EVENT_KEYS.filter(event => event !== 'test') as NotificationEvent[]
-const notificationTemplateVariableText = NOTIFICATION_TEMPLATE_VARIABLES.join('、')
 const notificationEventOptions = computed(() => notificationEvents.map(event => ({ label: eventLabel(event), value: event })))
+const notificationTemplateCategoryLabels: Record<string, string> = {
+  event: '事件与系统',
+  task: '任务',
+  batch: '批次',
+  watch: '目录监控',
+  glossary: '术语库'
+}
+const templateVariableTarget = ref<'title' | 'body' | 'webhook'>('body')
+const templateVariableSearch = ref('')
+const templateVariableTargetOptions = computed(() => [
+  { label: '插入标题', value: 'title' },
+  { label: '插入正文', value: 'body' },
+  ...(channelForm.type === 'webhook' ? [{ label: '插入 Webhook JSON', value: 'webhook' }] : [])
+])
+const notificationTemplateVariableGroups = computed(() => {
+  const keyword = templateVariableSearch.value.trim().toLowerCase()
+  const groups = new Map<string, { category: string, label: string, variables: typeof NOTIFICATION_TEMPLATE_VARIABLE_DEFINITIONS }>()
+  for (const variable of NOTIFICATION_TEMPLATE_VARIABLE_DEFINITIONS) {
+    if (keyword && !`${variable.key} ${variable.label} ${variable.description} ${variable.example}`.toLowerCase().includes(keyword)) continue
+    let group = groups.get(variable.category)
+    if (!group) {
+      group = {
+        category: variable.category,
+        label: notificationTemplateCategoryLabels[variable.category] || variable.category,
+        variables: []
+      }
+      groups.set(variable.category, group)
+    }
+    group.variables.push(variable)
+  }
+  return Array.from(groups.values())
+})
+function notificationTemplateToken(key: string) {
+  return `{{${key}}}`
+}
+
+function insertNotificationTemplateVariable(key: string) {
+  const token = `{{${key}}}`
+  const target = templateVariableTarget.value
+  const fieldId = target === 'title'
+    ? 'notification-template-title'
+    : target === 'webhook'
+      ? 'notification-template-webhook'
+      : 'notification-template-body'
+  const current = target === 'title'
+    ? String(channelForm.config.titleTemplate || '')
+    : target === 'webhook'
+      ? String(channelForm.config.webhookPayloadTemplate || '')
+      : String(channelForm.config.bodyTemplate || '')
+  const element = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement | null
+  const start = element?.selectionStart ?? current.length
+  const end = element?.selectionEnd ?? start
+  const next = `${current.slice(0, start)}${token}${current.slice(end)}`
+  if (target === 'title') channelForm.config.titleTemplate = next
+  else if (target === 'webhook') channelForm.config.webhookPayloadTemplate = next
+  else channelForm.config.bodyTemplate = next
+  nextTick(() => {
+    const nextElement = document.getElementById(fieldId) as HTMLInputElement | HTMLTextAreaElement | null
+    nextElement?.focus()
+    nextElement?.setSelectionRange(start + token.length, start + token.length)
+  })
+}
 function eventSelectionSummary(value: unknown) {
   const count = Array.isArray(value) ? value.length : 0
   if (!count) return '未选择'
@@ -1027,6 +1115,7 @@ function openChannelModal(channel?: NotificationChannel) {
   channelModalOpen.value = true
 }
 watch(() => channelForm.type, (type, old) => {
+  if (type !== 'webhook' && templateVariableTarget.value === 'webhook') templateVariableTarget.value = 'body'
   if (type !== old && !channelForm.id) {
     channelForm.name = channelTypeLabel(type)
     channelForm.config = defaultChannelConfig(type)

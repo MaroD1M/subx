@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderNotificationJsonTemplate, renderNotificationTemplate } from '../notificationTemplates'
 import { sanitizeChannelConfig } from '../notifications'
+import { NOTIFICATION_TEMPLATE_VARIABLE_DEFINITIONS } from '../../../shared/notificationEvents'
 
 describe('notification templates', () => {
   it('renders dotted variables and keeps text safe', () => {
@@ -27,5 +28,16 @@ describe('notification templates', () => {
     expect(config.bodyTemplate).toBe('{{task.statusLabel}}')
     expect(config.webhookPayloadTemplate).toBe('{"file":"{{task.fileName}}"}')
     expect(config.format).toBe('text')
+  })
+
+  it('documents every template variable with a label, description and example', () => {
+    expect(NOTIFICATION_TEMPLATE_VARIABLE_DEFINITIONS.length).toBeGreaterThan(0)
+    expect(new Set(NOTIFICATION_TEMPLATE_VARIABLE_DEFINITIONS.map(variable => variable.key)).size)
+      .toBe(NOTIFICATION_TEMPLATE_VARIABLE_DEFINITIONS.length)
+    for (const variable of NOTIFICATION_TEMPLATE_VARIABLE_DEFINITIONS) {
+      expect(variable.label.trim()).not.toBe('')
+      expect(variable.description.trim()).not.toBe('')
+      expect(variable.example.trim()).not.toBe('')
+    }
   })
 })

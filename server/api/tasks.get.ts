@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const conditions: string[] = []
   const params: any[] = []
   if (status) {
-    conditions.push('status = ?')
+    conditions.push('tasks.status = ?')
     params.push(String(status))
   }
   if (q) {

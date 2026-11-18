@@ -1250,6 +1250,22 @@ describe('core API integration', () => {
     }
   })
 
+  it('filters task history by status', async () => {
+    const db = new Database(dbPath)
+    try {
+      db.prepare("INSERT OR REPLACE INTO tasks (task_id, file_path, root_id, model, status) VALUES ('history-filter-error', 'History.Filter.srt', 'default', 'm', 'error')").run()
+      const response = await apiFetch('/api/tasks?page=1&pageSize=100&status=error', { headers: { cookie } })
+      expect(response.status).toBe(200)
+      const payload = await response.json() as any
+      expect(payload.tasks.length).toBeGreaterThan(0)
+      expect(payload.tasks.every((task: any) => task.status === 'error')).toBe(true)
+      expect(payload.tasks.some((task: any) => task.taskId === 'history-filter-error')).toBe(true)
+    } finally {
+      db.prepare("DELETE FROM tasks WHERE task_id = 'history-filter-error'").run()
+      db.close()
+    }
+  })
+
   it('exposes task queue and batch status endpoints', async () => {
     const queue = await apiFetch('/api/task-queue', { headers: { cookie } })
     expect(queue.status).toBe(200)

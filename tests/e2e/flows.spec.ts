@@ -28,6 +28,22 @@ test('client navigation updates active nav and page content', async ({ page }) =
   await expect(page.locator('aside').getByRole('link', { name: '翻译历史' })).toHaveAttribute('aria-current', 'page')
 })
 
+test('history status and path filters update results', async ({ page }) => {
+  await page.goto('/history')
+  await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+  await page.getByLabel('状态筛选').click()
+  await page.getByRole('option', { name: '失败' }).click()
+  await expect(page.getByText('共 1 条', { exact: true })).toBeVisible()
+  await expect(page.getByText('Example.Movie.2024.mkv').first()).toBeVisible()
+  await expect(page.getByText('Demo.Show.S01E01.mkv')).toHaveCount(0)
+
+  await page.getByRole('button', { name: '清空筛选' }).click()
+  await page.getByLabel('搜索文件路径').fill('S01E02')
+  await expect(page.getByText('共 1 条', { exact: true })).toBeVisible()
+  await expect(page.getByText('Demo.Show.S01E02.mkv').first()).toBeVisible()
+  await expect(page.getByText('Demo.Show.S01E01.mkv')).toHaveCount(0)
+})
+
 test('shared config and watch folder caches avoid duplicate requests on navigation', async ({ page }) => {
   let configRequests = 0
   let watchFoldersRequests = 0
@@ -198,6 +214,34 @@ test('automation notifications and API tabs are accessible', async ({ page }) =>
   await page.goto('/automation?tab=integrations')
   await expect(page.getByText('下载器 / 媒体服务器 Webhook')).toBeVisible()
   await expectNoSeriousA11y(page)
+})
+
+test('notification template variables explain and insert tokens', async ({ page }) => {
+  const created = await page.request.post('/api/notification-channels', {
+    data: {
+      type: 'telegram',
+      name: 'Template Variable Test',
+      enabled: true,
+      config: { botToken: '123456:abcdef', chatId: '100200300', events: ['task_done'] }
+    }
+  })
+  expect(created.ok()).toBeTruthy()
+  const channelId = (await created.json() as any).channel?.id
+  try {
+    await page.goto('/automation?tab=notifications')
+    await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+    const card = page.locator('article').filter({ hasText: 'Template Variable Test' })
+    await card.getByRole('button', { name: '编辑通知渠道' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByText('消息模板（可选）').click()
+    await dialog.getByLabel('插入变量位置').click()
+    await page.getByRole('option', { name: '插入标题' }).click()
+    await dialog.getByRole('button', { name: /事件名称/ }).click()
+    await expect(dialog.getByPlaceholder('留空使用默认标题')).toHaveValue('{{eventLabel}}')
+    await expect(dialog.getByText('事件的中文名称，例如“任务完成”。')).toBeVisible()
+  } finally {
+    if (channelId) await page.request.delete(`/api/notification-channels/${channelId}`)
+  }
 })
 
 test('glossary page creates a term and filters the list', async ({ page }) => {
