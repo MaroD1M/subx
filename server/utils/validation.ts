@@ -65,6 +65,7 @@ export const taskCreateSchema = z.object({
     z.object({ path: z.string(), rootId: z.string().optional() })
   ])).optional(),
   retryTaskId: z.string().optional(),
+  forceAsrRefresh: z.boolean().optional(),
   batch: z.object({
     name: z.string().max(160).optional(),
     priority: z.coerce.number().int().min(-1000).max(1000).optional(),

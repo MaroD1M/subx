@@ -22,6 +22,7 @@ export const SQLITE_SCHEMA_SQL = `    CREATE TABLE IF NOT EXISTS config (
       asr_run_id INTEGER,
       asr_confidence REAL,
       asr_checkpoint_key TEXT,
+      force_asr_refresh INTEGER NOT NULL DEFAULT 0,
       origin TEXT NOT NULL DEFAULT 'manual',
       watch_event_id INTEGER,
       content_title TEXT,

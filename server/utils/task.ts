@@ -75,8 +75,8 @@ export const TaskService = {
         const subtitleStyle = task.subtitleStyle ? normalizeSubtitleStyle(task.subtitleStyle, task.outputMode) : undefined
         const stmt = db.prepare(`
       INSERT INTO tasks (
-        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, subtitle_style_json, bilingual_layout, force_retranslate, status, progress, track_policy_json, series_key, batch_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        task_id, file_path, root_id, source_type, track_index, model, target_lang, output_mode, style_preset, style_prompt, source_lang, source_subtitle_path, asr_run_id, asr_confidence, asr_checkpoint_key, force_asr_refresh, origin, watch_event_id, content_title, content_background, custom_instructions, translation_mode, subtitle_format, subtitle_style_preset, subtitle_style_json, bilingual_layout, force_retranslate, status, progress, track_policy_json, series_key, batch_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `)
         stmt.run(
             task.taskId,
@@ -94,6 +94,7 @@ export const TaskService = {
             task.asrRunId || null,
             task.asrConfidence ?? null,
             task.asrCheckpointKey || null,
+            task.forceAsrRefresh === false ? 0 : 1,
             task.origin === 'automation' ? 'automation' : 'manual',
             task.watchEventId || null,
             task.contentTitle || null,
@@ -152,6 +153,7 @@ export const TaskService = {
             asrRunId: task.asr_run_id || undefined,
             asrConfidence: task.asr_confidence ?? undefined,
             asrCheckpointKey: task.asr_checkpoint_key || undefined,
+            forceAsrRefresh: Boolean(task.force_asr_refresh),
             origin: task.origin === 'automation' ? 'automation' : 'manual',
             watchEventId: task.watch_event_id || undefined,
             contentTitle: task.content_title || '',

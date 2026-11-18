@@ -54,7 +54,7 @@ const mockDb = {
       },
       run(...args: any[]) {
         if (sql.includes('INSERT INTO tasks')) {
-          const [taskId, filePath, rootId, sourceType, trackIndex, model, targetLang, outputMode, stylePreset, stylePrompt, sourceLang, _sourceSubtitlePath, asrRunId, asrConfidence, _asrCheckpointKey, _origin, _watchEventId, contentTitle, contentBackground, customInstructions, translationMode, subtitleFormat, subtitleStylePreset, _subtitleStyleJson, bilingualLayout, forceRetranslate, status, progress] = args
+          const [taskId, filePath, rootId, sourceType, trackIndex, model, targetLang, outputMode, stylePreset, stylePrompt, sourceLang, _sourceSubtitlePath, asrRunId, asrConfidence, _asrCheckpointKey, _forceAsrRefresh, _origin, _watchEventId, contentTitle, contentBackground, customInstructions, translationMode, subtitleFormat, subtitleStylePreset, _subtitleStyleJson, bilingualLayout, forceRetranslate, status, progress] = args
           dbState.set(String(taskId), { status: String(status), progress: Number(progress), error: null, forceRetranslate: Number(forceRetranslate) })
           return { changes: 1 }
         }

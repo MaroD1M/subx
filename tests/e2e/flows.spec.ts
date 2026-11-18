@@ -391,7 +391,7 @@ test('subtitled video can be forced to ASR', async ({ page }) => {
   const asrSwitch = page.getByRole('switch', { name: '使用语音识别' })
   await expect(asrSwitch).toBeEnabled()
   await asrSwitch.click()
-  await expect(page.getByText('已启用：将从所选音频轨道重新生成字幕')).toBeVisible()
+  await expect(page.getByText('已启用：将重新识别所选音频轨道并生成字幕')).toBeVisible()
 
   await asrSwitch.click()
   await expect(asrSwitch).not.toBeChecked()

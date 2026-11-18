@@ -269,9 +269,9 @@
                 color="warning"
                 size="xs"
                 :loading="retryingTaskId === row.original.taskId"
-                title="重新翻译"
-                aria-label="重新翻译"
-                @click="retryTask(row.original.taskId)"
+                :title="row.original.sourceType === 'asr' ? '重新翻译（复用语音识别）' : '重新翻译'"
+                :aria-label="row.original.sourceType === 'asr' ? '重新翻译（复用语音识别）' : '重新翻译'"
+                @click="retryTask(row.original)"
               />
             </div>
             <UDropdownMenu v-if="rowActionItems(row.original).length" :items="rowActionItems(row.original)" size="sm">
@@ -326,7 +326,7 @@
             <UButton v-if="task.reviewAvailable" label="核对" icon="i-lucide-list-checks" size="xs" color="warning" variant="soft" @click="openReview(task.taskId)" />
             <UButton v-if="canPauseQueue(task)" label="暂停" icon="i-lucide-pause" size="xs" color="warning" variant="soft" :loading="queueActionId === task.taskId" @click="pauseTask(task.taskId)" />
             <UButton v-if="task.status === 'paused' && !task.pauseRequested" label="继续" icon="i-lucide-play" size="xs" color="primary" variant="soft" :loading="resumingTaskId === task.taskId" @click="resumeTask(task.taskId)" />
-            <UButton v-if="['error', 'cancelled', 'review', 'done'].includes(task.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="retryingTaskId === task.taskId" @click="retryTask(task.taskId)" />
+            <UButton v-if="['error', 'cancelled', 'review', 'done'].includes(task.status)" label="重试" icon="i-lucide-refresh-cw" size="xs" color="neutral" variant="ghost" :loading="retryingTaskId === task.taskId" @click="retryTask(task)" />
             <UDropdownMenu v-if="rowActionItems(task).length" :items="rowActionItems(task)" size="sm" class="ml-auto">
               <UButton label="更多" icon="i-lucide-ellipsis" size="xs" color="neutral" variant="ghost" title="更多操作" aria-label="更多操作" />
             </UDropdownMenu>
@@ -638,18 +638,31 @@ async function clearHistory() {
   }
 }
 
-async function retryTask(taskId) {
+async function retryTask(task, forceAsrRefresh = false) {
+  const isAsrTask = String(task?.sourceType || '') === 'asr'
+  const description = forceAsrRefresh
+    ? '将忽略旧语音识别缓存，重新提取音频并识别，再重新翻译；耗时会更长。'
+    : isAsrTask
+      ? '将复用已有语音识别结果，只重新翻译。如需重新识别，请使用“重新识别并翻译”。'
+      : '将创建新任务并重新调用翻译模型，可能产生额外费用。'
   if (!(await confirm({
-    title: '重新翻译这个任务？',
-    description: '将创建新任务并重新调用翻译模型，可能产生额外费用。',
-    confirmLabel: '重新翻译',
+    title: forceAsrRefresh ? '重新识别并翻译这个任务？' : '重新翻译这个任务？',
+    description,
+    confirmLabel: forceAsrRefresh ? '重新识别并翻译' : '重新翻译',
     color: 'warning'
   }))) return
 
-  retryingTaskId.value = taskId
+  retryingTaskId.value = task?.taskId
   try {
-    const res = await $fetch('/api/task', { method: 'POST', body: { retryTaskId: taskId } })
-    toast.add({ title: '已重试', description: '任务已重新加入队列', color: 'success' })
+    const res = await $fetch('/api/task', {
+      method: 'POST',
+      body: { retryTaskId: task?.taskId, forceAsrRefresh }
+    })
+    toast.add({
+      title: forceAsrRefresh ? '已重新识别' : '已重试',
+      description: forceAsrRefresh ? '已忽略旧识别缓存，任务已加入队列' : '任务已重新加入队列',
+      color: 'success'
+    })
     if (res?.taskId) {
       navigateTo(`/task/${res.taskId}`)
     } else {
@@ -824,6 +837,14 @@ function rowActionItems(task) {
 
   if (terminal) {
     if (items.length) items.push({ type: 'separator' })
+    if (String(task?.sourceType || '') === 'asr') {
+      items.push({
+        label: '重新识别并翻译',
+        icon: 'i-lucide-audio-lines',
+        onSelect: () => retryTask(task, true)
+      })
+      items.push({ type: 'separator' })
+    }
     items.push({
       label: '删除记录',
       icon: 'i-lucide-trash-2',

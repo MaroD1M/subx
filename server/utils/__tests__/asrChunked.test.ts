@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { join } from 'path'
-import { buildAsrCheckpointKey, buildAsrChunkPlan, mergeChunkResults } from '../asr/chunked'
+import { buildAsrCheckpointKey, buildAsrChunkPlan, mergeChunkResults, resolveAsrCheckpointKey } from '../asr/chunked'
 
 describe('ASR chunking', () => {
   it('builds overlapping chunks and keeps the final tail', () => {
@@ -69,6 +69,17 @@ describe('ASR chunking', () => {
 
   it('throws instead of silently truncating extremely long audio', () => {
     expect(() => buildAsrChunkPlan(501 * 300, 300, 0)).toThrow(/分段数量超过上限/)
+  })
+
+  it('uses a task-scoped checkpoint key for fresh ASR runs', () => {
+    const base = 'base-checkpoint'
+    expect(resolveAsrCheckpointKey(base, { taskId: 'task-a', forceAsrRefresh: false } as any)).toBe(base)
+    expect(resolveAsrCheckpointKey(base, { taskId: 'task-a', forceAsrRefresh: true } as any)).not.toBe(base)
+    expect(resolveAsrCheckpointKey(base, { taskId: 'task-a', forceAsrRefresh: true } as any))
+      .toBe(resolveAsrCheckpointKey(base, { taskId: 'task-a', forceAsrRefresh: true } as any))
+    expect(resolveAsrCheckpointKey(base, { taskId: 'task-a', forceAsrRefresh: true } as any))
+      .not.toBe(resolveAsrCheckpointKey(base, { taskId: 'task-b', forceAsrRefresh: true } as any))
+    expect(resolveAsrCheckpointKey(base, { taskId: 'task-a', asrCheckpointKey: 'shared-key', forceAsrRefresh: true } as any)).toBe('shared-key')
   })
 
   it('invalidates checkpoints when ASR settings change', async () => {

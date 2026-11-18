@@ -13,7 +13,7 @@ export default defineEventHandler(() => {
     openapi: '3.1.0',
     info: {
       title: 'SubX API',
-      version: '2.11.1',
+      version: '2.11.2',
       description: 'SubX 任务、目录监控、通知与 API Token 接口。使用 Authorization: Bearer <token> 或 X-API-Token。'
     },
     servers: [{ url: '/' }],
@@ -50,6 +50,8 @@ export default defineEventHandler(() => {
             },
             bilingualLayout: { type: 'string', enum: ['translated_first', 'original_first'] },
             files: { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'object' }] } },
+            retryTaskId: { type: 'string' },
+            forceAsrRefresh: { type: 'boolean', description: '重试 ASR 任务时忽略旧检查点，重新识别语音' },
             dedupeEpisodes: { type: 'boolean', description: '批量任务按 SxxExx 去重，保留体积最大的版本' },
             trackPolicy: {
               type: 'object',

@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const processFile = async (path: string, type: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr', track: number, currentRootId?: string, policy?: TrackPolicy, persistSeriesProfile = false) => {
+  const processFile = async (path: string, type: 'auto' | 'embedded' | 'external' | 'asr' | 'ocr', track: number, currentRootId?: string, policy?: TrackPolicy, persistSeriesProfile = false, forceAsrRefresh = true) => {
     const requestedTarget = targetLanguage || config.targetLanguage
     const requestedOutputMode = outputMode || 'translated'
     const requestedFormat = subtitleFormat || config.subtitleFormat || 'srt'
@@ -93,6 +93,7 @@ export default defineEventHandler(async (event) => {
       seriesKey,
       sourceType: type,
       trackIndex: track,
+      forceAsrRefresh,
       model: model || config.defaultModel,
       targetLanguage: requestedTarget,
       outputMode: requestedOutputMode,
@@ -134,6 +135,8 @@ export default defineEventHandler(async (event) => {
       throw apiError(409, '原任务仍在运行，无法重试；请先取消或等待完成')
     }
     const newTaskId = uuidv4()
+    const reuseAsrCache = body.forceAsrRefresh !== true && Boolean(oldTask.asrCheckpointKey)
+    const forceAsrRefresh = !reuseAsrCache
     await TaskService.createTask({
       taskId: newTaskId,
       filePath: oldTask.filePath,
@@ -142,7 +145,8 @@ export default defineEventHandler(async (event) => {
       sourceType: oldTask.sourceType as 'embedded' | 'external' | 'asr' | 'ocr',
       trackIndex: oldTask.trackIndex || 0,
       model: oldTask.model || config.defaultModel,
-      asrCheckpointKey: oldTask.asrCheckpointKey,
+      asrCheckpointKey: reuseAsrCache ? oldTask.asrCheckpointKey : undefined,
+      forceAsrRefresh,
       targetLanguage: oldTask.targetLanguage || config.targetLanguage,
       outputMode: oldTask.outputMode || 'translated',
       stylePreset: oldTask.stylePreset || 'default',

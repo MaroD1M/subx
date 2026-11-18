@@ -1172,6 +1172,53 @@ describe('core API integration', () => {
     expect(cancelled.status).toBe(200)
   })
 
+  it('can retry an ASR task with or without reusing checkpoints', async () => {
+    const oldTaskId = 'retry-asr-old'
+    const db = new Database(dbPath)
+    db.prepare(`
+      INSERT INTO tasks (task_id, file_path, root_id, source_type, model, status, asr_checkpoint_key)
+      VALUES (?, 'Shows/Demo Show/Demo.Show.S01E01.mkv', 'default', 'asr', 'm', 'done', 'old-checkpoint-key')
+    `).run(oldTaskId)
+
+    try {
+      const retry = async (forceAsrRefresh: boolean) => {
+        const response = await apiFetch('/api/task', {
+          method: 'POST',
+          headers: { cookie, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            retryTaskId: oldTaskId,
+            forceAsrRefresh,
+            batch: { name: `retry-asr-${forceAsrRefresh}`, scheduledAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() }
+          })
+        })
+        expect(response.status).toBe(200)
+        return await response.json() as any
+      }
+
+      const fresh = await retry(true)
+      const freshRow = db.prepare('SELECT force_asr_refresh, asr_checkpoint_key FROM tasks WHERE task_id = ?').get(fresh.taskId) as any
+      expect(freshRow.force_asr_refresh).toBe(1)
+      expect(freshRow.asr_checkpoint_key).toBeNull()
+
+      const reused = await retry(false)
+      const reusedRow = db.prepare('SELECT force_asr_refresh, asr_checkpoint_key FROM tasks WHERE task_id = ?').get(reused.taskId) as any
+      expect(reusedRow.force_asr_refresh).toBe(0)
+      expect(reusedRow.asr_checkpoint_key).toBe('old-checkpoint-key')
+
+      for (const id of [fresh.taskId, reused.taskId]) {
+        db.prepare('DELETE FROM task_jobs WHERE task_id = ?').run(id)
+        db.prepare('DELETE FROM task_logs WHERE task_id = ?').run(id)
+        db.prepare('DELETE FROM tasks WHERE task_id = ?').run(id)
+      }
+      for (const batchId of [fresh.batchId, reused.batchId].filter(Boolean)) {
+        db.prepare('DELETE FROM task_batches WHERE id = ?').run(batchId)
+      }
+    } finally {
+      db.prepare('DELETE FROM tasks WHERE task_id = ?').run(oldTaskId)
+      db.close()
+    }
+  })
+
   it('exposes task queue and batch status endpoints', async () => {
     const queue = await apiFetch('/api/task-queue', { headers: { cookie } })
     expect(queue.status).toBe(200)

@@ -94,6 +94,17 @@ export async function buildAsrCheckpointKey(task: TranslationTask, options: AsrO
   return createHash('sha256').update(payload).digest('hex')
 }
 
+export function resolveAsrCheckpointKey(
+  baseCheckpointKey: string,
+  task: Pick<TranslationTask, 'taskId' | 'asrCheckpointKey' | 'forceAsrRefresh'>
+): string {
+  if (task.asrCheckpointKey) return task.asrCheckpointKey
+  if (task.forceAsrRefresh) {
+    return createHash('sha256').update(`${baseCheckpointKey}|${task.taskId}|fresh`).digest('hex')
+  }
+  return baseCheckpointKey
+}
+
 function loadCheckpoints(checkpointKey: string) {
   try {
     const rows = useDb().prepare(`
@@ -232,7 +243,8 @@ export async function transcribeChunked(options: {
   const { audioPath, sourcePath, chunkSeconds = DEFAULT_CHUNK_SECONDS, overlapSeconds = DEFAULT_OVERLAP_SECONDS, task, asrOptions, taskId, tempDir, signal, ensureNotPaused, onProgress, onCheckpointKey } = options
   const duration = await probeDurationSeconds(audioPath)
   const plan = buildAsrChunkPlan(duration, chunkSeconds, overlapSeconds)
-  const checkpointKey = await buildAsrCheckpointKey(task, asrOptions, audioPath, sourcePath, chunkSeconds, overlapSeconds)
+  const baseCheckpointKey = await buildAsrCheckpointKey(task, asrOptions, audioPath, sourcePath, chunkSeconds, overlapSeconds)
+  const checkpointKey = resolveAsrCheckpointKey(baseCheckpointKey, task)
   onCheckpointKey?.(checkpointKey)
   const checkpoints = loadCheckpoints(checkpointKey)
   const results: Array<{ plan: ChunkPlan, result: AsrResult, reused: boolean }> = []

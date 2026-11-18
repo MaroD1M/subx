@@ -1067,7 +1067,7 @@ const hasSupportedSubtitle = computed(() => supportedTracks.value.length > 0)
 const bitmapTracks = computed(() => tracks.value.filter((t: any) => isBitmapCodec(t.codec)))
 const asrHint = computed(() => {
   if (useAsr.value) {
-    return '已启用：将从所选音频轨道重新生成字幕，现有文本/图像字幕会被忽略。'
+    return '已启用：将重新识别所选音频轨道并生成字幕，不复用旧识别检查点，现有文本/图像字幕会被忽略。'
   }
   if (hasSupportedSubtitle.value) {
     return '已有文本字幕。想重新听写，或觉得现有字幕质量不佳？打开开关改用语音识别。'

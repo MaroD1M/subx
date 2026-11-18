@@ -101,6 +101,7 @@ export interface TranslationTask {
   asrRunId?: number            // 语音识别运行记录
   asrConfidence?: number       // 平均置信度
   asrCheckpointKey?: string    // ASR 分段检查点 key
+  forceAsrRefresh?: boolean    // 新建 ASR 任务时忽略旧检查点，重新识别
   origin?: 'manual' | 'automation' // 任务来源
   watchEventId?: number        // 自动任务关联的监控事件
   model: string                // 使用的模型

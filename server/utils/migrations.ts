@@ -951,6 +951,13 @@ export const MIGRATIONS: Migration[] = [
       ensureNotificationTemplates(db, dialect)
     }
   },
+  {
+    version: 18,
+    name: 'force-asr-refresh',
+    up(db, dialect) {
+      ensureColumn(db, dialect, 'tasks', 'force_asr_refresh', 'INTEGER NOT NULL DEFAULT 0')
+    }
+  },
 ]
 
 export function runMigrations(db: any, dialect: MigrationDialect) {

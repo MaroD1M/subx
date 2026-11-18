@@ -1,6 +1,6 @@
 # 维护与架构说明
 
-> 适用版本：v2.11.1
+> 适用版本：v2.11.2
 >
 > 本文档面向继续开发 SubX 的维护者，说明主要目录、数据缓存、数据库迁移和验证流程。
 
@@ -94,6 +94,7 @@
 - `15`：新增字幕版本快照 `task_review_versions`
 - `16`：新增 review_jobs 的 A/B 任务类型和选项字段
 - `17`：新增通知投递模板和 Webhook payload 快照字段
+- `18`：新增任务 `force_asr_refresh`，控制新建 ASR 任务是否忽略旧识别检查点
 
 SQLite 基线位于 `server/utils/schema.ts`，PostgreSQL 基线位于 `scripts/postgres-schema.sql`。`schemaDrift.test.ts` 会对比两边表和字段，修改任意一侧后必须同步另一侧。
 
