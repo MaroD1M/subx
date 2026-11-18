@@ -527,8 +527,16 @@ test('history queue panel expands and adjusts a waiting task', async ({ page }) 
       VALUES ('queue-ui-task', 'Shows/Demo Show/Queue.UI.Test.zh.srt', 'default', 'm', 'queued', 0, '等待执行')
     `).run()
     db.prepare(`
-      INSERT OR REPLACE INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, priority, created_at, updated_at)
-      VALUES ('queue-ui-task', 'queued', 0, 3, datetime('now', '+1 hour'), 5, datetime('now'), datetime('now'))
+      INSERT OR REPLACE INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, scheduled_at, priority, created_at, updated_at)
+      VALUES ('queue-ui-task', 'queued', 0, 3, datetime('now', '+1 hour'), datetime('now', '+1 hour'), 5, datetime('now'), datetime('now'))
+    `).run()
+    db.prepare(`
+      INSERT OR REPLACE INTO tasks (task_id, file_path, root_id, model, status, progress, step_message)
+      VALUES ('queue-ui-bulk', 'Shows/Demo Show/Queue.UI.Bulk.zh.srt', 'default', 'm', 'queued', 0, '等待执行')
+    `).run()
+    db.prepare(`
+      INSERT OR REPLACE INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, scheduled_at, priority, created_at, updated_at)
+      VALUES ('queue-ui-bulk', 'queued', 0, 3, datetime('now', '+1 hour'), datetime('now', '+1 hour'), 3, datetime('now'), datetime('now'))
     `).run()
 
     await page.goto('/history')
@@ -542,17 +550,59 @@ test('history queue panel expands and adjusts a waiting task', async ({ page }) 
     await expect(queueContent.getByText('Queue.UI.Test.zh.srt')).toBeVisible()
     await expect(queueContent.getByText('#1')).toBeVisible()
     await expect(queueContent.getByText('P5', { exact: true })).toBeVisible()
-    await expect(queueContent.getByText('共 1 个任务 · 第 1 / 1 页')).toBeVisible()
+    await expect(queueContent.getByText('共 2 个任务 · 第 1 / 1 页')).toBeVisible()
 
     await page.getByRole('button', { name: '提高优先级 Queue.UI.Test.zh.srt' }).click()
     await expect(queueContent.getByText('P15', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: '暂停 Queue.UI.Test.zh.srt' }).click()
     await expect(queueContent.getByText('已暂停').first()).toBeVisible()
+    await page.getByRole('button', { name: '继续 Queue.UI.Test.zh.srt' }).click()
+    await expect(queueContent.getByText('等待中')).toBeVisible()
+
+    await queueContent.getByRole('checkbox', { name: '选择队列任务 Queue.UI.Test.zh.srt' }).click()
+    await queueContent.getByRole('checkbox', { name: '选择队列任务 Queue.UI.Bulk.zh.srt' }).click()
+    await queueContent.getByRole('button', { name: '暂停', exact: true }).click()
+    await expect(queueContent.getByText('已暂停').first()).toBeVisible()
+    await expect(queueContent.getByText('等待中')).toHaveCount(0)
+
+    await queueContent.getByRole('checkbox', { name: '选择队列任务 Queue.UI.Test.zh.srt' }).click()
+    await queueContent.getByRole('checkbox', { name: '选择队列任务 Queue.UI.Bulk.zh.srt' }).click()
+    await queueContent.getByRole('button', { name: '继续', exact: true }).click()
+    await expect(queueContent.getByText('等待中')).toBeVisible()
+    await expect(queueContent.getByText('已暂停')).toHaveCount(0)
     await expectNoSeriousA11y(page)
   } finally {
-    db.prepare("DELETE FROM task_jobs WHERE task_id = 'queue-ui-task'").run()
-    db.prepare("DELETE FROM task_logs WHERE task_id = 'queue-ui-task'").run()
-    db.prepare("DELETE FROM tasks WHERE task_id = 'queue-ui-task'").run()
+    for (const taskId of ['queue-ui-task', 'queue-ui-bulk']) {
+      db.prepare('DELETE FROM task_jobs WHERE task_id = ?').run(taskId)
+      db.prepare('DELETE FROM task_logs WHERE task_id = ?').run(taskId)
+      db.prepare('DELETE FROM tasks WHERE task_id = ?').run(taskId)
+    }
+    db.close()
+  }
+})
+
+test('history supports bulk selection and deleting finished tasks', async ({ page }) => {
+  const db = new Database(String(process.env.DB_PATH))
+  try {
+    for (const [taskId, filePath] of [['history-bulk-a', 'Bulk.History.A.srt'], ['history-bulk-b', 'Bulk.History.B.srt']]) {
+      db.prepare(`
+        INSERT OR REPLACE INTO tasks (task_id, file_path, root_id, model, status)
+        VALUES (?, ?, 'default', 'm', 'done')
+      `).run(taskId, filePath)
+    }
+
+    await page.goto('/history')
+    await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as any)?.__vue_app__))
+    await page.getByRole('checkbox', { name: '选择任务 Bulk.History.A.srt' }).click()
+    await page.getByRole('checkbox', { name: '选择任务 Bulk.History.B.srt' }).click()
+    await expect(page.getByText('已选 2 项')).toBeVisible()
+    await page.getByRole('button', { name: '删除已结束' }).click()
+    await page.getByRole('button', { name: '删除记录' }).click()
+    await expect(page.getByText('Bulk.History.A.srt')).toHaveCount(0)
+    await expect(page.getByText('Bulk.History.B.srt')).toHaveCount(0)
+    await expectNoSeriousA11y(page)
+  } finally {
+    db.prepare("DELETE FROM tasks WHERE task_id IN ('history-bulk-a', 'history-bulk-b')").run()
     db.close()
   }
 })

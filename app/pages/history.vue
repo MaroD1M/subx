@@ -14,7 +14,16 @@
       </div>
       <div class="app-toolbar-row">
         <UButton v-if="searchQuery || statusFilter !== 'all'" label="清空筛选" icon="i-lucide-filter-x" size="sm" color="neutral" variant="ghost" @click="clearFilters" />
+        <UButton :label="allHistorySelected ? '取消全选' : '全选本页'" icon="i-lucide-check-square" size="sm" color="neutral" variant="ghost" :disabled="!tasks.length" @click="toggleSelectAllHistory" />
         <UButton label="清空历史" icon="i-lucide-trash-2" size="sm" color="error" variant="ghost" @click="isClearModalOpen = true" />
+      </div>
+      <div v-if="selectedTaskIds.size" class="app-toolbar-row border-t border-gray-100 pt-2 dark:border-gray-800">
+        <span class="app-pill app-pill-primary">已选 {{ selectedTaskIds.size }} 项</span>
+        <UButton label="暂停" icon="i-lucide-pause" size="sm" color="warning" variant="soft" :loading="historyBulkAction === 'pause'" :disabled="Boolean(historyBulkAction) || !historyPausableTasks.length" @click="bulkPauseHistory" />
+        <UButton label="继续" icon="i-lucide-play" size="sm" color="primary" variant="soft" :loading="historyBulkAction === 'resume'" :disabled="Boolean(historyBulkAction) || !historyResumableTasks.length" @click="bulkResumeHistory" />
+        <UButton label="取消" icon="i-lucide-octagon-x" size="sm" color="error" variant="soft" :loading="historyBulkAction === 'cancel'" :disabled="Boolean(historyBulkAction) || !historyCancelableTasks.length" @click="bulkCancelHistory" />
+        <UButton label="删除已结束" icon="i-lucide-trash-2" size="sm" color="error" variant="ghost" :loading="historyBulkAction === 'delete'" :disabled="Boolean(historyBulkAction) || !historyDeletableTasks.length" @click="bulkDeleteHistory" />
+        <UButton label="清空选择" icon="i-lucide-x" size="sm" color="neutral" variant="ghost" @click="clearTaskSelection" />
       </div>
     </div>
 
@@ -49,6 +58,18 @@
       </div>
 
       <div v-if="queueExpanded" id="history-queue-content" class="border-t border-gray-100 dark:border-gray-800">
+        <div v-if="queueTotal > 0" class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-1.5 dark:border-gray-800">
+          <span class="app-meta">{{ selectedQueueTaskIds.size ? `已选 ${selectedQueueTaskIds.size} 项` : '勾选任务可批量操作' }}</span>
+          <UButton :label="allQueueTasksSelected ? '取消全选' : '全选本页'" icon="i-lucide-check-square" size="xs" color="neutral" variant="ghost" @click="toggleSelectAllQueue" />
+        </div>
+        <div v-if="selectedQueueTaskIds.size" class="flex flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+          <UButton label="暂停" icon="i-lucide-pause" size="xs" color="warning" variant="soft" :loading="queueBulkAction === 'pause'" :disabled="Boolean(queueBulkAction) || !queuePausableTasks.length" @click="bulkPauseQueue" />
+          <UButton label="继续" icon="i-lucide-play" size="xs" color="primary" variant="soft" :loading="queueBulkAction === 'resume'" :disabled="Boolean(queueBulkAction) || !queueResumableTasks.length" @click="bulkResumeQueue" />
+          <UButton label="取消" icon="i-lucide-octagon-x" size="xs" color="error" variant="soft" :loading="queueBulkAction === 'cancel'" :disabled="Boolean(queueBulkAction) || !queueCancelableTasks.length" @click="bulkCancelQueue" />
+          <UButton label="删除已暂停" icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" :loading="queueBulkAction === 'delete'" :disabled="Boolean(queueBulkAction) || !allQueueSelectedPaused" @click="bulkDeleteQueue" />
+          <UButton label="清空选择" icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="clearQueueTaskSelection" />
+        </div>
+
         <div v-if="!queueSections.length && !activeBatches.length" class="px-3 py-6 text-center">
           <UIcon name="i-lucide-list-checks" class="mx-auto h-6 w-6 text-gray-300 dark:text-gray-600" />
           <p class="app-caption mt-2">当前没有运行中或等待中的任务</p>
@@ -64,6 +85,7 @@
           <div class="divide-y divide-gray-100 dark:divide-gray-800">
             <div v-for="task in section.tasks" :key="task.taskId" class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:gap-3">
               <div class="flex min-w-0 flex-1 items-start gap-2.5">
+                <UCheckbox :model-value="isQueueTaskSelected(task.taskId)" :aria-label="`选择队列任务 ${fileName(task.filePath)}`" class="mt-0.5 shrink-0" @update:model-value="toggleQueueTaskSelection(task.taskId)" />
                 <span class="mt-0.5 w-8 shrink-0 text-center text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-400">#{{ task.queuePosition }}</span>
 
                 <div class="min-w-0 flex-1 space-y-1">
@@ -190,6 +212,7 @@
         <template #filePath-cell="{ row }">
           <div class="min-w-0 max-w-[460px] lg:max-w-[560px] xl:max-w-[680px]">
             <div class="flex items-center gap-2">
+              <UCheckbox :model-value="isTaskSelected(row.original.taskId)" :aria-label="`选择任务 ${fileName(row.original.filePath)}`" class="shrink-0" @update:model-value="toggleTaskSelection(row.original.taskId)" />
               <p class="break-all text-sm font-medium text-gray-800 transition-colors group-hover:text-primary-700 dark:text-gray-100 dark:group-hover:text-primary-300">{{ fileName(row.original.filePath) }}</p>
               <UButton
                 icon="i-lucide-copy"
@@ -295,6 +318,7 @@
         </div>
         <article v-for="task in tasks" :key="task.taskId" class="p-3 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-900/30 sm:p-4">
           <div class="flex items-start justify-between gap-3">
+            <UCheckbox :model-value="isTaskSelected(task.taskId)" :aria-label="`选择任务 ${fileName(task.filePath)}`" class="mt-0.5 shrink-0" @update:model-value="toggleTaskSelection(task.taskId)" />
             <div class="min-w-0">
               <p class="break-all text-sm font-semibold text-gray-900 dark:text-white">{{ fileName(task.filePath) }}</p>
               <p class="app-meta mt-1">{{ task.rootName || '默认媒体库' }} · {{ formatDate(task.createdAt) }}</p>
@@ -460,6 +484,7 @@ const batchActionId = ref('')
 const activeBatches = computed(() => (batchData.value?.batches || []).filter(batch => ['scheduled', 'queued', 'running', 'paused'].includes(String(batch.status))))
 const showQueuePanel = computed(() => Boolean(queueControl.value?.paused || activeBatches.value.length || queueTotal.value || queueJobs.value?.queued || queueJobs.value?.running))
 watch(queuePageSize, () => { queuePage.value = 1 })
+watch([queuePage, queuePageSize], () => { clearQueueTaskSelection() })
 watch(queueTotalPages, (total) => {
   if (queuePage.value > total) queuePage.value = total
 })
@@ -470,7 +495,10 @@ watch(searchQuery, (value) => {
     debouncedSearch.value = value
   }, 250)
 })
-watch([statusFilter, searchQuery, pageSize], () => { page.value = 1 })
+watch([statusFilter, searchQuery, pageSize], () => {
+  page.value = 1
+  clearTaskSelection()
+})
 onBeforeUnmount(() => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
 })
@@ -484,6 +512,7 @@ const pageNumbers = computed(() => {
 })
 
 watch(page, () => {
+  clearTaskSelection()
   if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
 })
 
@@ -491,6 +520,32 @@ watch(totalPages, (total) => {
   if (page.value > total) page.value = total
 })
 const tasks = computed(() => data.value?.tasks || [])
+const selectedTaskIds = ref(new Set())
+const historySelectedTasks = computed(() => tasks.value.filter(task => selectedTaskIds.value.has(task.taskId)))
+const allHistorySelected = computed(() => tasks.value.length > 0 && tasks.value.every(task => selectedTaskIds.value.has(task.taskId)))
+const historyPausableTasks = computed(() => historySelectedTasks.value.filter(canPauseQueue))
+const historyResumableTasks = computed(() => historySelectedTasks.value.filter(canResumeTask))
+const historyCancelableTasks = computed(() => historySelectedTasks.value.filter(isCancelableTask))
+const historyDeletableTasks = computed(() => historySelectedTasks.value.filter(isTerminalTask))
+const historyBulkAction = ref('')
+const selectedQueueTaskIds = ref(new Set())
+const selectedQueueTasks = computed(() => queueTasks.value.filter(task => selectedQueueTaskIds.value.has(task.taskId)))
+const allQueueTasksSelected = computed(() => queueTasks.value.length > 0 && queueTasks.value.every(task => selectedQueueTaskIds.value.has(task.taskId)))
+const queuePausableTasks = computed(() => selectedQueueTasks.value.filter(canPauseQueue))
+const queueResumableTasks = computed(() => selectedQueueTasks.value.filter(canResumeTask))
+const queueCancelableTasks = computed(() => selectedQueueTasks.value.filter(isCancelableTask))
+const allQueueSelectedPaused = computed(() => selectedQueueTasks.value.length > 0 && selectedQueueTasks.value.every(task => task.queueStatus === 'paused'))
+const queueBulkAction = ref('')
+watch(tasks, (list) => {
+  const available = new Set(list.map(task => task.taskId))
+  const next = new Set(Array.from(selectedTaskIds.value).filter(taskId => available.has(taskId)))
+  if (next.size !== selectedTaskIds.value.size) selectedTaskIds.value = next
+})
+watch(queueTasks, (list) => {
+  const available = new Set(list.map(task => task.taskId))
+  const next = new Set(Array.from(selectedQueueTaskIds.value).filter(taskId => available.has(taskId)))
+  if (next.size !== selectedQueueTaskIds.value.size) selectedQueueTaskIds.value = next
+})
 const hasActiveTasks = computed(() => tasks.value.some(task => isActiveStatus(task.status)))
 let liveRefreshTimer = null
 
@@ -755,6 +810,196 @@ async function deleteTask(taskId) {
     toast.add({ title: '删除失败', description: e?.data?.message || '无法删除该任务', color: 'error' })
   } finally {
     deletingTaskId.value = ''
+  }
+}
+
+function isTerminalTask(task) {
+  return ['done', 'error', 'cancelled', 'review'].includes(String(task?.status || ''))
+}
+
+function isCancelableTask(task) {
+  return !isTerminalTask(task)
+}
+
+function canResumeTask(task) {
+  return String(task?.status || '') === 'paused' && !task?.pauseRequested
+}
+
+function isTaskSelected(taskId) {
+  return selectedTaskIds.value.has(taskId)
+}
+
+function isQueueTaskSelected(taskId) {
+  return selectedQueueTaskIds.value.has(taskId)
+}
+
+function toggleTaskSelection(taskId) {
+  const next = new Set(selectedTaskIds.value)
+  if (next.has(taskId)) next.delete(taskId)
+  else next.add(taskId)
+  selectedTaskIds.value = next
+}
+
+function toggleQueueTaskSelection(taskId) {
+  const next = new Set(selectedQueueTaskIds.value)
+  if (next.has(taskId)) next.delete(taskId)
+  else next.add(taskId)
+  selectedQueueTaskIds.value = next
+}
+
+function toggleSelectAllHistory() {
+  selectedTaskIds.value = allHistorySelected.value
+    ? new Set()
+    : new Set(tasks.value.map(task => task.taskId))
+}
+
+function toggleSelectAllQueue() {
+  selectedQueueTaskIds.value = allQueueTasksSelected.value
+    ? new Set()
+    : new Set(queueTasks.value.map(task => task.taskId))
+}
+
+function clearTaskSelection() {
+  selectedTaskIds.value = new Set()
+}
+
+function clearQueueTaskSelection() {
+  selectedQueueTaskIds.value = new Set()
+}
+
+async function runBulkTaskAction(action, taskList, label, skipped = 0) {
+  if (!taskList.length) return
+  const results = await Promise.allSettled(taskList.map(task => {
+    if (action === 'delete') return $fetch(`/api/tasks/${task.taskId}`, { method: 'DELETE' })
+    return $fetch(`/api/tasks/${task.taskId}/${action}`, { method: 'POST' })
+  }))
+  const failed = results.filter(result => result.status === 'rejected').length
+  const succeeded = results.length - failed
+  toast.add({
+    title: `${label}完成`,
+    description: `${succeeded} 个成功${failed ? `，${failed} 个失败` : ''}${skipped ? `，${skipped} 个跳过` : ''}`,
+    color: failed ? 'warning' : 'success'
+  })
+  await Promise.all([refresh(), refreshQueue(), refreshBatches()])
+}
+
+async function bulkPauseHistory() {
+  const list = historyPausableTasks.value
+  if (!list.length) return
+  historyBulkAction.value = 'pause'
+  try {
+    await runBulkTaskAction('pause', list, '暂停', historySelectedTasks.value.length - list.length)
+    clearTaskSelection()
+  } finally {
+    historyBulkAction.value = ''
+  }
+}
+
+async function bulkResumeHistory() {
+  const list = historyResumableTasks.value
+  if (!list.length) return
+  historyBulkAction.value = 'resume'
+  try {
+    await runBulkTaskAction('resume', list, '继续', historySelectedTasks.value.length - list.length)
+    clearTaskSelection()
+  } finally {
+    historyBulkAction.value = ''
+  }
+}
+
+async function bulkCancelHistory() {
+  const list = historyCancelableTasks.value
+  if (!list.length) return
+  if (!(await confirm({
+    title: `取消选中的 ${list.length} 个任务？`,
+    description: '运行中的任务会停止，已完成的部分不会回滚。',
+    confirmLabel: '取消任务',
+    color: 'error'
+  }))) return
+  historyBulkAction.value = 'cancel'
+  try {
+    await runBulkTaskAction('cancel', list, '取消', historySelectedTasks.value.length - list.length)
+    clearTaskSelection()
+  } finally {
+    historyBulkAction.value = ''
+  }
+}
+
+async function bulkDeleteHistory() {
+  const list = historyDeletableTasks.value
+  if (!list.length) return
+  if (!(await confirm({
+    title: `删除选中的 ${list.length} 条历史记录？`,
+    description: '任务记录、日志和核对数据会被删除，此操作不可撤销。',
+    confirmLabel: '删除记录',
+    color: 'error'
+  }))) return
+  historyBulkAction.value = 'delete'
+  try {
+    await runBulkTaskAction('delete', list, '删除', historySelectedTasks.value.length - list.length)
+    clearTaskSelection()
+  } finally {
+    historyBulkAction.value = ''
+  }
+}
+
+async function bulkPauseQueue() {
+  const list = queuePausableTasks.value
+  if (!list.length) return
+  queueBulkAction.value = 'pause'
+  try {
+    await runBulkTaskAction('pause', list, '暂停', selectedQueueTasks.value.length - list.length)
+    clearQueueTaskSelection()
+  } finally {
+    queueBulkAction.value = ''
+  }
+}
+
+async function bulkResumeQueue() {
+  const list = queueResumableTasks.value
+  if (!list.length) return
+  queueBulkAction.value = 'resume'
+  try {
+    await runBulkTaskAction('resume', list, '继续', selectedQueueTasks.value.length - list.length)
+    clearQueueTaskSelection()
+  } finally {
+    queueBulkAction.value = ''
+  }
+}
+
+async function bulkCancelQueue() {
+  const list = queueCancelableTasks.value
+  if (!list.length) return
+  if (!(await confirm({
+    title: `取消选中的 ${list.length} 个队列任务？`,
+    description: '等待中的任务会取消，运行中的任务会停止；已完成部分不会回滚。',
+    confirmLabel: '取消任务',
+    color: 'error'
+  }))) return
+  queueBulkAction.value = 'cancel'
+  try {
+    await runBulkTaskAction('cancel', list, '取消', selectedQueueTasks.value.length - list.length)
+    clearQueueTaskSelection()
+  } finally {
+    queueBulkAction.value = ''
+  }
+}
+
+async function bulkDeleteQueue() {
+  const list = selectedQueueTasks.value
+  if (!list.length || !allQueueSelectedPaused.value) return
+  if (!(await confirm({
+    title: `删除选中的 ${list.length} 个已暂停任务？`,
+    description: '任务记录、日志和核对数据会被删除，此操作不可撤销。',
+    confirmLabel: '删除记录',
+    color: 'error'
+  }))) return
+  queueBulkAction.value = 'delete'
+  try {
+    await runBulkTaskAction('delete', list, '删除', selectedQueueTasks.value.length - list.length)
+    clearQueueTaskSelection()
+  } finally {
+    queueBulkAction.value = ''
   }
 }
 
