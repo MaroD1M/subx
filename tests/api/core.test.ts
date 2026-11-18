@@ -1219,6 +1219,37 @@ describe('core API integration', () => {
     }
   })
 
+  it('reorders eligible waiting tasks for drag-and-drop', async () => {
+    const db = new Database(dbPath)
+    const ids = ['queue-order-high', 'queue-order-mid', 'queue-order-low']
+    db.prepare("INSERT OR REPLACE INTO queue_control (id, paused, paused_at) VALUES (1, 1, datetime('now'))").run()
+    try {
+      ids.forEach((id, index) => {
+        db.prepare("INSERT INTO tasks (task_id, file_path, root_id, model, status) VALUES (?, ?, 'default', 'm', 'queued')").run(id, `${id}.srt`)
+        db.prepare("INSERT INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, priority) VALUES (?, 'queued', 0, 3, datetime('now'), ?)").run(id, 30 - index * 10)
+      })
+
+      const reorder = await apiFetch('/api/task-queue/reorder', {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ taskId: 'queue-order-low', targetTaskId: 'queue-order-high', position: 'before' })
+      })
+      expect(reorder.status).toBe(200)
+
+      const list = await apiFetch('/api/task-queue?page=1&pageSize=20', { headers: { cookie } })
+      const payload = await list.json() as any
+      const orderedIds = payload.tasks.map((task: any) => task.taskId).filter((id: string) => ids.includes(id))
+      expect(orderedIds).toEqual(['queue-order-low', 'queue-order-high', 'queue-order-mid'])
+    } finally {
+      for (const id of ids) {
+        db.prepare('DELETE FROM task_jobs WHERE task_id = ?').run(id)
+        db.prepare('DELETE FROM tasks WHERE task_id = ?').run(id)
+      }
+      db.prepare("UPDATE queue_control SET paused = 0, paused_at = NULL, paused_by = NULL WHERE id = 1").run()
+      db.close()
+    }
+  })
+
   it('exposes task queue and batch status endpoints', async () => {
     const queue = await apiFetch('/api/task-queue', { headers: { cookie } })
     expect(queue.status).toBe(200)

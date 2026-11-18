@@ -32,6 +32,7 @@
         <button
           type="button"
           class="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left focus-ring"
+          :aria-label="`任务队列，${queueControl?.paused ? '已暂停' : '运行中'}，待执行 ${queueJobs?.waiting || 0}，定时 ${queueJobs?.scheduled || 0}，运行 ${queueJobs?.running || 0}，已暂停 ${queueJobs?.paused || 0}`"
           :aria-expanded="queueExpanded"
           aria-controls="history-queue-content"
           @click="queueExpanded = !queueExpanded"
@@ -40,7 +41,8 @@
           <span class="shrink-0 text-sm font-medium">{{ queueControl?.paused ? '队列已暂停' : '任务队列' }}</span>
           <span class="flex min-w-0 flex-wrap items-center gap-1.5">
             <span v-if="queueJobs?.running" class="app-pill app-pill-primary">运行 {{ queueJobs.running }}</span>
-            <span v-if="queueJobs?.queued" class="app-pill app-pill-info">等待 {{ queueJobs.queued }}</span>
+            <span v-if="queueJobs?.waiting" class="app-pill app-pill-info">待执行 {{ queueJobs.waiting }}</span>
+            <span v-if="queueJobs?.scheduled" class="app-pill app-pill-neutral">定时 {{ queueJobs.scheduled }}</span>
             <span v-if="queueJobs?.paused" class="app-pill app-pill-warning">暂停 {{ queueJobs.paused }}</span>
             <span v-if="activeBatches.length" class="app-pill app-pill-neutral">批次 {{ activeBatches.length }}</span>
           </span>
@@ -80,13 +82,31 @@
             <UIcon :name="section.icon" class="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
             <span class="text-xs font-semibold text-gray-600 dark:text-gray-300">{{ section.label }}</span>
             <span class="app-meta">{{ section.tasks.length }}</span>
-            <span v-if="section.key === 'waiting'" class="app-meta ml-auto">按优先级从高到低</span>
+            <span v-if="section.key === 'waiting'" class="app-meta ml-auto">按优先级从高到低 · 可拖动排序</span>
+            <span v-else-if="section.key === 'scheduled'" class="app-meta ml-auto">按计划时间</span>
           </div>
           <div class="divide-y divide-gray-100 dark:divide-gray-800">
-            <div v-for="task in section.tasks" :key="task.taskId" class="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:gap-3">
+            <div
+              v-for="task in section.tasks"
+              :key="task.taskId"
+              class="flex flex-col gap-2 px-3 py-2.5 transition-colors sm:flex-row sm:items-start sm:gap-3"
+              :class="{
+                'cursor-grab': section.key === 'waiting' && !queueReordering,
+                'opacity-50': draggingQueueTaskId === task.taskId,
+                'bg-primary-50/70 ring-1 ring-inset ring-primary-300 dark:bg-primary-950/20': dragOverQueueTaskId === task.taskId
+              }"
+              :draggable="section.key === 'waiting' && !queueReordering"
+              @dragstart="startQueueDrag($event, task, section.key)"
+              @dragover="onQueueDragOver($event, task, section.key)"
+              @dragleave="onQueueDragLeave($event, task)"
+              @drop="onQueueDrop($event, task, section.key)"
+              @dragend="endQueueDrag"
+            >
               <div class="flex min-w-0 flex-1 items-start gap-2.5">
                 <UCheckbox :model-value="isQueueTaskSelected(task.taskId)" :aria-label="`选择队列任务 ${fileName(task.filePath)}`" class="mt-0.5 shrink-0" @update:model-value="toggleQueueTaskSelection(task.taskId)" />
-                <span class="mt-0.5 w-8 shrink-0 text-center text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-400">#{{ task.queuePosition }}</span>
+                <UIcon v-if="section.key === 'waiting'" name="i-lucide-grip-vertical" class="mt-1 h-4 w-4 shrink-0 text-gray-300 dark:text-gray-600" aria-hidden="true" />
+                <span v-if="section.key === 'waiting'" class="mt-0.5 w-8 shrink-0 text-center text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-400">#{{ task.waitingPosition }}</span>
+                <UIcon v-else :name="section.key === 'running' ? 'i-lucide-loader-2' : section.key === 'scheduled' ? 'i-lucide-calendar-clock' : 'i-lucide-pause'" class="mt-0.5 h-4 w-4 shrink-0" :class="section.key === 'running' ? 'animate-spin text-sky-500' : section.key === 'scheduled' ? 'text-gray-400' : 'text-amber-500'" />
 
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -97,7 +117,7 @@
                     <span v-if="task.batchName" class="app-meta truncate">{{ task.batchName }}</span>
                   </div>
                   <p v-if="task.stepMessage" class="app-meta break-all">{{ task.stepMessage }}</p>
-                  <div v-if="section.key !== 'waiting' || task.pauseRequested" class="flex items-center gap-2">
+                  <div v-if="section.key === 'running' || section.key === 'paused' || task.pauseRequested" class="flex items-center gap-2">
                     <div class="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                       <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${Math.max(0, Math.min(100, Number(task.progress) || 0))}%` }" />
                     </div>
@@ -473,16 +493,22 @@ const queuePageNumbers = computed(() => {
   return Array.from({ length: 5 }, (_, index) => start + index)
 })
 const queueRunningTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'running'))
-const queueWaitingTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'queued'))
+const queueWaitingTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'queued' && task.waitingEligible))
+const queueScheduledTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'queued' && !task.waitingEligible))
 const queuePausedTasks = computed(() => queueTasks.value.filter(task => task.queueStatus === 'paused'))
 const queueSections = computed(() => [
   { key: 'running', label: '运行中', icon: 'i-lucide-activity', tasks: queueRunningTasks.value },
-  { key: 'waiting', label: '等待中', icon: 'i-lucide-clock-3', tasks: queueWaitingTasks.value },
+  { key: 'waiting', label: '等待执行', icon: 'i-lucide-list-ordered', tasks: queueWaitingTasks.value },
+  { key: 'scheduled', label: '定时等待', icon: 'i-lucide-calendar-clock', tasks: queueScheduledTasks.value },
   { key: 'paused', label: '已暂停', icon: 'i-lucide-pause', tasks: queuePausedTasks.value }
 ].filter(section => section.tasks.length > 0))
 const batchActionId = ref('')
 const activeBatches = computed(() => (batchData.value?.batches || []).filter(batch => ['scheduled', 'queued', 'running', 'paused'].includes(String(batch.status))))
 const showQueuePanel = computed(() => Boolean(queueControl.value?.paused || activeBatches.value.length || queueTotal.value || queueJobs.value?.queued || queueJobs.value?.running))
+const draggingQueueTaskId = ref('')
+const dragOverQueueTaskId = ref('')
+const dragOverQueuePosition = ref('before')
+const queueReordering = ref(false)
 watch(queuePageSize, () => { queuePage.value = 1 })
 watch([queuePage, queuePageSize], () => { clearQueueTaskSelection() })
 watch(queueTotalPages, (total) => {
@@ -865,6 +891,63 @@ function clearTaskSelection() {
 
 function clearQueueTaskSelection() {
   selectedQueueTaskIds.value = new Set()
+}
+
+function startQueueDrag(event, task, sectionKey) {
+  if (sectionKey !== 'waiting' || queueReordering.value) {
+    event.preventDefault()
+    return
+  }
+  draggingQueueTaskId.value = task.taskId
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', task.taskId)
+}
+
+function onQueueDragOver(event, task, sectionKey) {
+  if (sectionKey !== 'waiting' || !draggingQueueTaskId.value || queueReordering.value) return
+  if (task.taskId === draggingQueueTaskId.value) {
+    dragOverQueueTaskId.value = ''
+    return
+  }
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'move'
+  const rect = event.currentTarget.getBoundingClientRect()
+  dragOverQueuePosition.value = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+  dragOverQueueTaskId.value = task.taskId
+}
+
+function onQueueDragLeave(event, task) {
+  if (dragOverQueueTaskId.value !== task.taskId) return
+  const related = event.relatedTarget
+  if (related && event.currentTarget.contains(related)) return
+  dragOverQueueTaskId.value = ''
+}
+
+function endQueueDrag() {
+  draggingQueueTaskId.value = ''
+  dragOverQueueTaskId.value = ''
+  dragOverQueuePosition.value = 'before'
+}
+
+async function onQueueDrop(event, task, sectionKey) {
+  event.preventDefault()
+  const movingTaskId = draggingQueueTaskId.value
+  const position = dragOverQueuePosition.value
+  endQueueDrag()
+  if (sectionKey !== 'waiting' || !movingTaskId || movingTaskId === task.taskId || queueReordering.value) return
+  queueReordering.value = true
+  try {
+    await $fetch('/api/task-queue/reorder', {
+      method: 'POST',
+      body: { taskId: movingTaskId, targetTaskId: task.taskId, position }
+    })
+    toast.add({ title: '队列顺序已更新', description: '等待任务会按新的顺序执行', color: 'success' })
+    await Promise.all([refresh(), refreshQueue()])
+  } catch (e) {
+    toast.add({ title: '调整顺序失败', description: e?.data?.message || e?.message || '请稍后重试', color: 'error' })
+  } finally {
+    queueReordering.value = false
+  }
 }
 
 async function runBulkTaskAction(action, taskList, label, skipped = 0) {

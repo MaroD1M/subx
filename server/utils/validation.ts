@@ -148,6 +148,12 @@ export const taskPrioritySchema = z.object({
   priority: z.coerce.number().int().min(-1000).max(1000)
 }).passthrough()
 
+export const taskQueueReorderSchema = z.object({
+  taskId: z.string().min(1),
+  targetTaskId: z.string().min(1),
+  position: z.enum(['before', 'after']).default('before')
+})
+
 export const reviewVersionCreateSchema = z.object({
   label: z.string().max(160).optional(),
   note: z.string().max(2000).optional()

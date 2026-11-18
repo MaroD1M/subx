@@ -520,23 +520,25 @@ test('media library edits save without leaving the page', async ({ page }) => {
 })
 
 test('history queue panel expands and adjusts a waiting task', async ({ page }) => {
+  test.setTimeout(120_000)
   const db = new Database(String(process.env.DB_PATH))
   try {
+    db.prepare("INSERT OR REPLACE INTO queue_control (id, paused, paused_at) VALUES (1, 1, datetime('now'))").run()
     db.prepare(`
       INSERT OR REPLACE INTO tasks (task_id, file_path, root_id, model, status, progress, step_message)
-      VALUES ('queue-ui-task', 'Shows/Demo Show/Queue.UI.Test.zh.srt', 'default', 'm', 'queued', 0, '等待执行')
+      VALUES ('queue-ui-task', 'Shows/Demo Show/Queue.UI.Test.zh.srt', 'default', 'm', 'queued', 0, '准备执行')
     `).run()
     db.prepare(`
-      INSERT OR REPLACE INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, scheduled_at, priority, created_at, updated_at)
-      VALUES ('queue-ui-task', 'queued', 0, 3, datetime('now', '+1 hour'), datetime('now', '+1 hour'), 5, datetime('now'), datetime('now'))
+      INSERT OR REPLACE INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, priority, created_at, updated_at)
+      VALUES ('queue-ui-task', 'queued', 0, 3, datetime('now'), 5, datetime('now'), datetime('now'))
     `).run()
     db.prepare(`
       INSERT OR REPLACE INTO tasks (task_id, file_path, root_id, model, status, progress, step_message)
-      VALUES ('queue-ui-bulk', 'Shows/Demo Show/Queue.UI.Bulk.zh.srt', 'default', 'm', 'queued', 0, '等待执行')
+      VALUES ('queue-ui-bulk', 'Shows/Demo Show/Queue.UI.Bulk.zh.srt', 'default', 'm', 'queued', 0, '准备执行')
     `).run()
     db.prepare(`
-      INSERT OR REPLACE INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, scheduled_at, priority, created_at, updated_at)
-      VALUES ('queue-ui-bulk', 'queued', 0, 3, datetime('now', '+1 hour'), datetime('now', '+1 hour'), 3, datetime('now'), datetime('now'))
+      INSERT OR REPLACE INTO task_jobs (task_id, status, attempts, max_attempts, next_run_at, priority, created_at, updated_at)
+      VALUES ('queue-ui-bulk', 'queued', 0, 3, datetime('now'), 3, datetime('now'), datetime('now'))
     `).run()
 
     await page.goto('/history')
@@ -546,7 +548,7 @@ test('history queue panel expands and adjusts a waiting task', async ({ page }) 
     await queueToggle.click()
     await expect(queueToggle).toHaveAttribute('aria-expanded', 'true')
     const queueContent = page.locator('#history-queue-content')
-    await expect(queueContent.getByText('等待中')).toBeVisible()
+    await expect(queueContent.getByText('等待执行', { exact: true })).toBeVisible()
     await expect(queueContent.getByText('Queue.UI.Test.zh.srt')).toBeVisible()
     await expect(queueContent.getByText('#1')).toBeVisible()
     await expect(queueContent.getByText('P5', { exact: true })).toBeVisible()
@@ -557,18 +559,24 @@ test('history queue panel expands and adjusts a waiting task', async ({ page }) 
     await page.getByRole('button', { name: '暂停 Queue.UI.Test.zh.srt' }).click()
     await expect(queueContent.getByText('已暂停').first()).toBeVisible()
     await page.getByRole('button', { name: '继续 Queue.UI.Test.zh.srt' }).click()
-    await expect(queueContent.getByText('等待中')).toBeVisible()
+    await expect(queueContent.getByText('等待执行', { exact: true })).toBeVisible()
+
+    const waitingRows = queueContent.locator('[draggable="true"]')
+    await expect(waitingRows).toHaveCount(2)
+    await waitingRows.nth(0).dragTo(waitingRows.nth(1))
+    await expect(waitingRows.nth(0)).toContainText('Queue.UI.Bulk.zh.srt')
+    await expect(waitingRows.nth(1)).toContainText('Queue.UI.Test.zh.srt')
 
     await queueContent.getByRole('checkbox', { name: '选择队列任务 Queue.UI.Test.zh.srt' }).click()
     await queueContent.getByRole('checkbox', { name: '选择队列任务 Queue.UI.Bulk.zh.srt' }).click()
     await queueContent.getByRole('button', { name: '暂停', exact: true }).click()
     await expect(queueContent.getByText('已暂停').first()).toBeVisible()
-    await expect(queueContent.getByText('等待中')).toHaveCount(0)
+    await expect(queueContent.getByText('等待执行', { exact: true })).toHaveCount(0)
 
     await queueContent.getByRole('checkbox', { name: '选择队列任务 Queue.UI.Test.zh.srt' }).click()
     await queueContent.getByRole('checkbox', { name: '选择队列任务 Queue.UI.Bulk.zh.srt' }).click()
     await queueContent.getByRole('button', { name: '继续', exact: true }).click()
-    await expect(queueContent.getByText('等待中')).toBeVisible()
+    await expect(queueContent.getByText('等待执行', { exact: true })).toBeVisible()
     await expect(queueContent.getByText('已暂停')).toHaveCount(0)
     await expectNoSeriousA11y(page)
   } finally {
@@ -577,6 +585,7 @@ test('history queue panel expands and adjusts a waiting task', async ({ page }) 
       db.prepare('DELETE FROM task_logs WHERE task_id = ?').run(taskId)
       db.prepare('DELETE FROM tasks WHERE task_id = ?').run(taskId)
     }
+    db.prepare("UPDATE queue_control SET paused = 0, paused_at = NULL, paused_by = NULL WHERE id = 1").run()
     db.close()
   }
 })

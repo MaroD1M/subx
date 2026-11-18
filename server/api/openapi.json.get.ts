@@ -144,6 +144,7 @@ export default defineEventHandler(() => {
       },
       '/api/task-queue/pause': { post: { summary: '暂停队列（不领取新任务）', responses: { '200': { description: 'OK' } } } },
       '/api/task-queue/resume': { post: { summary: '恢复队列', responses: { '200': { description: 'OK' } } } },
+      '/api/task-queue/reorder': { post: { summary: '调整可立即执行等待任务的顺序', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['taskId', 'targetTaskId', 'position'], properties: { taskId: { type: 'string' }, targetTaskId: { type: 'string' }, position: { type: 'string', enum: ['before', 'after'] } } } } } }, responses: { '200': { description: 'OK' } } } },
       '/api/task-batches': { get: { summary: '批次列表', parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer' } }], responses: { '200': { description: 'OK' } } } },
       '/api/task-batches/{id}': {
         get: { summary: '批次详情', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } },
