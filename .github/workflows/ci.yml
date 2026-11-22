@@ -24,7 +24,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -64,7 +63,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
@@ -109,8 +107,6 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: subx:ci
-          cache-from: type=gha,scope=subx-ci-docker
-          cache-to: type=gha,mode=max,scope=subx-ci-docker
 
       - name: Start container and check health
         run: |
