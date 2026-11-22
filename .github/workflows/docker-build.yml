@@ -22,7 +22,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm run typecheck
@@ -71,8 +70,6 @@ jobs:
           platforms: linux/amd64
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=subx-amd64
-          cache-to: type=gha,mode=max,scope=subx-amd64
 
       - name: Export digest
         run: |
@@ -130,8 +127,6 @@ jobs:
           platforms: linux/arm64
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=subx-arm64
-          cache-to: type=gha,mode=max,scope=subx-arm64
 
       - name: Export digest
         run: |
